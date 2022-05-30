@@ -1,0 +1,71 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"debug.allowBreakpointsEverywhere": true,
+		"lldb.verboseLogging": false,
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"type": "cargo",
+				"command": "build",
+				"problemMatcher": [
+					"$rustc"
+				],
+				"group": "build",
+				"label": "Rust: cargo build - rend-vk"
+			}
+		]
+	},
+	"launch": {
+		"configurations": [
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug executable 'rend-vk'",
+				"env": {
+					"RUST_BACKTRACE": "1"
+				},
+				"cargo": {
+					"args": [
+						"build",
+						"--bin=rend-vk",
+						"--package=rend-vk"
+					],
+					"filter": {
+						"name": "rend-vk",
+						"kind": "bin"
+					}
+				},
+				"stopOnEntry": false,
+				"args": [],
+				"cwd": "${workspaceFolder}"
+			},
+			{
+				"type": "lldb",
+				"request": "launch",
+				"name": "Debug unit tests in executable 'rend-vk'",
+				"cargo": {
+					"args": [
+						"test",
+						"--no-run",
+						"--bin=rend-vk",
+						"--package=rend-vk"
+					],
+					"filter": {
+						"name": "rend-vk",
+						"kind": "bin"
+					}
+				},
+				"args": [],
+				"cwd": "${workspaceFolder}"
+			}
+		],
+		"compounds": []
+	}
+}

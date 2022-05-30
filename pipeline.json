@@ -1,0 +1,63 @@
+{
+  "targets": [
+    {
+      "name": "albedo",
+      "group": "gbuffer",
+      "format": "SRGBA8"
+    },
+    {
+      "name": "normal",
+      "group": "gbuffer",
+      "format": "RG16"
+    },
+    {
+      "name": "velocity",
+      "group": "gbuffer",
+      "format": "RG16F"
+    },
+    {
+      "name": "misc",
+      "group": "gbuffer",
+      "format": "R11G11B10F"
+    }
+  ],
+  "programs": [
+    {
+      "name": "gbuffer",
+      "vertex": "simple.vert",
+      "fragment": "simple.frag"
+    }
+  ],
+  "passes": [
+    {
+      "name": "gbuffer",
+      "program": "gbuffer",
+      "batch": "mesh_static",
+      "outputs": [  
+        "albedo",
+        "normal",
+        "misc",
+        "velocity"
+      ],
+      "updaters": [
+        "transform",
+        "transform_extra",
+        "material"
+      ],
+      "state": {
+        "writing": "DEFAULT",
+        "depth": "DEFAULT",
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": {
+          "func": "INCR",
+          "refValue": 0,
+          "readMask": 0
+        },
+        "triangle": "DEFAULT",
+        "blending": "DISABLED",
+        "clearing": "ALL"
+      }
+    }
+  ]
+}
