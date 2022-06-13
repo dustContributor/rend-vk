@@ -14,10 +14,11 @@ impl Range {
     }
 }
 pub struct GpuAllocator {
-    mem: vk::DeviceMemory,
+    pub type_index: u32,
+    pub alignment: u64,
     pub buffer: vk::Buffer,
+    pub mem: vk::DeviceMemory,
     addr: *mut c_void,
-    pub align: u64,
     ranges: Vec<Range>,
 }
 
@@ -39,7 +40,7 @@ impl GpuAllocator {
             | Buf::TRANSFER_SRC
             | Buf::TRANSFER_DST;
         let mem_flags = Mpf::DEVICE_LOCAL | Mpf::HOST_VISIBLE | Mpf::HOST_COHERENT;
-        let create_info = vk::BufferCreateInfo {
+        let buffer_info = vk::BufferCreateInfo {
             size,
             usage: usage_flags,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
@@ -48,12 +49,12 @@ impl GpuAllocator {
         let buffer: vk::Buffer;
         let mem_reqs: vk::MemoryRequirements;
         unsafe {
-            buffer = device.create_buffer(&create_info, None).unwrap();
+            buffer = device.create_buffer(&buffer_info, None).unwrap();
             mem_reqs = device.get_buffer_memory_requirements(buffer);
         }
         let memi = GpuAllocator::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
             .expect("Unable to find suitable memorytype for the vertex buffer.");
-        let alloc_info = vk::MemoryAllocateInfo {
+        let mem_info = vk::MemoryAllocateInfo {
             allocation_size: mem_reqs.size,
             memory_type_index: memi,
             ..Default::default()
@@ -61,23 +62,22 @@ impl GpuAllocator {
         let mem: vk::DeviceMemory;
         let addr: *mut c_void;
         unsafe {
-            mem = device.allocate_memory(&alloc_info, None).unwrap();
+            mem = device.allocate_memory(&mem_info, None).unwrap();
             addr = device
                 .map_memory(mem, 0, mem_reqs.size, vk::MemoryMapFlags::empty())
                 .unwrap();
-            device
-                .bind_buffer_memory(buffer, mem, 0)
-                .unwrap();
+            device.bind_buffer_memory(buffer, mem, 0).unwrap();
         }
         let ranges = vec![Range {
             start: 0,
-            end: alloc_info.allocation_size,
+            end: mem_info.allocation_size,
         }];
         return GpuAllocator {
+            type_index: memi,
             mem,
             buffer,
             addr,
-            align: mem_reqs.alignment,
+            alignment: mem_reqs.alignment,
             ranges,
         };
     }
@@ -88,7 +88,7 @@ impl GpuAllocator {
     }
 
     pub fn alloc(&mut self, size: u64) -> Option<GpuSlice> {
-        let size = GpuAllocator::next_size(size, self.align);
+        let size = GpuAllocator::next_size(size, self.alignment);
         let ranges = &mut self.ranges;
         for i in 0..ranges.len() {
             let range = &ranges[i];

@@ -2,11 +2,10 @@ use ash::vk;
 use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
-    io::Seek,
     process::Command,
 };
 
-use crate::shader;
+use crate::{buffer, format, shader, render};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,7 +20,9 @@ pub struct Pipeline {
 pub struct Target {
     pub name: String,
     pub group: String,
-    pub format: String,
+    pub format: format::Format,
+    pub width: U32OrF32,
+    pub height: U32OrF32,
 }
 
 #[derive(Deserialize)]
@@ -29,8 +30,9 @@ pub struct Target {
 pub struct Pass {
     pub name: String,
     pub program: String,
-    pub batch: String,
+    pub batch: render::BatchType,
     pub outputs: Vec<String>,
+    pub inputs: Vec<String>,
     pub updaters: Vec<String>,
     pub state: State,
 }
@@ -494,18 +496,28 @@ where
     }
 }
 
+struct Attachment {
+    name: String,
+    memory: vk::DeviceMemory,
+    image: vk::Image,
+}
+
 impl Pipeline {
+    pub fn read(name: Option<&str>) -> Self {
+        let name = name.unwrap_or("pipeline.json");
+        let file = std::fs::File::open(name).expect("failed opening the pipeline");
+        return serde_json::from_reader(file).expect("couldn't parse the pipeline");
+    }
+
     pub fn load(
-        device: ash::Device,
+        device: &ash::Device,
+        memory_type_index: u32,
         window_format: vk::Format,
         window_width: u32,
         window_height: u32,
         name: Option<&str>,
     ) -> Self {
-        let name = name.unwrap_or("pipeline.json");
-        let file = std::fs::File::open(name).expect("failed opening the pipeline");
-        let pip: Pipeline = serde_json::from_reader(file).expect("couldn't parse the pipeline");
-
+        let pip = Self::read(name);
         let shaders_by_name: HashMap<_, _> = pip
             .programs
             .iter()
@@ -517,14 +529,12 @@ impl Pipeline {
             .iter()
             .map(|f| (format!("shader/{f}"), format!("shader/{f}.spv")))
             .collect();
-
         for src_out in &shaders_by_name {
             Command::new("glslangValidator")
                 .args([&src_out.0, "-V", "-o", &src_out.1])
                 .spawn()
                 .expect(format!("failed to compile {}", &src_out.0).as_str());
         }
-
         let load_shader = |name: &String| {
             shaders_by_name.get(name).map(|v| {
                 (
@@ -533,22 +543,67 @@ impl Pipeline {
                 )
             })
         };
-
-        let shader_programs = pip
+        let shader_programs_by_name: HashMap<_, _> = pip
             .programs
             .iter()
             .map(|f| {
-                shader::ShaderProgram::new(
-                    &device,
-                    f.name.clone(),
-                    load_shader(&f.vertex),
-                    load_shader(&f.fragment),
-                    load_shader(&f.geometry),
+                (
+                    &f.name,
+                    shader::ShaderProgram::new(
+                        &device,
+                        f.name.clone(),
+                        load_shader(&f.vertex),
+                        load_shader(&f.fragment),
+                        load_shader(&f.geometry),
+                    ),
                 )
             })
-            .collect::<Vec<_>>();
-
-        for pass in &pip.passes {
+            .collect();
+        let attachments_by_name: HashMap<_, _> = pip
+            .targets
+            .iter()
+            .map(|f| {
+                let extent = Self::extent_of(f.width, f.height, window_width, window_height).into();
+                let format = f.format.to_vk();
+                let texture_create_info = vk::ImageCreateInfo {
+                    image_type: vk::ImageType::TYPE_2D,
+                    format,
+                    extent,
+                    mip_levels: 1,
+                    array_layers: 1,
+                    samples: vk::SampleCountFlags::TYPE_1,
+                    tiling: vk::ImageTiling::OPTIMAL,
+                    usage: if f.format.has_depth() {
+                        vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+                    } else {
+                        vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    } | vk::ImageUsageFlags::SAMPLED,
+                    sharing_mode: vk::SharingMode::EXCLUSIVE,
+                    ..Default::default()
+                };
+                let image = unsafe { device.create_image(&texture_create_info, None) }.unwrap();
+                let texture_memory_req = unsafe { device.get_image_memory_requirements(image) };
+                let texture_allocate_info = vk::MemoryAllocateInfo {
+                    allocation_size: texture_memory_req.size,
+                    memory_type_index,
+                    ..Default::default()
+                };
+                let memory = unsafe { device.allocate_memory(&texture_allocate_info, None) }
+                    .expect("failed image memory alloc");
+                unsafe { device.bind_image_memory(image, memory, 0) }
+                    .expect("failed image memory bind");
+                return (
+                    &f.name,
+                    Attachment {
+                        name: f.name.clone(),
+                        image,
+                        memory,
+                    },
+                );
+            })
+            .collect();
+        let mut pipelines = Vec::<_>::with_capacity(pip.passes.len());
+        for pass in &pip.passes  {
             let writing = Self::handle_option(pass.state.writing.clone());
             let depth = Self::handle_option(pass.state.depth.clone());
             let blending = Self::handle_option(pass.state.blending.clone());
@@ -620,16 +675,7 @@ impl Pipeline {
                         U32OrF32::F32(v) => (window_height as f32 * v).ceil() as i32,
                     },
                 },
-                extent: vk::Extent2D {
-                    width: match scissor.width {
-                        U32OrF32::U32(v) => v,
-                        U32OrF32::F32(v) => (window_width as f32 * v).ceil() as u32,
-                    },
-                    height: match scissor.height {
-                        U32OrF32::U32(v) => v,
-                        U32OrF32::F32(v) => (window_height as f32 * v).ceil() as u32,
-                    },
-                },
+                extent: Self::extent_of(scissor.width, scissor.height, window_width, window_height),
             }];
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
                 .scissors(&scissors)
@@ -742,9 +788,8 @@ impl Pipeline {
                 ..Default::default()
             };
 
-            let dynamic_state = [];
             let dynamic_state_info =
-                vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_state);
+                vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
 
             let mut rendering_pipeline_info = vk::PipelineRenderingCreateInfo::builder()
                 .color_attachment_formats(&[window_format])
@@ -759,9 +804,8 @@ impl Pipeline {
                 rasterization_samples: vk::SampleCountFlags::TYPE_1,
                 ..Default::default()
             };
-            let shader_stages = shader_programs
-                .iter()
-                .find(|s| s.name == pass.program)
+            let shader_stages = shader_programs_by_name
+                .get(&pass.program)
                 .unwrap()
                 .shaders
                 .iter()
@@ -788,9 +832,29 @@ impl Pipeline {
                 )
             }
             .expect("Unable to create graphics pipeline");
+
+            pipelines.push(graphics_pipelines[0]);
         }
 
         return pip;
+    }
+
+    fn extent_of(
+        opt_width: U32OrF32,
+        opt_height: U32OrF32,
+        ref_width: u32,
+        ref_height: u32,
+    ) -> vk::Extent2D {
+        vk::Extent2D {
+            width: match opt_width {
+                U32OrF32::U32(v) => v,
+                U32OrF32::F32(v) => (ref_width as f32 * v).ceil() as u32,
+            },
+            height: match opt_height {
+                U32OrF32::U32(v) => v,
+                U32OrF32::F32(v) => (ref_height as f32 * v).ceil() as u32,
+            },
+        }
     }
 }
 
