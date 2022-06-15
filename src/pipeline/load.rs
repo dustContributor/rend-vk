@@ -141,7 +141,6 @@ impl Pipeline {
                         image,
                         memory,
                         view,
-                        clear: None,
                     },
                 );
             })
@@ -258,8 +257,19 @@ impl Pipeline {
                 .map(|e| {
                     attachments_by_name
                         .get(e)
+                        .map_or_else(
+                            || {
+                                if e == Attachment::DEFAULT_NAME {
+                                    // Default attachment uses the window format.
+                                    Some(window_format)
+                                } else {
+                                    // Output attachment not found, fail.
+                                    None
+                                }
+                            },
+                            |e| Some(e.vk_format),
+                        )
                         .expect(&format!("color attachment missing: {e}"))
-                        .vk_format
                 })
                 .collect::<Vec<vk::Format>>();
 
@@ -267,7 +277,8 @@ impl Pipeline {
                 let mut b = vk::PipelineRenderingCreateInfo::builder()
                     .color_attachment_formats(&color_attachment_formats);
                 if writing.depth {
-                    let depth_name = "depth".to_string();
+                    let depth_name = Attachment::DEPTH_NAME.to_string();
+                    // Depth is special cased.
                     b = b.depth_attachment_format(
                         attachments_by_name.get(&depth_name).unwrap().vk_format,
                     );
@@ -312,16 +323,11 @@ impl Pipeline {
             }
             .expect("Unable to create graphics pipeline");
             let graphics_pipeline = graphics_pipelines[0];
-            let get_attachment = |e: &String| -> Attachment {
-                attachments_by_name
-                    .get(&e)
-                    .expect(&format!("missing attachment {}", e))
-                    .clone()
-            };
 
             let clear_color_value = clearing.color.and_then(|e| {
                 Some(vk::ClearValue {
                     color: vk::ClearColorValue {
+                        // Convolutedw way to separate a RGBA u32 into a vec4
                         float32: e
                             .to_ne_bytes()
                             .into_iter()
@@ -343,8 +349,28 @@ impl Pipeline {
                 } else {
                     None
                 };
-            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).collect();
-            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).collect();
+            let get_attachment = |e: &String| -> Option<Attachment> {
+                attachments_by_name.get(&e).map_or_else(
+                    || {
+                        if e == Attachment::DEFAULT_NAME {
+                            // Skip over the default attachment.
+                            None
+                        } else {
+                            // Name was specified and it isn't the default, fail.
+                            panic!("missing attachment: {e}")
+                        }
+                    },
+                    |e| Some(e.clone()),
+                )
+            };
+            // Final passes have special rendering attachment info hanlding on render.
+            let is_final = pass
+                .outputs
+                .iter()
+                .find(|&e| Attachment::DEFAULT_NAME == e)
+                .is_some();
+            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).flatten().collect();
+            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).flatten().collect();
             let pre_rendering_color: Vec<_> = outputs
                 .iter()
                 .map(|e| vk::RenderingAttachmentInfo {
@@ -361,9 +387,9 @@ impl Pipeline {
 
             let pre_rendering_builder =
                 vk::RenderingInfo::builder().color_attachments(&pre_rendering_color);
-            let maybe_depth = outputs.iter().find(|e| e.format.has_depth());
-            let pre_rendering = match maybe_depth {
+            let pre_rendering = match outputs.iter().find(|e| e.format.has_depth()) {
                 Some(depth) => {
+                    // Only support depth only, or depth+stencil. No stencil only.
                     let depth_info = vk::RenderingAttachmentInfo {
                         image_view: depth.view,
                         image_layout: if depth.format.has_stencil() {
@@ -392,6 +418,7 @@ impl Pipeline {
                 updaters: pass.updaters.clone(),
                 inputs,
                 outputs,
+                is_final,
             });
         }
         for shader in shader_programs_by_name
