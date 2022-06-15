@@ -15,7 +15,11 @@ pub struct Attachment {
     vk_format: vk::Format,
     image: vk::Image,
     view: vk::ImageView,
-    clear: Option<vk::ClearValue>,
+}
+
+impl Attachment {
+    const DEFAULT_NAME: &'static str = "default";
+    const DEPTH_NAME: &'static str = "depth";
 }
 
 #[derive(Clone)]
@@ -28,6 +32,7 @@ pub struct Stage {
     pub inputs: Vec<Attachment>,
     pub updaters: Vec<String>,
     pub batch: BatchType,
+    pub is_final: bool,
 }
 
 #[derive(Clone)]
