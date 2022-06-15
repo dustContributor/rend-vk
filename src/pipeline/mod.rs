@@ -10,15 +10,18 @@ mod state;
 pub struct Attachment {
     name: String,
     memory: vk::DeviceMemory,
-    format: vk::Format,
+    format: crate::format::Format,
+    // Keep the equivalent vulkan value for convenience.
+    vk_format: vk::Format,
     image: vk::Image,
     view: vk::ImageView,
-    clear: Option<vk::ClearValue>
+    clear: Option<vk::ClearValue>,
 }
 
 #[derive(Clone)]
 pub struct Stage {
     pub name: String,
+    pub pre_rendering: vk::RenderingInfo,
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
     pub outputs: Vec<Attachment>,
@@ -31,7 +34,6 @@ pub struct Stage {
 pub struct Pipeline {
     pub stages: Vec<Stage>,
     pub attachments: Vec<Attachment>,
-    pub shader_modules: Vec<vk::ShaderModule>,
 }
 
 impl Pipeline {
@@ -40,9 +42,6 @@ impl Pipeline {
             for stage in &self.stages {
                 device.destroy_pipeline(stage.pipeline, None);
                 device.destroy_pipeline_layout(stage.layout, None);
-            }
-            for module in &self.shader_modules {
-                device.destroy_shader_module(*module, None);
             }
             for attachment in &self.attachments {
                 device.free_memory(attachment.memory, None);

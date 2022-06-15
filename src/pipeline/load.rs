@@ -136,7 +136,8 @@ impl Pipeline {
                     &f.name,
                     Attachment {
                         name: f.name.clone(),
-                        format,
+                        format: f.format,
+                        vk_format: format,
                         image,
                         memory,
                         view,
@@ -230,30 +231,7 @@ impl Pipeline {
                 line_width: 1.0,
                 ..Default::default()
             };
-            let clear_color_value = clearing.color.and_then(|e| {
-                Some(vk::ClearValue {
-                    color: vk::ClearColorValue {
-                        float32: e
-                            .to_ne_bytes()
-                            .into_iter()
-                            .map(|v| (v as f32) / 255.0)
-                            .collect::<Vec<_>>()
-                            .try_into()
-                            .unwrap(),
-                    },
-                })
-            });
-            let clear_depth_stencil_value =
-                if clearing.depth.is_some() || clearing.stencil.is_some() {
-                    Some(vk::ClearValue {
-                        depth_stencil: vk::ClearDepthStencilValue {
-                            depth: clearing.depth.unwrap_or(0.0),
-                            stencil: clearing.stencil.unwrap_or(0),
-                        },
-                    })
-                } else {
-                    None
-                };
+
             let vertex_input_binding_descriptions = Self::default_vertex_inputs();
             let binding_descs = vertex_input_binding_descriptions
                 .iter()
@@ -274,10 +252,10 @@ impl Pipeline {
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
 
-            let color_attachment_formats = pass
+            let color_attachment_formats: Vec<_> = pass
                 .outputs
                 .iter()
-                .map(|e| attachments_by_name.get(e).unwrap().format)
+                .map(|e| attachments_by_name.get(e).unwrap().vk_format)
                 .collect::<Vec<vk::Format>>();
 
             let mut rendering_pipeline_info = {
@@ -286,7 +264,7 @@ impl Pipeline {
                 if writing.depth {
                     let depth_name = "depth".to_string();
                     b = b.depth_attachment_format(
-                        attachments_by_name.get(&depth_name).unwrap().format,
+                        attachments_by_name.get(&depth_name).unwrap().vk_format,
                     );
                 }
                 b.build()
@@ -335,25 +313,93 @@ impl Pipeline {
                     .expect(&format!("missing attachment {}", e))
                     .clone()
             };
+
+            let clear_color_value = clearing.color.and_then(|e| {
+                Some(vk::ClearValue {
+                    color: vk::ClearColorValue {
+                        float32: e
+                            .to_ne_bytes()
+                            .into_iter()
+                            .map(|v| (v as f32) / 255.0)
+                            .collect::<Vec<_>>()
+                            .try_into()
+                            .unwrap(),
+                    },
+                })
+            });
+            let clear_depth_stencil_value =
+                if clearing.depth.is_some() || clearing.stencil.is_some() {
+                    Some(vk::ClearValue {
+                        depth_stencil: vk::ClearDepthStencilValue {
+                            depth: clearing.depth.unwrap_or(0.0),
+                            stencil: clearing.stencil.unwrap_or(0),
+                        },
+                    })
+                } else {
+                    None
+                };
+            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).collect();
+            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).collect();
+            let pre_rendering_color: Vec<_> = outputs
+                .iter()
+                .map(|e| vk::RenderingAttachmentInfo {
+                    image_view: e.view,
+                    image_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    load_op: clear_color_value.map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
+                        vk::AttachmentLoadOp::CLEAR
+                    }),
+                    store_op: vk::AttachmentStoreOp::STORE,
+                    clear_value: clear_color_value.unwrap_or_default(),
+                    ..Default::default()
+                })
+                .collect();
+
+            let pre_rendering_builder =
+                vk::RenderingInfo::builder().color_attachments(&pre_rendering_color);
+            let maybe_depth = outputs.iter().find(|e| e.format.has_depth());
+            let pre_rendering = match maybe_depth {
+                Some(depth) => {
+                    let depth_info = vk::RenderingAttachmentInfo {
+                        image_view: depth.view,
+                        image_layout: if depth.format.has_stencil() {
+                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                        } else {
+                            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
+                        },
+                        load_op: clear_depth_stencil_value
+                            .map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
+                                vk::AttachmentLoadOp::CLEAR
+                            }),
+                        clear_value: clear_depth_stencil_value.unwrap_or_default(),
+                        ..Default::default()
+                    };
+                    pre_rendering_builder.depth_attachment(&depth_info).build()
+                }
+                _ => pre_rendering_builder.build(),
+            };
+
             stages.push(crate::pipeline::Stage {
                 name: pass.name.clone(),
+                pre_rendering,
                 batch: pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
                 updaters: pass.updaters.clone(),
-                inputs: pass.inputs.iter().map(get_attachment).collect(),
-                outputs: pass.outputs.iter().map(get_attachment).collect(),
+                inputs,
+                outputs,
             });
+        }
+        for shader in shader_programs_by_name
+            .into_values()
+            .flat_map(|e| e.shaders)
+        {
+            // No longer need them.
+            unsafe { device.destroy_shader_module(shader.info.module, None) };
         }
 
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
-            shader_modules: shader_programs_by_name
-                .into_values()
-                .flat_map(|e| e.shaders)
-                .map(|e| e.info.module)
-                .collect(),
         };
     }
 
