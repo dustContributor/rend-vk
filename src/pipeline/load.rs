@@ -127,11 +127,12 @@ impl Pipeline {
                     .view_type(vk::ImageViewType::TYPE_2D);
                 let view = unsafe {
                     device
+                        .bind_image_memory(image, memory, 0)
+                        .expect("failed image memory bind");
+                    device
                         .create_image_view(&image_view_info, None)
                         .expect("failed image view")
                 };
-                unsafe { device.bind_image_memory(image, memory, 0) }
-                    .expect("failed image memory bind");
                 return (
                     &f.name,
                     Attachment {
