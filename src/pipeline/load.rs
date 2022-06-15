@@ -255,7 +255,12 @@ impl Pipeline {
             let color_attachment_formats: Vec<_> = pass
                 .outputs
                 .iter()
-                .map(|e| attachments_by_name.get(e).unwrap().vk_format)
+                .map(|e| {
+                    attachments_by_name
+                        .get(e)
+                        .expect(&format!("color attachment missing: {e}"))
+                        .vk_format
+                })
                 .collect::<Vec<vk::Format>>();
 
             let mut rendering_pipeline_info = {
