@@ -19,7 +19,7 @@ impl Pipeline {
     pub fn load(
         device: &ash::Device,
         memory_type_index: u32,
-        window_format: vk::Format,
+        default_attachment: Attachment,
         window_width: u32,
         window_height: u32,
         name: Option<&str>,
@@ -66,7 +66,7 @@ impl Pipeline {
                 )
             })
             .collect();
-        let attachments_by_name: HashMap<_, _> = pip
+        let mut attachments_by_name: HashMap<_, _> = pip
             .targets
             .iter()
             .map(|f| {
@@ -146,6 +146,10 @@ impl Pipeline {
                 );
             })
             .collect();
+        let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
+        // Default attachment is provided by the caller since it depends on the swapchain.
+        attachments_by_name.insert(&default_attachment_name, default_attachment);
+
         let mut stages = Vec::<_>::with_capacity(pip.passes.len());
         for pass in &pip.passes {
             let writing = Self::handle_option(pass.state.writing.clone());
@@ -258,19 +262,8 @@ impl Pipeline {
                 .map(|e| {
                     attachments_by_name
                         .get(e)
-                        .map_or_else(
-                            || {
-                                if e == Attachment::DEFAULT_NAME {
-                                    // Default attachment uses the window format.
-                                    Some(window_format)
-                                } else {
-                                    // Output attachment not found, fail.
-                                    None
-                                }
-                            },
-                            |e| Some(e.vk_format),
-                        )
                         .expect(&format!("color attachment missing: {e}"))
+                        .vk_format
                 })
                 .collect::<Vec<vk::Format>>();
 
@@ -350,19 +343,11 @@ impl Pipeline {
                 } else {
                     None
                 };
-            let get_attachment = |e: &String| -> Option<Attachment> {
-                attachments_by_name.get(&e).map_or_else(
-                    || {
-                        if e == Attachment::DEFAULT_NAME {
-                            // Skip over the default attachment.
-                            None
-                        } else {
-                            // Name was specified and it isn't the default, fail.
-                            panic!("missing attachment: {e}")
-                        }
-                    },
-                    |e| Some(e.clone()),
-                )
+            let get_attachment = |e: &String| -> Attachment {
+                attachments_by_name
+                    .get(&e)
+                    .expect(&format!("missing attachment: {e}"))
+                    .clone()
             };
             // Final passes have special rendering attachment info hanlding on render.
             let is_final = pass
@@ -370,8 +355,8 @@ impl Pipeline {
                 .iter()
                 .find(|&e| Attachment::DEFAULT_NAME == e)
                 .is_some();
-            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).flatten().collect();
-            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).flatten().collect();
+            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).collect();
+            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).collect();
             let pre_rendering_color: Vec<_> = outputs
                 .iter()
                 .map(|e| vk::RenderingAttachmentInfo {
@@ -472,19 +457,19 @@ impl Pipeline {
                     offset: 0,
                 },
             ),
-            (
-                vk::VertexInputBindingDescription {
-                    stride: (std::mem::size_of::<f32>() * 3) as u32,
-                    input_rate: vk::VertexInputRate::VERTEX,
-                    binding: crate::shader::ATTRIB_LOC_NORMAL,
-                },
-                vk::VertexInputAttributeDescription {
-                    location: crate::shader::ATTRIB_LOC_NORMAL,
-                    binding: crate::shader::ATTRIB_LOC_NORMAL,
-                    format: vk::Format::R32G32B32_SFLOAT,
-                    offset: 0,
-                },
-            ),
+            // (
+            //     vk::VertexInputBindingDescription {
+            //         stride: (std::mem::size_of::<f32>() * 3) as u32,
+            //         input_rate: vk::VertexInputRate::VERTEX,
+            //         binding: crate::shader::ATTRIB_LOC_NORMAL,
+            //     },
+            //     vk::VertexInputAttributeDescription {
+            //         location: crate::shader::ATTRIB_LOC_NORMAL,
+            //         binding: crate::shader::ATTRIB_LOC_NORMAL,
+            //         format: vk::Format::R32G32B32_SFLOAT,
+            //         offset: 0,
+            //     },
+            // ),
             (
                 vk::VertexInputBindingDescription {
                     stride: (std::mem::size_of::<u8>() * 4) as u32,
@@ -494,36 +479,36 @@ impl Pipeline {
                 vk::VertexInputAttributeDescription {
                     location: crate::shader::ATTRIB_LOC_COLOR,
                     binding: crate::shader::ATTRIB_LOC_COLOR,
-                    format: vk::Format::R8G8B8A8_UINT,
+                    format: vk::Format::R32G32B32_SFLOAT,
                     offset: 0,
                 },
             ),
-            (
-                vk::VertexInputBindingDescription {
-                    stride: (std::mem::size_of::<f32>() * 2) as u32,
-                    input_rate: vk::VertexInputRate::VERTEX,
-                    binding: crate::shader::ATTRIB_LOC_TEXCOORD,
-                },
-                vk::VertexInputAttributeDescription {
-                    location: crate::shader::ATTRIB_LOC_TEXCOORD,
-                    binding: crate::shader::ATTRIB_LOC_TEXCOORD,
-                    format: vk::Format::R32G32_SFLOAT,
-                    offset: 0,
-                },
-            ),
-            (
-                vk::VertexInputBindingDescription {
-                    stride: (std::mem::size_of::<u32>() * 1) as u32,
-                    input_rate: vk::VertexInputRate::INSTANCE,
-                    binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-                },
-                vk::VertexInputAttributeDescription {
-                    location: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-                    binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-                    format: vk::Format::R32_UINT,
-                    offset: 0,
-                },
-            ),
+            // (
+            //     vk::VertexInputBindingDescription {
+            //         stride: (std::mem::size_of::<f32>() * 2) as u32,
+            //         input_rate: vk::VertexInputRate::VERTEX,
+            //         binding: crate::shader::ATTRIB_LOC_TEXCOORD,
+            //     },
+            //     vk::VertexInputAttributeDescription {
+            //         location: crate::shader::ATTRIB_LOC_TEXCOORD,
+            //         binding: crate::shader::ATTRIB_LOC_TEXCOORD,
+            //         format: vk::Format::R32G32_SFLOAT,
+            //         offset: 0,
+            //     },
+            // ),
+            // (
+            //     vk::VertexInputBindingDescription {
+            //         stride: (std::mem::size_of::<u32>() * 1) as u32,
+            //         input_rate: vk::VertexInputRate::INSTANCE,
+            //         binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
+            //     },
+            //     vk::VertexInputAttributeDescription {
+            //         location: crate::shader::ATTRIB_LOC_INSTANCE_ID,
+            //         binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
+            //         format: vk::Format::R32_UINT,
+            //         offset: 0,
+            //     },
+            // ),
         ]
     }
 }
