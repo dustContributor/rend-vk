@@ -15,6 +15,7 @@ pub struct Attachment {
     pub vk_format: vk::Format,
     pub image: vk::Image,
     pub view: vk::ImageView,
+    pub extent: vk::Extent2D,
 }
 
 impl Attachment {
@@ -25,6 +26,7 @@ impl Attachment {
         vk_format: vk::Format,
         image: vk::Image,
         image_view: vk::ImageView,
+        extent: vk::Extent2D,
     ) -> Attachment {
         Attachment {
             format: crate::format::Format::UNDEFINED,
@@ -33,6 +35,7 @@ impl Attachment {
             memory: vk::DeviceMemory::null(),
             name: Attachment::DEFAULT_NAME.to_string(),
             view: image_view,
+            extent,
         }
     }
 
@@ -55,12 +58,40 @@ pub struct Stage {
 }
 
 impl Stage {
+    fn mask_layout_aspect_for(
+        format: crate::format::Format,
+    ) -> (vk::AccessFlags, vk::ImageLayout, vk::ImageAspectFlags) {
+        if format.has_depth() {
+            let (layout, aspect) = if format.has_stencil() {
+                (
+                    vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
+                )
+            } else {
+                (
+                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+                    vk::ImageAspectFlags::DEPTH,
+                )
+            };
+            (
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                layout,
+                aspect,
+            )
+        } else {
+            (
+                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                vk::ImageAspectFlags::COLOR,
+            )
+        }
+    }
+
     pub fn render<F: FnOnce(&ash::Device, vk::CommandBuffer)>(
         &self,
         device: &ash::Device,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
-        default_extent: vk::Extent2D,
         draw_commands: F,
     ) {
         let default_output = vec![default_attachment.clone()];
@@ -72,14 +103,15 @@ impl Stage {
         let pre_transition_barriers: Vec<_> = outputs
             .iter()
             .map(|e| {
+                let (msk, layout, aspect) = Self::mask_layout_aspect_for(e.format);
                 vk::ImageMemoryBarrier::builder()
                     .image(e.image)
-                    .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .dst_access_mask(msk)
                     .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .new_layout(layout)
                     .subresource_range(
                         vk::ImageSubresourceRange::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .aspect_mask(aspect)
                             .base_mip_level(0)
                             .level_count(1)
                             .base_array_layer(0)
@@ -109,7 +141,7 @@ impl Stage {
                         ..Default::default()
                     }])
                     .render_area(vk::Rect2D {
-                        extent: default_extent,
+                        extent: default_attachment.extent,
                         ..Default::default()
                     })
                     .layer_count(1)
@@ -126,9 +158,7 @@ impl Stage {
             draw_commands(&device, command_buffer);
             device.cmd_end_rendering(command_buffer);
         };
-        if !self.is_final {
-            return;
-        }
+        let is_final = self.is_final;
         let post_transition_barriers: Vec<_> = outputs
             .iter()
             .map(|e| {

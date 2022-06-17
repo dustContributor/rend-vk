@@ -20,8 +20,6 @@ impl Pipeline {
         device: &ash::Device,
         memory_type_index: u32,
         default_attachment: Attachment,
-        window_width: u32,
-        window_height: u32,
         name: Option<&str>,
     ) -> crate::pipeline::Pipeline {
         let pip = Self::read(name);
@@ -66,16 +64,18 @@ impl Pipeline {
                 )
             })
             .collect();
+        let window_width = default_attachment.extent.width;
+        let window_height = default_attachment.extent.height;
         let mut attachments_by_name: HashMap<_, _> = pip
             .targets
             .iter()
             .map(|f| {
-                let extent = Self::extent_of(f.width, f.height, window_width, window_height).into();
+                let extent = Self::extent_of(f.width, f.height, window_width, window_height);
                 let format = f.format.to_vk();
                 let texture_create_info = vk::ImageCreateInfo {
                     image_type: vk::ImageType::TYPE_2D,
                     format,
-                    extent,
+                    extent: extent.into(),
                     mip_levels: 1,
                     array_layers: 1,
                     samples: vk::SampleCountFlags::TYPE_1,
@@ -142,6 +142,7 @@ impl Pipeline {
                         image,
                         memory,
                         view,
+                        extent,
                     },
                 );
             })
@@ -371,8 +372,14 @@ impl Pipeline {
                 })
                 .collect();
 
-            let pre_rendering_builder =
+            let mut pre_rendering_builder =
                 vk::RenderingInfo::builder().color_attachments(&pre_rendering_color);
+            if !outputs.is_empty() {
+                pre_rendering_builder = pre_rendering_builder.render_area(vk::Rect2D {
+                    extent: outputs.first().unwrap().extent,
+                    ..Default::default()
+                });
+            }
             let pre_rendering = match outputs.iter().find(|e| e.format.has_depth()) {
                 Some(depth) => {
                     // Only support depth only, or depth+stencil. No stencil only.
