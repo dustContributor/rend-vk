@@ -35,10 +35,18 @@ impl Pipeline {
             .map(|f| (f.clone(), format!("shader/{f}.spv")))
             .collect();
         for src_out in &shaders_by_name {
-            Command::new("glslangValidator")
-                .args([&format!("shader/{}", src_out.0), "-V", "-o", &src_out.1])
+            let name = src_out.0;
+            let args = [&format!("shader/{}", name), "-V", "-o", &src_out.1];
+            let res = Command::new("glslangValidator")
+                .args(args)
                 .spawn()
-                .expect(format!("failed to compile {}", &src_out.0).as_str());
+                .expect(format!("failed to start {}", &name).as_str())
+                // TODO: Could launch all of these these concurrently and wait for them all.
+                .wait();
+            match res {
+                Ok(_) => continue,
+                Err(e) => panic!("error compiling shader {}, error {}", name, e),
+            }
         }
         let load_shader = |name: &String| {
             shaders_by_name.get(name).map(|v| {
