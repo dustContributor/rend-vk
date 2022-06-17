@@ -43,9 +43,8 @@ impl Pipeline {
                 .expect(format!("failed to start {}", &name).as_str())
                 // TODO: Could launch all of these these concurrently and wait for them all.
                 .wait();
-            match res {
-                Ok(_) => continue,
-                Err(e) => panic!("error compiling shader {}, error {}", name, e),
+            if let Err(e) = res {
+                panic!("error compiling shader {}, error {}", name, e)
             }
         }
         let load_shader = |name: &String| {
