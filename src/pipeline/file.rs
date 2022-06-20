@@ -1,3 +1,4 @@
+use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
@@ -375,4 +376,142 @@ impl DescHandler<ViewportDesc> for Pipeline {
 
 impl DescHandler<ClearDesc> for Pipeline {
     // Empty.
+}
+
+impl BlendDesc {
+    pub fn to_vk(&self) -> vk::PipelineColorBlendStateCreateInfo {
+        vk::PipelineColorBlendStateCreateInfo::builder()
+            .logic_op(vk::LogicOp::CLEAR)
+            .attachments(&[vk::PipelineColorBlendAttachmentState {
+                blend_enable: if self.disabled { 0 } else { 1 },
+                src_color_blend_factor: self.src_factor.to_vk(),
+                dst_color_blend_factor: self.dst_factor.to_vk(),
+                color_blend_op: vk::BlendOp::ADD,
+                src_alpha_blend_factor: vk::BlendFactor::ZERO,
+                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+                alpha_blend_op: vk::BlendOp::ADD,
+                color_write_mask: vk::ColorComponentFlags::RGBA,
+            }])
+            .build()
+    }
+}
+
+impl StencilDesc {
+    pub fn to_vk(&self) -> vk::StencilOpState {
+        vk::StencilOpState {
+            fail_op: self.fail_op.to_vk(),
+            pass_op: self.pass_op.to_vk(),
+            depth_fail_op: self.depth_fail_op.to_vk(),
+            compare_op: self.func.to_vk(),
+            compare_mask: self.read_mask,
+            reference: self.ref_value,
+            ..Default::default()
+        }
+    }
+}
+
+impl DepthDesc {
+    pub fn to_vk(
+        &self,
+        stencil: vk::StencilOpState,
+        writing: &WriteDesc,
+    ) -> vk::PipelineDepthStencilStateCreateInfo {
+        vk::PipelineDepthStencilStateCreateInfo {
+            depth_test_enable: if self.testing { 1 } else { 0 },
+            depth_write_enable: if writing.depth { 1 } else { 0 },
+            depth_compare_op: self.func.to_vk(),
+            front: stencil,
+            back: stencil,
+            max_depth_bounds: self.range_end,
+            min_depth_bounds: self.range_start,
+            ..Default::default()
+        }
+    }
+}
+
+impl ViewportDesc {
+    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::Viewport {
+        vk::Viewport {
+            x: match self.x {
+                U32OrF32::U32(v) => v as f32,
+                U32OrF32::F32(v) => window_width * v,
+            },
+            y: match self.y {
+                U32OrF32::U32(v) => v as f32,
+                U32OrF32::F32(v) => window_height * v,
+            },
+            width: match self.width {
+                U32OrF32::U32(v) => v as f32,
+                U32OrF32::F32(v) => window_width * v,
+            },
+            height: match self.height {
+                U32OrF32::U32(v) => v as f32,
+                U32OrF32::F32(v) => window_height * v,
+            },
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }
+    }
+}
+
+impl ScissorDesc {
+    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::Rect2D {
+        vk::Rect2D {
+            offset: vk::Offset2D {
+                x: match self.x {
+                    U32OrF32::U32(v) => v as i32,
+                    U32OrF32::F32(v) => (window_width * v).ceil() as i32,
+                },
+                y: match self.y {
+                    U32OrF32::U32(v) => v as i32,
+                    U32OrF32::F32(v) => (window_height * v).ceil() as i32,
+                },
+            },
+            extent: Pipeline::extent_of(self.width, self.height, window_width, window_height),
+        }
+    }
+}
+
+impl ClearDesc {
+    pub fn to_vk_color(&self) -> Option<vk::ClearValue> {
+        self.color.and_then(|e| {
+            Some(vk::ClearValue {
+                color: vk::ClearColorValue {
+                    // Convolutedw way to separate a RGBA u32 into a vec4
+                    float32: e
+                        .to_ne_bytes()
+                        .into_iter()
+                        .map(|v| (v as f32) / 255.0)
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                },
+            })
+        })
+    }
+
+    pub fn to_vk_depth_stencil(&self) -> Option<vk::ClearValue> {
+        if self.depth.is_some() || self.stencil.is_some() {
+            Some(vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: self.depth.unwrap_or(0.0),
+                    stencil: self.stencil.unwrap_or(0),
+                },
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl TriangleDesc {
+    pub fn to_vk(&self) -> vk::PipelineRasterizationStateCreateInfo {
+        vk::PipelineRasterizationStateCreateInfo {
+            front_face: self.front_face.to_vk(),
+            cull_mode: self.cull_face.to_vk(),
+            polygon_mode: self.polygon_mode.to_vk(),
+            line_width: 1.0,
+            ..Default::default()
+        }
+    }
 }

@@ -77,7 +77,8 @@ impl Pipeline {
             .targets
             .iter()
             .map(|f| {
-                let extent = Self::extent_of(f.width, f.height, window_width, window_height);
+                let extent =
+                    Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
                 let format = f.format.to_vk();
                 let texture_create_info = vk::ImageCreateInfo {
                     image_type: vk::ImageType::TYPE_2D,
@@ -168,81 +169,15 @@ impl Pipeline {
             let scissor = Self::handle_option(pass.state.scissor.clone());
             let triangle = Self::handle_option(pass.state.triangle.clone());
             let clearing = Self::handle_option(pass.state.clearing.clone());
-            let blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
-                .logic_op(vk::LogicOp::CLEAR)
-                .attachments(&[vk::PipelineColorBlendAttachmentState {
-                    blend_enable: if blending.disabled { 0 } else { 1 },
-                    src_color_blend_factor: blending.src_factor.to_vk(),
-                    dst_color_blend_factor: blending.dst_factor.to_vk(),
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                    color_write_mask: vk::ColorComponentFlags::RGBA,
-                }])
-                .build();
-            let stencil_op_state = vk::StencilOpState {
-                fail_op: stencil.fail_op.to_vk(),
-                pass_op: stencil.pass_op.to_vk(),
-                depth_fail_op: stencil.depth_fail_op.to_vk(),
-                compare_op: stencil.func.to_vk(),
-                compare_mask: stencil.read_mask,
-                reference: stencil.ref_value,
-                ..Default::default()
-            };
-            let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo {
-                depth_test_enable: if depth.testing { 1 } else { 0 },
-                depth_write_enable: if writing.depth { 1 } else { 0 },
-                depth_compare_op: depth.func.to_vk(),
-                front: stencil_op_state,
-                back: stencil_op_state,
-                max_depth_bounds: depth.range_end,
-                min_depth_bounds: depth.range_start,
-                ..Default::default()
-            };
-            let viewports = [vk::Viewport {
-                x: match viewport.x {
-                    U32OrF32::U32(v) => v as f32,
-                    U32OrF32::F32(v) => window_width as f32 * v,
-                },
-                y: match viewport.y {
-                    U32OrF32::U32(v) => v as f32,
-                    U32OrF32::F32(v) => window_height as f32 * v,
-                },
-                width: match viewport.width {
-                    U32OrF32::U32(v) => v as f32,
-                    U32OrF32::F32(v) => window_width as f32 * v,
-                },
-                height: match viewport.height {
-                    U32OrF32::U32(v) => v as f32,
-                    U32OrF32::F32(v) => window_height as f32 * v,
-                },
-                min_depth: 0.0,
-                max_depth: 1.0,
-            }];
-            let scissors = [vk::Rect2D {
-                offset: vk::Offset2D {
-                    x: match scissor.x {
-                        U32OrF32::U32(v) => v as i32,
-                        U32OrF32::F32(v) => (window_width as f32 * v).ceil() as i32,
-                    },
-                    y: match scissor.y {
-                        U32OrF32::U32(v) => v as i32,
-                        U32OrF32::F32(v) => (window_height as f32 * v).ceil() as i32,
-                    },
-                },
-                extent: Self::extent_of(scissor.width, scissor.height, window_width, window_height),
-            }];
+            let blend_state = blending.to_vk();
+            let stencil_op_state = stencil.to_vk();
+            let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
+            let viewports = [viewport.to_vk(window_width as f32, window_height as f32)];
+            let scissors = [scissor.to_vk(window_width as f32, window_height as f32)];
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
                 .scissors(&scissors)
                 .viewports(&viewports);
-            let rasterization_state = vk::PipelineRasterizationStateCreateInfo {
-                front_face: triangle.front_face.to_vk(),
-                cull_mode: triangle.cull_face.to_vk(),
-                polygon_mode: triangle.polygon_mode.to_vk(),
-                line_width: 1.0,
-                ..Default::default()
-            };
+            let rasterization_state = triangle.to_vk();
 
             let vertex_input_binding_descriptions = Self::default_vertex_inputs();
             let binding_descs = vertex_input_binding_descriptions
@@ -326,31 +261,8 @@ impl Pipeline {
             .expect("Unable to create graphics pipeline");
             let graphics_pipeline = graphics_pipelines[0];
 
-            let clear_color_value = clearing.color.and_then(|e| {
-                Some(vk::ClearValue {
-                    color: vk::ClearColorValue {
-                        // Convolutedw way to separate a RGBA u32 into a vec4
-                        float32: e
-                            .to_ne_bytes()
-                            .into_iter()
-                            .map(|v| (v as f32) / 255.0)
-                            .collect::<Vec<_>>()
-                            .try_into()
-                            .unwrap(),
-                    },
-                })
-            });
-            let clear_depth_stencil_value =
-                if clearing.depth.is_some() || clearing.stencil.is_some() {
-                    Some(vk::ClearValue {
-                        depth_stencil: vk::ClearDepthStencilValue {
-                            depth: clearing.depth.unwrap_or(0.0),
-                            stencil: clearing.stencil.unwrap_or(0),
-                        },
-                    })
-                } else {
-                    None
-                };
+            let clear_color_value = clearing.to_vk_color();
+            let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
             let get_attachment = |e: &String| -> Attachment {
                 attachments_by_name
                     .get(&e)
@@ -435,20 +347,20 @@ impl Pipeline {
         };
     }
 
-    fn extent_of(
+    pub fn extent_of(
         opt_width: U32OrF32,
         opt_height: U32OrF32,
-        ref_width: u32,
-        ref_height: u32,
+        ref_width: f32,
+        ref_height: f32,
     ) -> vk::Extent2D {
         vk::Extent2D {
             width: match opt_width {
                 U32OrF32::U32(v) => v,
-                U32OrF32::F32(v) => (ref_width as f32 * v).ceil() as u32,
+                U32OrF32::F32(v) => (ref_width * v).ceil() as u32,
             },
             height: match opt_height {
                 U32OrF32::U32(v) => v,
-                U32OrF32::F32(v) => (ref_height as f32 * v).ceil() as u32,
+                U32OrF32::F32(v) => (ref_height * v).ceil() as u32,
             },
         }
     }
