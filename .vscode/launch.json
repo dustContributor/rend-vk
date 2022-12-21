@@ -1,0 +1,68 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'rend-vk'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--lib",
+          "--package=rend-vk"
+        ],
+        "filter": {
+          "name": "rend-vk",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'rend-vk'",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      },
+      "stopOnEntry": false,
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=rend-vk",
+          "--package=rend-vk"
+        ],
+        "filter": {
+          "name": "rend-vk",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'rend-vk'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=rend-vk",
+          "--package=rend-vk"
+        ],
+        "filter": {
+          "name": "rend-vk",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
