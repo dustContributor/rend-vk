@@ -19,6 +19,7 @@ pub struct GpuAllocator {
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,
     addr: *mut c_void,
+    device_addr: u64,
     ranges: Vec<Range>,
 }
 
@@ -33,7 +34,8 @@ impl GpuAllocator {
         use vk::BufferUsageFlags as Buf;
         use vk::MemoryPropertyFlags as Mpf;
         // Apparently these dont matter much to the driver.
-        let usage_flags = Buf::VERTEX_BUFFER
+        let usage_flags = Buf::SHADER_DEVICE_ADDRESS
+            | Buf::VERTEX_BUFFER
             | Buf::INDEX_BUFFER
             | Buf::STORAGE_BUFFER
             | Buf::UNIFORM_BUFFER
@@ -54,19 +56,29 @@ impl GpuAllocator {
         }
         let memi = GpuAllocator::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
             .expect("Unable to find suitable memorytype for the vertex buffer.");
-        let mem_info = vk::MemoryAllocateInfo {
-            allocation_size: mem_reqs.size,
-            memory_type_index: memi,
+        let mut mem_flags = vk::MemoryAllocateFlagsInfo {
+            flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
+            ..Default::default()
+        };
+        let mem_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(mem_reqs.size)
+            .memory_type_index(memi)
+            .push_next(&mut mem_flags)
+            .build();
+        let device_addr_info = vk::BufferDeviceAddressInfo {
+            buffer,
             ..Default::default()
         };
         let mem: vk::DeviceMemory;
         let addr: *mut c_void;
+        let device_addr: u64;
         unsafe {
             mem = device.allocate_memory(&mem_info, None).unwrap();
             addr = device
                 .map_memory(mem, 0, mem_reqs.size, vk::MemoryMapFlags::empty())
                 .unwrap();
             device.bind_buffer_memory(buffer, mem, 0).unwrap();
+            device_addr = device.get_buffer_device_address(&device_addr_info);
         }
         let ranges = vec![Range {
             start: 0,
@@ -77,6 +89,7 @@ impl GpuAllocator {
             mem,
             buffer,
             addr,
+            device_addr,
             alignment: mem_reqs.alignment,
             ranges,
         };
