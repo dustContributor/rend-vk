@@ -23,7 +23,7 @@ impl SwapchainContext {
     pub fn new(window_context: &WindowContext, entry: &Entry, instance: &Instance) -> Self {
         let surface_loader = Surface::new(&entry, &instance);
         let surface =
-            unsafe { ash_window::create_surface(&entry, &instance, &window_context.window, None) }
+            unsafe { ash_window::create_surface(entry, instance, &window_context.window, None) }
                 .unwrap();
 
         return SwapchainContext {
