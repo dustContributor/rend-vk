@@ -391,6 +391,7 @@ impl BlendDesc {
                 dst_alpha_blend_factor: vk::BlendFactor::ZERO,
                 alpha_blend_op: vk::BlendOp::ADD,
                 color_write_mask: vk::ColorComponentFlags::RGBA,
+                ..Default::default()
             }])
             .build()
     }
