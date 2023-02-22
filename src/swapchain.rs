@@ -163,6 +163,7 @@ impl SwapchainContext {
                         g: vk::ComponentSwizzle::G,
                         b: vk::ComponentSwizzle::B,
                         a: vk::ComponentSwizzle::A,
+                        ..Default::default()
                     })
                     .subresource_range(vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -170,8 +171,10 @@ impl SwapchainContext {
                         level_count: 1,
                         base_array_layer: 0,
                         layer_count: 1,
+                        ..Default::default()
                     })
-                    .image(image);
+                    .image(image)
+                    .build();
                 unsafe { device.create_image_view(&create_view_info, None).unwrap() }
             })
             .collect();

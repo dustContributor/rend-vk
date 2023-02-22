@@ -169,7 +169,7 @@ impl Pipeline {
             let scissor = Self::handle_option(pass.state.scissor.clone());
             let triangle = Self::handle_option(pass.state.triangle.clone());
             let clearing = Self::handle_option(pass.state.clearing.clone());
-            let blend_state = blending.to_vk();
+            let (_attachments, blend_state) = blending.to_vk();
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
             let viewports = [viewport.to_vk(window_width as f32, window_height as f32)];

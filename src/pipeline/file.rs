@@ -379,21 +379,28 @@ impl DescHandler<ClearDesc> for Pipeline {
 }
 
 impl BlendDesc {
-    pub fn to_vk(&self) -> vk::PipelineColorBlendStateCreateInfo {
-        vk::PipelineColorBlendStateCreateInfo::builder()
+    pub fn to_vk(
+        &self,
+    ) -> (
+        Vec<vk::PipelineColorBlendAttachmentState>,
+        vk::PipelineColorBlendStateCreateInfo,
+    ) {
+        let attachments = vec![vk::PipelineColorBlendAttachmentState {
+            blend_enable: if self.disabled { 0 } else { 1 },
+            src_color_blend_factor: self.src_factor.to_vk(),
+            dst_color_blend_factor: self.dst_factor.to_vk(),
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ZERO,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
+            color_write_mask: vk::ColorComponentFlags::RGBA,
+            ..Default::default()
+        }];
+        let info = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op(vk::LogicOp::CLEAR)
-            .attachments(&[vk::PipelineColorBlendAttachmentState {
-                blend_enable: if self.disabled { 0 } else { 1 },
-                src_color_blend_factor: self.src_factor.to_vk(),
-                dst_color_blend_factor: self.dst_factor.to_vk(),
-                color_blend_op: vk::BlendOp::ADD,
-                src_alpha_blend_factor: vk::BlendFactor::ZERO,
-                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                alpha_blend_op: vk::BlendOp::ADD,
-                color_write_mask: vk::ColorComponentFlags::RGBA,
-                ..Default::default()
-            }])
-            .build()
+            .attachments(&attachments)
+            .build();
+        (attachments, info)
     }
 }
 
