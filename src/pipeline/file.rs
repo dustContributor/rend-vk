@@ -497,6 +497,7 @@ impl ClearDesc {
                 depth_stencil: vk::ClearDepthStencilValue {
                     depth: self.depth.unwrap_or(0.0),
                     stencil: self.stencil.unwrap_or(0),
+                    ..Default::default()
                 },
             })
         } else {
