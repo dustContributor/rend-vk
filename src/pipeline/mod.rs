@@ -55,6 +55,7 @@ pub struct Stage {
     pub updaters: Vec<String>,
     pub batch: BatchType,
     pub is_final: bool,
+    pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
 }
 
 impl Stage {
@@ -157,7 +158,8 @@ impl Stage {
             );
             draw_commands(&device, command_buffer);
             device.cmd_end_rendering(command_buffer);
-        };
+        }
+
         let is_final = self.is_final;
         let post_transition_barriers: Vec<_> = outputs
             .iter()

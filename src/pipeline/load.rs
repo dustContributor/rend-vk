@@ -160,7 +160,7 @@ impl Pipeline {
         attachments_by_name.insert(&default_attachment_name, default_attachment);
 
         let mut stages = Vec::<_>::with_capacity(pip.passes.len());
-        for pass in &pip.passes {
+        for (passi, pass) in pip.passes.iter().enumerate() {
             let writing = Self::handle_option(pass.state.writing.clone());
             let depth = Self::handle_option(pass.state.depth.clone());
             let blending = Self::handle_option(pass.state.blending.clone());
@@ -321,6 +321,9 @@ impl Pipeline {
                 _ => pre_rendering_builder.build(),
             };
 
+            let image_barriers =
+                Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
+
             stages.push(crate::pipeline::Stage {
                 name: pass.name.clone(),
                 pre_rendering,
@@ -331,6 +334,7 @@ impl Pipeline {
                 inputs,
                 outputs,
                 is_final,
+                image_barriers,
             });
         }
         for shader in shader_programs_by_name
@@ -362,6 +366,127 @@ impl Pipeline {
                 U32OrF32::U32(v) => v,
                 U32OrF32::F32(v) => (ref_height * v).ceil() as u32,
             },
+        }
+    }
+
+    fn gen_image_barriers_for(
+        currenti: usize,
+        inputs: &Vec<Attachment>,
+        outputs: &Vec<Attachment>,
+        passes: &Vec<Pass>,
+    ) -> Vec<vk::ImageMemoryBarrier2> {
+        let mut i = currenti;
+        let mut barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
+        for input in inputs {
+            loop {
+                i = (i - 1) % passes.len();
+                if i == currenti {
+                    // Looped back to current pass, nothing to check
+                    break;
+                }
+                let prev = &passes[i];
+                if prev.inputs.contains(&input.name) {
+                    // Already issued barrier before
+                    break;
+                }
+                if !prev.outputs.contains(&input.name) {
+                    // Continue to previous pass
+                    continue;
+                }
+                // Image was written to before, barrier for reading
+                let barrier = vk::ImageMemoryBarrier2::builder()
+                    .image(input.image)
+                    .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+                    .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
+                    .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+                    .new_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
+                    .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+                    .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::builder()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1)
+                            .build(),
+                    )
+                    .build();
+                barriers.push(barrier);
+                break;
+            }
+        }
+        for output in outputs {
+            loop {
+                i = (i - 1) % passes.len();
+                if i == currenti {
+                    // Looped back to current pass, nothing to check
+                    break;
+                }
+                let prev = &passes[i];
+                if prev.outputs.contains(&output.name) {
+                    // Already issued barrier before
+                    break;
+                }
+                if !prev.inputs.contains(&output.name) {
+                    // Continue to previous pass
+                    continue;
+                }
+                // Image was read before, issue barrier for writing
+                let barrier = vk::ImageMemoryBarrier2::builder()
+                    .image(output.image)
+                    .src_access_mask(vk::AccessFlags2::MEMORY_READ)
+                    .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+                    .src_stage_mask(vk::PipelineStageFlags2::NONE)
+                    .dst_stage_mask(
+                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS,
+                    )
+                    .subresource_range(
+                        vk::ImageSubresourceRange::builder()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1)
+                            .build(),
+                    )
+                    .build();
+                barriers.push(barrier);
+                break;
+            }
+        }
+        return barriers;
+    }
+
+    fn mask_layout_aspect_for(
+        format: crate::format::Format,
+    ) -> (vk::AccessFlags, vk::ImageLayout, vk::ImageAspectFlags) {
+        if format.has_depth() {
+            let (layout, aspect) = if format.has_stencil() {
+                (
+                    vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
+                )
+            } else {
+                (
+                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+                    vk::ImageAspectFlags::DEPTH,
+                )
+            };
+            (
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                layout,
+                aspect,
+            )
+        } else {
+            (
+                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                vk::ImageAspectFlags::COLOR,
+            )
         }
     }
 
