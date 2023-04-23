@@ -8,6 +8,7 @@ struct Range {
     start: u64,
     end: u64,
 }
+
 impl Range {
     fn size(&self) -> u64 {
         self.end - self.start
@@ -18,6 +19,7 @@ pub struct GpuAllocator {
     pub alignment: u64,
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,
+    pub kind: BufferKind,
     addr: *mut c_void,
     device_addr: u64,
     ranges: Vec<Range>,
@@ -29,18 +31,58 @@ pub struct GpuSlice {
     pub offset: u64,
 }
 
-impl GpuAllocator {
-    pub fn new(mem_props: &vk::PhysicalDeviceMemoryProperties, device: &Device, size: u64) -> Self {
+pub enum BufferKind {
+    GENERAL,
+    DESCRIPTOR,
+}
+
+impl BufferKind {
+    fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
         use vk::BufferUsageFlags as Buf;
+        match self {
+            BufferKind::GENERAL => {
+                Buf::SHADER_DEVICE_ADDRESS
+                    | Buf::VERTEX_BUFFER
+                    | Buf::INDEX_BUFFER
+                    | Buf::STORAGE_BUFFER
+                    | Buf::UNIFORM_BUFFER
+                    | Buf::TRANSFER_SRC
+                    | Buf::TRANSFER_DST
+            }
+            BufferKind::DESCRIPTOR => {
+                Buf::SHADER_DEVICE_ADDRESS
+                    | Buf::RESOURCE_DESCRIPTOR_BUFFER_EXT
+                    | Buf::SAMPLER_DESCRIPTOR_BUFFER_EXT
+            }
+        }
+    }
+}
+
+impl GpuAllocator {
+    pub fn new_general(
+        mem_props: &vk::PhysicalDeviceMemoryProperties,
+        device: &Device,
+        size: u64,
+    ) -> Self {
+        Self::new(mem_props, device, size, BufferKind::GENERAL)
+    }
+
+    pub fn new_descriptor(
+        mem_props: &vk::PhysicalDeviceMemoryProperties,
+        device: &Device,
+        size: u64,
+    ) -> Self {
+        Self::new(mem_props, device, size, BufferKind::DESCRIPTOR)
+    }
+
+    pub fn new(
+        mem_props: &vk::PhysicalDeviceMemoryProperties,
+        device: &Device,
+        size: u64,
+        kind: BufferKind,
+    ) -> Self {
         use vk::MemoryPropertyFlags as Mpf;
-        // Apparently these dont matter much to the driver.
-        let usage_flags = Buf::SHADER_DEVICE_ADDRESS
-            | Buf::VERTEX_BUFFER
-            | Buf::INDEX_BUFFER
-            | Buf::STORAGE_BUFFER
-            | Buf::UNIFORM_BUFFER
-            | Buf::TRANSFER_SRC
-            | Buf::TRANSFER_DST;
+        let usage_flags = kind.to_vk_usage_flags();
         let mem_flags = Mpf::DEVICE_LOCAL | Mpf::HOST_VISIBLE | Mpf::HOST_COHERENT;
         let buffer_info = vk::BufferCreateInfo {
             size,
@@ -89,6 +131,7 @@ impl GpuAllocator {
             mem,
             buffer,
             addr,
+            kind,
             device_addr,
             alignment: mem_reqs.alignment,
             ranges,
