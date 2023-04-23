@@ -233,7 +233,7 @@ impl Pipeline {
             };
             let shader_stages = shader_programs_by_name
                 .get(&pass.program)
-                .unwrap()
+                .expect(format!("Missing program: {}", pass.program).as_str())
                 .shaders
                 .iter()
                 .map(|e| e.info)
@@ -377,9 +377,19 @@ impl Pipeline {
     ) -> Vec<vk::ImageMemoryBarrier2> {
         let mut i = currenti;
         let mut barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
+        fn wrap_around(index: usize, length: usize) -> usize {
+            if index == 0 {
+                length - 1
+            } else {
+                index - 1
+            }
+        }
         for input in inputs {
+            if Attachment::DEFAULT_NAME == input.name {
+                panic!("Can't read from the default attachment!")
+            }
             loop {
-                i = (i - 1) % passes.len();
+                i = wrap_around(i, passes.len());
                 if i == currenti {
                     // Looped back to current pass, nothing to check
                     break;
@@ -402,23 +412,22 @@ impl Pipeline {
                     .new_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
                     .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
-                    .subresource_range(
-                        vk::ImageSubresourceRange::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
+                    .subresource_range(Self::color_subresource_range())
                     .build();
                 barriers.push(barrier);
                 break;
             }
         }
         for output in outputs {
+            if Attachment::DEFAULT_NAME == output.name {
+                /*
+                 * Handled in the rendering loop, since the swapchain
+                 * changes which image this barrier refers to.
+                 */
+                continue;
+            }
             loop {
-                i = (i - 1) % passes.len();
+                i = wrap_around(i, passes.len());
                 if i == currenti {
                     // Looped back to current pass, nothing to check
                     break;
@@ -440,25 +449,50 @@ impl Pipeline {
                     .old_layout(vk::ImageLayout::UNDEFINED)
                     .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
-                    .dst_stage_mask(
-                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
-                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS,
-                    )
-                    .subresource_range(
-                        vk::ImageSubresourceRange::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
+                    .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+                    .subresource_range(Self::color_subresource_range())
                     .build();
                 barriers.push(barrier);
                 break;
             }
         }
         return barriers;
+    }
+
+    pub fn default_attachment_write_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
+        vk::ImageMemoryBarrier2::builder()
+            .image(image)
+            .src_access_mask(vk::AccessFlags2::MEMORY_READ)
+            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .src_stage_mask(vk::PipelineStageFlags2::NONE)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .subresource_range(Self::color_subresource_range())
+            .build()
+    }
+
+    pub fn default_attachment_present_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
+        vk::ImageMemoryBarrier2::builder()
+            .image(image)
+            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .dst_access_mask(vk::AccessFlags2::NONE)
+            .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .src_stage_mask(vk::PipelineStageFlags2::NONE)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .subresource_range(Self::color_subresource_range())
+            .build()
+    }
+
+    fn color_subresource_range() -> vk::ImageSubresourceRange {
+        vk::ImageSubresourceRange::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(1)
+            .build()
     }
 
     fn mask_layout_aspect_for(
