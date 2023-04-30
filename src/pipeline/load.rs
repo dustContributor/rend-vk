@@ -1,4 +1,4 @@
-use ash::vk::{self, SamplerAddressMode};
+use ash::vk;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -353,6 +353,8 @@ impl Pipeline {
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
+            linear_sampler: crate::pipeline::sampler::Sampler::make_for(device, "linear".to_string(), true),
+            nearest_sampler: crate::pipeline::sampler::Sampler::make_for(device, "nearest".to_string(), false),
         };
     }
 
@@ -372,24 +374,6 @@ impl Pipeline {
                 U32OrF32::F32(v) => (ref_height * v).ceil() as u32,
             },
         }
-    }
-
-    fn make_sampler_info(is_linear: bool) -> vk::SamplerCreateInfo {
-        let filter = if is_linear {
-            vk::Filter::LINEAR
-        } else {
-            vk::Filter::NEAREST
-        };
-        vk::SamplerCreateInfo::builder()
-            .address_mode_u(SamplerAddressMode::CLAMP_TO_EDGE)
-            .address_mode_v(SamplerAddressMode::CLAMP_TO_EDGE)
-            .address_mode_w(SamplerAddressMode::CLAMP_TO_EDGE)
-            .anisotropy_enable(false)
-            .compare_enable(false)
-            .min_filter(filter)
-            .mag_filter(filter)
-            .max_lod(vk::LOD_CLAMP_NONE)
-            .build()
     }
 
     fn gen_image_barriers_for(
@@ -435,7 +419,7 @@ impl Pipeline {
                     .new_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
                     .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
-                    .subresource_range(Self::color_subresource_range())
+                    .subresource_range(Attachment::color_subresource_range())
                     .build();
                 barriers.push(barrier);
                 break;
@@ -473,7 +457,7 @@ impl Pipeline {
                     .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
                     .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-                    .subresource_range(Self::color_subresource_range())
+                    .subresource_range(Attachment::color_subresource_range())
                     .build();
                 barriers.push(barrier);
                 break;
@@ -482,41 +466,7 @@ impl Pipeline {
         return barriers;
     }
 
-    pub fn default_attachment_write_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
-        vk::ImageMemoryBarrier2::builder()
-            .image(image)
-            .src_access_mask(vk::AccessFlags2::MEMORY_READ)
-            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-            .src_stage_mask(vk::PipelineStageFlags2::NONE)
-            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .subresource_range(Self::color_subresource_range())
-            .build()
-    }
-
-    pub fn default_attachment_present_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
-        vk::ImageMemoryBarrier2::builder()
-            .image(image)
-            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-            .dst_access_mask(vk::AccessFlags2::NONE)
-            .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .src_stage_mask(vk::PipelineStageFlags2::NONE)
-            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .subresource_range(Self::color_subresource_range())
-            .build()
-    }
-
-    fn color_subresource_range() -> vk::ImageSubresourceRange {
-        vk::ImageSubresourceRange::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_mip_level(0)
-            .level_count(1)
-            .base_array_layer(0)
-            .layer_count(1)
-            .build()
-    }
+   
 
     fn mask_layout_aspect_for(
         format: crate::format::Format,

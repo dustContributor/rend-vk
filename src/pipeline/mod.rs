@@ -1,6 +1,7 @@
 pub mod attachment;
 pub mod file;
 pub mod stage;
+pub mod sampler;
 mod load;
 mod state;
 
@@ -8,6 +9,8 @@ mod state;
 pub struct Pipeline {
     pub stages: Vec<crate::pipeline::stage::Stage>,
     pub attachments: Vec<crate::pipeline::attachment::Attachment>,
+    pub nearest_sampler: crate::pipeline::sampler::Sampler,
+    pub linear_sampler: crate::pipeline::sampler::Sampler,
 }
 
 impl Pipeline {
