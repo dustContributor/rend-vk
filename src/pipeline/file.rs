@@ -26,7 +26,7 @@ pub struct Target {
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInput {
     pub name: String,
-    pub sampler: SamplerType,
+    pub sampler: SamplerKind,
 }
 
 #[derive(Deserialize)]
@@ -282,11 +282,12 @@ pub enum U32OrF32 {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone)]
-pub enum SamplerType {
+#[derive(Copy, Clone, strum_macros::Display)]
+pub enum SamplerKind {
     NEAREST,
     LINEAR,
 }
+
 
 pub trait Predefined<T> {
     fn def() -> T {
