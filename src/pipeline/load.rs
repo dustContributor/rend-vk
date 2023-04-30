@@ -1,4 +1,4 @@
-use ash::vk;
+use ash::vk::{self, SamplerAddressMode};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::file::*;
-use crate::pipeline::Attachment;
+use crate::pipeline::attachment::Attachment;
 use crate::shader;
 
 impl Pipeline {
@@ -275,7 +275,12 @@ impl Pipeline {
                 .iter()
                 .find(|&e| Attachment::DEFAULT_NAME == e)
                 .is_some();
-            let inputs: Vec<_> = pass.inputs.iter().map(get_attachment).collect();
+            let inputs: Vec<_> = pass
+                .inputs
+                .iter()
+                .map(|e| &e.name)
+                .map(get_attachment)
+                .collect();
             let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).collect();
             let pre_rendering_color: Vec<_> = outputs
                 .iter()
@@ -324,7 +329,7 @@ impl Pipeline {
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
 
-            stages.push(crate::pipeline::Stage {
+            stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
                 pre_rendering,
                 batch: pass.batch,
@@ -369,6 +374,24 @@ impl Pipeline {
         }
     }
 
+    fn make_sampler_info(is_linear: bool) -> vk::SamplerCreateInfo {
+        let filter = if is_linear {
+            vk::Filter::LINEAR
+        } else {
+            vk::Filter::NEAREST
+        };
+        vk::SamplerCreateInfo::builder()
+            .address_mode_u(SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(SamplerAddressMode::CLAMP_TO_EDGE)
+            .anisotropy_enable(false)
+            .compare_enable(false)
+            .min_filter(filter)
+            .mag_filter(filter)
+            .max_lod(vk::LOD_CLAMP_NONE)
+            .build()
+    }
+
     fn gen_image_barriers_for(
         currenti: usize,
         inputs: &Vec<Attachment>,
@@ -395,7 +418,7 @@ impl Pipeline {
                     break;
                 }
                 let prev = &passes[i];
-                if prev.inputs.contains(&input.name) {
+                if !prev.inputs.iter().any(|e| e.name.eq(&input.name)) {
                     // Already issued barrier before
                     break;
                 }
@@ -437,7 +460,7 @@ impl Pipeline {
                     // Already issued barrier before
                     break;
                 }
-                if !prev.inputs.contains(&output.name) {
+                if !prev.inputs.iter().any(|e| e.name.eq(&output.name)) {
                     // Continue to previous pass
                     continue;
                 }

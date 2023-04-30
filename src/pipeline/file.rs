@@ -2,7 +2,7 @@ use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::{format, render};
+use crate::format;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,12 +24,19 @@ pub struct Target {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AttachmentInput {
+    pub name: String,
+    pub sampler: SamplerType,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Pass {
     pub name: String,
     pub program: String,
-    pub batch: render::BatchType,
+    pub batch: crate::pipeline::stage::BatchType,
     pub outputs: Vec<String>,
-    pub inputs: Vec<String>,
+    pub inputs: Vec<AttachmentInput>,
     pub updaters: Vec<String>,
     pub state: State,
 }
@@ -271,6 +278,14 @@ impl Predefined<WriteDesc> for WriteDesc {
 pub enum U32OrF32 {
     U32(u32),
     F32(f32),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone)]
+pub enum SamplerType {
+    NEAREST,
+    LINEAR,
 }
 
 pub trait Predefined<T> {
