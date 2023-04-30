@@ -353,8 +353,11 @@ impl Pipeline {
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
-            linear_sampler: crate::pipeline::sampler::Sampler::make_for(device, "linear".to_string(), true),
-            nearest_sampler: crate::pipeline::sampler::Sampler::make_for(device, "nearest".to_string(), false),
+            linear_sampler: crate::pipeline::sampler::Sampler::of_kind(device, SamplerKind::LINEAR),
+            nearest_sampler: crate::pipeline::sampler::Sampler::of_kind(
+                device,
+                SamplerKind::NEAREST,
+            ),
         };
     }
 
@@ -465,8 +468,6 @@ impl Pipeline {
         }
         return barriers;
     }
-
-   
 
     fn mask_layout_aspect_for(
         format: crate::format::Format,

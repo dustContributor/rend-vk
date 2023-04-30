@@ -6,7 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ash = { version = "0.37.0", features = ["linked", "debug"] }
+strum = "0.24"
+strum_macros = "0.24"
+rand = { version = "0.8.5" }
+ash = { version = "0.37.2", features = ["linked", "debug"] }
 ash-window = "0.10.0"
 glam = "0.20.2"
 serde = { version = "1.0.136", features = ["derive"] }
