@@ -1,4 +1,4 @@
-use ash::{vk, Device};
+use ash::vk;
 use std::clone::Clone;
 use std::marker::Copy;
 use std::os::raw::c_void;
@@ -14,6 +14,7 @@ impl Range {
         self.end - self.start
     }
 }
+
 pub struct GpuAllocator {
     pub type_index: u32,
     pub alignment: u64,
@@ -25,12 +26,15 @@ pub struct GpuAllocator {
     ranges: Vec<Range>,
 }
 
+#[derive(Copy, Clone)]
 pub struct GpuSlice {
     pub addr: *mut c_void,
     pub size: u64,
     pub offset: u64,
+    pub alignment: u64,
 }
 
+#[derive(PartialEq, strum_macros::Display)]
 pub enum BufferKind {
     GENERAL,
     DESCRIPTOR,
@@ -60,24 +64,33 @@ impl BufferKind {
 
 impl GpuAllocator {
     pub fn new_general(
-        mem_props: &vk::PhysicalDeviceMemoryProperties,
-        device: &Device,
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+        device: &ash::Device,
         size: u64,
     ) -> Self {
-        Self::new(mem_props, device, size, BufferKind::GENERAL)
+        Self::new(instance, physical_device, device, size, BufferKind::GENERAL)
     }
 
     pub fn new_descriptor(
-        mem_props: &vk::PhysicalDeviceMemoryProperties,
-        device: &Device,
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+        device: &ash::Device,
         size: u64,
     ) -> Self {
-        Self::new(mem_props, device, size, BufferKind::DESCRIPTOR)
+        Self::new(
+            instance,
+            physical_device,
+            device,
+            size,
+            BufferKind::DESCRIPTOR,
+        )
     }
 
     pub fn new(
-        mem_props: &vk::PhysicalDeviceMemoryProperties,
-        device: &Device,
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+        device: &ash::Device,
         size: u64,
         kind: BufferKind,
     ) -> Self {
@@ -96,8 +109,22 @@ impl GpuAllocator {
             buffer = device.create_buffer(&buffer_info, None).unwrap();
             mem_reqs = device.get_buffer_memory_requirements(buffer);
         }
-        let memi = GpuAllocator::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
-            .expect("Unable to find suitable memorytype for the vertex buffer.");
+        let alignment = if BufferKind::DESCRIPTOR == kind {
+            /*
+             * Descriptor offset alignment may be wider than the actual memory
+             * alignment, defensively use the bigger of the two.
+             */
+            std::cmp::max(
+                mem_reqs.alignment,
+                Self::get_descriptor_offset_alignment(instance, physical_device),
+            )
+        } else {
+            mem_reqs.alignment
+        };
+        let mem_props = unsafe { instance.get_physical_device_memory_properties(*physical_device) };
+
+        let memi = Self::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
+            .expect("Unable to find suitable memorytype for the buffer");
         let mut mem_flags = vk::MemoryAllocateFlagsInfo {
             flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
             ..Default::default()
@@ -126,16 +153,31 @@ impl GpuAllocator {
             start: 0,
             end: mem_info.allocation_size,
         }];
-        return GpuAllocator {
+        return Self {
             type_index: memi,
             mem,
             buffer,
             addr,
             kind,
             device_addr,
-            alignment: mem_reqs.alignment,
+            alignment,
             ranges,
         };
+    }
+
+    fn get_descriptor_offset_alignment(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+    ) -> u64 {
+        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
+            ..Default::default()
+        };
+        let mut device_props = vk::PhysicalDeviceProperties2::builder()
+            .push_next(&mut props)
+            .build();
+        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
+
+        props.descriptor_buffer_offset_alignment
     }
 
     fn next_size(base: u64, mul: u64) -> u64 {
@@ -144,7 +186,7 @@ impl GpuAllocator {
     }
 
     pub fn alloc(&mut self, size: u64) -> Option<GpuSlice> {
-        let size = GpuAllocator::next_size(size, self.alignment);
+        let size = Self::next_size(size, self.alignment);
         let ranges = &mut self.ranges;
         for i in 0..ranges.len() {
             let range = &ranges[i];
@@ -166,7 +208,12 @@ impl GpuAllocator {
                 addr = addr.offset(old_start as isize);
                 offset = addr.offset_from(self.addr) as u64;
             }
-            return Some(GpuSlice { addr, size, offset });
+            return Some(GpuSlice {
+                addr,
+                size,
+                offset,
+                alignment: self.alignment,
+            });
         }
         return None;
     }
@@ -224,7 +271,7 @@ impl GpuAllocator {
         );
     }
 
-    pub fn destroy(&self, device: &Device) {
+    pub fn destroy(&self, device: &ash::Device) {
         unsafe {
             device.destroy_buffer(self.buffer, None);
             device.free_memory(self.mem, None);
