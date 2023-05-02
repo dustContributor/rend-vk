@@ -2,6 +2,7 @@ pub mod attachment;
 pub mod file;
 pub mod stage;
 pub mod sampler;
+pub mod descriptor;
 mod load;
 mod state;
 
