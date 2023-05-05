@@ -19,25 +19,19 @@ impl DescriptorBuffer {
         mem: &mut GpuAllocator,
         name: String,
         descriptor_type: vk::DescriptorType,
+        count: u32,
     ) -> Self {
-        if BufferKind::DESCRIPTOR != mem.kind {
-            panic!(
-                "Allocator with kind {} passed, kind {} needed!",
-                mem.kind,
-                BufferKind::DESCRIPTOR
-            )
-        }
-        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
-            ..Default::default()
-        };
-        let mut device_props = vk::PhysicalDeviceProperties2::builder()
-            .push_next(&mut props)
-            .build();
-        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
-        let descriptor_size = Self::size_for(descriptor_type, &props);
+        assert!(count > 0, "Cant have zero sized descriptor buffers!");
+        assert!(
+            BufferKind::DESCRIPTOR == mem.kind,
+            "Allocator with kind {} passed, kind {} needed!",
+            mem.kind,
+            BufferKind::DESCRIPTOR
+        );
+        let descriptor_size = Self::size_of(descriptor_type, instance, physical_device);
         let binding = vk::DescriptorSetLayoutBinding {
             descriptor_type,
-            descriptor_count: 256,
+            descriptor_count: count,
             stage_flags: vk::ShaderStageFlags::ALL_GRAPHICS,
             ..Default::default()
         };
@@ -60,15 +54,39 @@ impl DescriptorBuffer {
         }
     }
 
-    fn size_for(
+    fn size_of(
         descriptor_type: vk::DescriptorType,
-        props: &vk::PhysicalDeviceDescriptorBufferPropertiesEXT,
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
     ) -> usize {
+        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
+            ..Default::default()
+        };
+        let mut device_props = vk::PhysicalDeviceProperties2::builder()
+            .push_next(&mut props)
+            .build();
+        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
         match descriptor_type {
             vk::DescriptorType::SAMPLED_IMAGE => props.sampled_image_descriptor_size,
             vk::DescriptorType::UNIFORM_BUFFER => props.uniform_buffer_descriptor_size,
             vk::DescriptorType::SAMPLER => props.sampler_descriptor_size,
             _ => panic!("Unsupported descriptor type {:?}", descriptor_type),
         }
+    }
+
+    pub fn place_at(&mut self, index: u32, data: &[u8]) {
+        let offset = index as usize * self.descriptor_size;
+        self.local[offset..(offset + self.descriptor_size)].copy_from_slice(data);
+    }
+
+    pub fn into_device(&mut self) {
+        let mut device_buffer_slice = unsafe {
+            ash::util::Align::new(
+                self.device.addr,
+                self.descriptor_size as u64,
+                self.local.len() as u64,
+            )
+        };
+        device_buffer_slice.copy_from_slice(&self.local);
     }
 }
