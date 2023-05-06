@@ -1,29 +1,16 @@
 use ash::vk;
+use std::cell::RefCell;
 use std::clone::Clone;
 use std::marker::Copy;
 use std::os::raw::c_void;
-
-#[derive(Copy, Clone)]
-struct Range {
-    start: u64,
-    end: u64,
-}
-
-impl Range {
-    fn size(&self) -> u64 {
-        self.end - self.start
-    }
-}
+use std::rc::Rc;
 
 pub struct GpuAllocator {
+    inner: Rc<RefCell<InnerGpuAllocator>>,
     pub type_index: u32,
     pub alignment: u64,
-    pub buffer: vk::Buffer,
-    pub mem: vk::DeviceMemory,
     pub kind: BufferKind,
-    addr: *mut c_void,
-    device_addr: u64,
-    ranges: Vec<Range>,
+    pub buffer: vk::Buffer,
 }
 
 #[derive(Copy, Clone)]
@@ -32,34 +19,6 @@ pub struct GpuSlice {
     pub size: u64,
     pub offset: u64,
     pub alignment: u64,
-}
-
-#[derive(PartialEq, strum_macros::Display)]
-pub enum BufferKind {
-    GENERAL,
-    DESCRIPTOR,
-}
-
-impl BufferKind {
-    fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
-        use vk::BufferUsageFlags as Buf;
-        match self {
-            BufferKind::GENERAL => {
-                Buf::SHADER_DEVICE_ADDRESS
-                    | Buf::VERTEX_BUFFER
-                    | Buf::INDEX_BUFFER
-                    | Buf::STORAGE_BUFFER
-                    | Buf::UNIFORM_BUFFER
-                    | Buf::TRANSFER_SRC
-                    | Buf::TRANSFER_DST
-            }
-            BufferKind::DESCRIPTOR => {
-                Buf::SHADER_DEVICE_ADDRESS
-                    | Buf::RESOURCE_DESCRIPTOR_BUFFER_EXT
-                    | Buf::SAMPLER_DESCRIPTOR_BUFFER_EXT
-            }
-        }
-    }
 }
 
 impl GpuAllocator {
@@ -88,6 +47,97 @@ impl GpuAllocator {
     }
 
     pub fn new(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+        device: &ash::Device,
+        size: u64,
+        kind: BufferKind,
+    ) -> Self {
+        let inner = InnerGpuAllocator::new(instance, physical_device, device, size, kind);
+        let alignment = inner.alignment;
+        let buffer = inner.buffer;
+        let kind = inner.kind;
+        let type_index = inner.type_index;
+        let refc = Rc::new(RefCell::new(inner));
+        Self {
+            alignment,
+            kind,
+            type_index,
+            buffer,
+            inner: refc,
+        }
+    }
+
+    pub fn alloc(&self, size: u64) -> Option<GpuSlice> {
+        self.inner.borrow_mut().alloc(size)
+    }
+
+    pub fn free(&self, slice: GpuSlice) {
+        self.inner.borrow_mut().free(slice)
+    }
+
+    pub fn destroy(&self, device: &ash::Device) {
+        self.inner.borrow().destroy(device)
+    }
+
+    pub fn available(&self) -> u64 {
+        self.inner.borrow().available()
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, strum_macros::Display)]
+pub enum BufferKind {
+    GENERAL,
+    DESCRIPTOR,
+}
+
+impl BufferKind {
+    fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
+        use vk::BufferUsageFlags as Buf;
+        match self {
+            BufferKind::GENERAL => {
+                Buf::SHADER_DEVICE_ADDRESS
+                    | Buf::VERTEX_BUFFER
+                    | Buf::INDEX_BUFFER
+                    | Buf::STORAGE_BUFFER
+                    | Buf::UNIFORM_BUFFER
+                    | Buf::TRANSFER_SRC
+                    | Buf::TRANSFER_DST
+            }
+            BufferKind::DESCRIPTOR => {
+                Buf::SHADER_DEVICE_ADDRESS
+                    | Buf::RESOURCE_DESCRIPTOR_BUFFER_EXT
+                    | Buf::SAMPLER_DESCRIPTOR_BUFFER_EXT
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+struct Range {
+    start: u64,
+    end: u64,
+}
+
+impl Range {
+    fn size(&self) -> u64 {
+        self.end - self.start
+    }
+}
+
+struct InnerGpuAllocator {
+    type_index: u32,
+    alignment: u64,
+    buffer: vk::Buffer,
+    mem: vk::DeviceMemory,
+    kind: BufferKind,
+    addr: *mut c_void,
+    device_addr: u64,
+    ranges: Vec<Range>,
+}
+
+impl InnerGpuAllocator {
+    fn new(
         instance: &ash::Instance,
         physical_device: &vk::PhysicalDevice,
         device: &ash::Device,
@@ -165,27 +215,7 @@ impl GpuAllocator {
         };
     }
 
-    fn get_descriptor_offset_alignment(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-    ) -> u64 {
-        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
-            ..Default::default()
-        };
-        let mut device_props = vk::PhysicalDeviceProperties2::builder()
-            .push_next(&mut props)
-            .build();
-        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
-
-        props.descriptor_buffer_offset_alignment
-    }
-
-    fn next_size(base: u64, mul: u64) -> u64 {
-        let mask = -(mul as i64) as u64;
-        (base + (mul - 1)) & mask
-    }
-
-    pub fn alloc(&mut self, size: u64) -> Option<GpuSlice> {
+    fn alloc(&mut self, size: u64) -> Option<GpuSlice> {
         let size = Self::next_size(size, self.alignment);
         let ranges = &mut self.ranges;
         for i in 0..ranges.len() {
@@ -218,7 +248,7 @@ impl GpuAllocator {
         return None;
     }
 
-    pub fn free(&mut self, slice: GpuSlice) {
+    fn free(&mut self, slice: GpuSlice) {
         // | | | | | |
         let slice_start = unsafe { slice.addr.offset(-(self.addr as isize)) as u64 };
         let slice_end = slice_start + slice.size;
@@ -271,11 +301,35 @@ impl GpuAllocator {
         );
     }
 
-    pub fn destroy(&self, device: &ash::Device) {
+    fn destroy(&self, device: &ash::Device) {
         unsafe {
             device.destroy_buffer(self.buffer, None);
             device.free_memory(self.mem, None);
         }
+    }
+
+    fn available(&self) -> u64 {
+        self.ranges.iter().map(|r| r.end - r.start).sum()
+    }
+
+    fn get_descriptor_offset_alignment(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+    ) -> u64 {
+        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
+            ..Default::default()
+        };
+        let mut device_props = vk::PhysicalDeviceProperties2::builder()
+            .push_next(&mut props)
+            .build();
+        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
+
+        props.descriptor_buffer_offset_alignment
+    }
+
+    fn next_size(base: u64, mul: u64) -> u64 {
+        let mask = -(mul as i64) as u64;
+        (base + (mul - 1)) & mask
     }
 
     fn find_memorytype_index(
