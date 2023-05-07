@@ -5,6 +5,7 @@ use std::marker::Copy;
 use std::os::raw::c_void;
 use std::rc::Rc;
 
+#[derive(Clone)]
 pub struct GpuAllocator {
     inner: Rc<RefCell<InnerGpuAllocator>>,
     pub type_index: u32,
