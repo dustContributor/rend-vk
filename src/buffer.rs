@@ -6,23 +6,20 @@ use std::os::raw::c_void;
 use std::rc::Rc;
 
 #[derive(Clone)]
-pub struct GpuAllocator {
-    inner: Rc<RefCell<InnerGpuAllocator>>,
-    pub type_index: u32,
-    pub alignment: u64,
-    pub kind: BufferKind,
-    pub buffer: vk::Buffer,
+pub struct DeviceAllocator {
+    inner: Rc<RefCell<InnerDeviceAllocator>>,
+    pub buffer: DeviceBuffer,
 }
 
 #[derive(Copy, Clone)]
-pub struct GpuSlice {
-    pub addr: *mut c_void,
+pub struct DeviceSlice {
     pub size: u64,
     pub offset: u64,
     pub alignment: u64,
+    pub addr: *mut c_void,
 }
 
-impl GpuAllocator {
+impl DeviceAllocator {
     pub fn new_general(
         instance: &ash::Instance,
         physical_device: &vk::PhysicalDevice,
@@ -54,26 +51,20 @@ impl GpuAllocator {
         size: u64,
         kind: BufferKind,
     ) -> Self {
-        let inner = InnerGpuAllocator::new(instance, physical_device, device, size, kind);
-        let alignment = inner.alignment;
-        let buffer = inner.buffer;
-        let kind = inner.kind;
-        let type_index = inner.type_index;
+        let inner = InnerDeviceAllocator::new(instance, physical_device, device, size, kind);
+        let buffer = inner.buffer.clone();
         let refc = Rc::new(RefCell::new(inner));
         Self {
-            alignment,
-            kind,
-            type_index,
             buffer,
             inner: refc,
         }
     }
 
-    pub fn alloc(&self, size: u64) -> Option<GpuSlice> {
+    pub fn alloc(&self, size: u64) -> Option<DeviceSlice> {
         self.inner.borrow_mut().alloc(size)
     }
 
-    pub fn free(&self, slice: GpuSlice) {
+    pub fn free(&self, slice: DeviceSlice) {
         self.inner.borrow_mut().free(slice)
     }
 
@@ -126,19 +117,28 @@ impl Range {
     }
 }
 
-struct InnerGpuAllocator {
-    type_index: u32,
-    alignment: u64,
-    buffer: vk::Buffer,
-    mem: vk::DeviceMemory,
-    kind: BufferKind,
-    addr: *mut c_void,
-    device_addr: u64,
+struct InnerDeviceAllocator {
+    buffer: DeviceBuffer,
     ranges: Vec<Range>,
 }
 
-impl InnerGpuAllocator {
-    fn new(
+#[derive(Clone)]
+pub struct DeviceBuffer {
+    pub size: u64,
+    pub alignment: u64,
+    pub device_addr: u64,
+    pub buffer: vk::Buffer,
+    pub memory: vk::DeviceMemory,
+    pub addr: *mut c_void,
+    pub type_index: u32,
+    pub kind: BufferKind,
+}
+
+impl DeviceBuffer {
+    // Max alignment a buffer of any type can have
+    const MAX_ALIGNMENT: u64 = 256;
+
+    pub fn new(
         instance: &ash::Instance,
         physical_device: &vk::PhysicalDevice,
         device: &ash::Device,
@@ -149,7 +149,7 @@ impl InnerGpuAllocator {
         let usage_flags = kind.to_vk_usage_flags();
         let mem_flags = Mpf::DEVICE_LOCAL | Mpf::HOST_VISIBLE | Mpf::HOST_COHERENT;
         let buffer_info = vk::BufferCreateInfo {
-            size,
+            size: Self::next_size(size, Self::MAX_ALIGNMENT),
             usage: usage_flags,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             ..Default::default()
@@ -200,24 +200,76 @@ impl InnerGpuAllocator {
             device.bind_buffer_memory(buffer, mem, 0).unwrap();
             device_addr = device.get_buffer_device_address(&device_addr_info);
         }
-        let ranges = vec![Range {
-            start: 0,
-            end: mem_info.allocation_size,
-        }];
         return Self {
             type_index: memi,
-            mem,
             buffer,
             addr,
             kind,
             device_addr,
             alignment,
-            ranges,
+            memory: mem,
+            size: mem_info.allocation_size,
         };
     }
 
-    fn alloc(&mut self, size: u64) -> Option<GpuSlice> {
-        let size = Self::next_size(size, self.alignment);
+    fn get_descriptor_offset_alignment(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+    ) -> u64 {
+        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
+            ..Default::default()
+        };
+        let mut device_props = vk::PhysicalDeviceProperties2::builder()
+            .push_next(&mut props)
+            .build();
+        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
+
+        props.descriptor_buffer_offset_alignment
+    }
+
+    fn next_size(base: u64, mul: u64) -> u64 {
+        let mask = -(mul as i64) as u64;
+        (base + (mul - 1)) & mask
+    }
+
+    fn find_memorytype_index(
+        memory_req: &vk::MemoryRequirements,
+        memory_prop: &vk::PhysicalDeviceMemoryProperties,
+        flags: vk::MemoryPropertyFlags,
+    ) -> Option<u32> {
+        memory_prop.memory_types[..memory_prop.memory_type_count as _]
+            .iter()
+            .enumerate()
+            .find(|(index, memory_type)| {
+                (1 << index) & memory_req.memory_type_bits != 0
+                    && memory_type.property_flags & flags == flags
+            })
+            .map(|(index, _memory_type)| index as _)
+    }
+}
+
+impl InnerDeviceAllocator {
+    fn new(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+        device: &ash::Device,
+        size: u64,
+        kind: BufferKind,
+    ) -> Self {
+        let buffer = DeviceBuffer::new(instance, physical_device, device, size, kind);
+        Self::wrap(buffer)
+    }
+
+    fn wrap(buffer: DeviceBuffer) -> Self {
+        let ranges = vec![Range {
+            start: 0,
+            end: buffer.size,
+        }];
+        return Self { buffer, ranges };
+    }
+
+    fn alloc(&mut self, size: u64) -> Option<DeviceSlice> {
+        let size = DeviceBuffer::next_size(size, self.buffer.alignment);
         let ranges = &mut self.ranges;
         for i in 0..ranges.len() {
             let range = &ranges[i];
@@ -233,25 +285,25 @@ impl InnerGpuAllocator {
             }
             let range = &mut ranges[i];
             range.start = new_start;
-            let mut addr = self.addr;
+            let mut addr = self.buffer.addr;
             let offset;
             unsafe {
                 addr = addr.offset(old_start as isize);
-                offset = addr.offset_from(self.addr) as u64;
+                offset = addr.offset_from(self.buffer.addr) as u64;
             }
-            return Some(GpuSlice {
+            return Some(DeviceSlice {
                 addr,
                 size,
                 offset,
-                alignment: self.alignment,
+                alignment: self.buffer.alignment,
             });
         }
         return None;
     }
 
-    fn free(&mut self, slice: GpuSlice) {
+    fn free(&mut self, slice: DeviceSlice) {
         // | | | | | |
-        let slice_start = unsafe { slice.addr.offset(-(self.addr as isize)) as u64 };
+        let slice_start = unsafe { slice.addr.offset(-(self.buffer.addr as isize)) as u64 };
         let slice_end = slice_start + slice.size;
         let mut idx = 0;
         for i in 0..self.ranges.len() {
@@ -304,47 +356,12 @@ impl InnerGpuAllocator {
 
     fn destroy(&self, device: &ash::Device) {
         unsafe {
-            device.destroy_buffer(self.buffer, None);
-            device.free_memory(self.mem, None);
+            device.destroy_buffer(self.buffer.buffer, None);
+            device.free_memory(self.buffer.memory, None);
         }
     }
 
     fn available(&self) -> u64 {
-        self.ranges.iter().map(|r| r.end - r.start).sum()
-    }
-
-    fn get_descriptor_offset_alignment(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-    ) -> u64 {
-        let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
-            ..Default::default()
-        };
-        let mut device_props = vk::PhysicalDeviceProperties2::builder()
-            .push_next(&mut props)
-            .build();
-        unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
-
-        props.descriptor_buffer_offset_alignment
-    }
-
-    fn next_size(base: u64, mul: u64) -> u64 {
-        let mask = -(mul as i64) as u64;
-        (base + (mul - 1)) & mask
-    }
-
-    fn find_memorytype_index(
-        memory_req: &vk::MemoryRequirements,
-        memory_prop: &vk::PhysicalDeviceMemoryProperties,
-        flags: vk::MemoryPropertyFlags,
-    ) -> Option<u32> {
-        memory_prop.memory_types[..memory_prop.memory_type_count as _]
-            .iter()
-            .enumerate()
-            .find(|(index, memory_type)| {
-                (1 << index) & memory_req.memory_type_bits != 0
-                    && memory_type.property_flags & flags == flags
-            })
-            .map(|(index, _memory_type)| index as _)
+        self.ranges.iter().map(|r| r.size()).sum()
     }
 }

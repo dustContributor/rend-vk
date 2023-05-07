@@ -1,10 +1,12 @@
-use crate::buffer::{BufferKind, GpuAllocator, GpuSlice};
+use crate::buffer::{BufferKind, DeviceAllocator, DeviceSlice};
 use ash::vk;
+
+use super::VulkanContext;
 
 pub struct DescriptorBuffer {
     name: String,
-    device: GpuSlice,
-    local: Box<[u8]>,
+    device: DeviceSlice,
+    host: Box<[u8]>,
     layout: vk::DescriptorSetLayout,
     descriptor_type: vk::DescriptorType,
     descriptor_size: usize,
@@ -12,23 +14,20 @@ pub struct DescriptorBuffer {
 
 impl DescriptorBuffer {
     pub fn of(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-        mem: &mut GpuAllocator,
+        ctx: &VulkanContext,
+        mem: &mut DeviceAllocator,
         name: String,
         descriptor_type: vk::DescriptorType,
         count: u32,
     ) -> Self {
         assert!(count > 0, "Cant have zero sized descriptor buffers!");
         assert!(
-            BufferKind::DESCRIPTOR == mem.kind,
+            BufferKind::DESCRIPTOR == mem.buffer.kind,
             "Allocator with kind {} passed, kind {} needed!",
-            mem.kind,
+            mem.buffer.kind,
             BufferKind::DESCRIPTOR
         );
-        let descriptor_size = Self::size_of(descriptor_type, instance, physical_device);
+        let descriptor_size = Self::size_of(descriptor_type, &ctx.instance, &ctx.physical_device);
         let binding = vk::DescriptorSetLayoutBinding {
             descriptor_type,
             descriptor_count: count,
@@ -40,15 +39,26 @@ impl DescriptorBuffer {
             .bindings(&bindings)
             .flags(vk::DescriptorSetLayoutCreateFlags::DESCRIPTOR_BUFFER_EXT)
             .build();
-        let layout = unsafe { device.create_descriptor_set_layout(&info, None) }.unwrap();
-        let layout_size = unsafe { desc_buffer_instance.get_descriptor_set_layout_size(layout) };
+        let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
+        let layout_size = unsafe {
+            ctx.desc_buffer_instance
+                .get_descriptor_set_layout_size(layout)
+        };
         let boxed: Box<[u8]> = vec![0; layout_size as usize].into_boxed_slice();
-        let buffer = mem.alloc(layout_size).unwrap();
+        let buffer = if let Some(buffer) = mem.alloc(layout_size) {
+            buffer
+        } else {
+            panic!(
+                "Not enough memory for the descriptor! Requested: {}, available: {}",
+                layout_size,
+                mem.available()
+            )
+        };
         Self {
             name,
             layout,
             device: buffer,
-            local: boxed,
+            host: boxed,
             descriptor_type,
             descriptor_size,
         }
@@ -76,7 +86,7 @@ impl DescriptorBuffer {
 
     pub fn place_at(&mut self, index: u32, data: &[u8]) {
         let offset = index as usize * self.descriptor_size;
-        self.local[offset..(offset + self.descriptor_size)].copy_from_slice(data);
+        self.host[offset..(offset + self.descriptor_size)].copy_from_slice(data);
     }
 
     pub fn into_device(&mut self) {
@@ -84,9 +94,9 @@ impl DescriptorBuffer {
             ash::util::Align::new(
                 self.device.addr,
                 self.descriptor_size as u64,
-                self.local.len() as u64,
+                self.host.len() as u64,
             )
         };
-        device_buffer_slice.copy_from_slice(&self.local);
+        device_buffer_slice.copy_from_slice(&self.host);
     }
 }
