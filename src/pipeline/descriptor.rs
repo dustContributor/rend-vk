@@ -84,9 +84,14 @@ impl DescriptorBuffer {
         }
     }
 
-    pub fn place_at(&mut self, index: u32, data: &[u8]) {
-        let offset = index as usize * self.descriptor_size;
+    pub fn place_at(&mut self, index: u32, data: &[u8]) -> usize {
+        let offset = self.offset_of(index);
         self.host[offset..(offset + self.descriptor_size)].copy_from_slice(data);
+        offset
+    }
+
+    pub fn offset_of(&self, index: u32) -> usize {
+        index as usize * self.descriptor_size
     }
 
     pub fn place_image_at(
@@ -94,7 +99,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: vk::DescriptorImageInfo,
         desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
-    ) {
+    ) -> usize {
         self.get_desc_and_place(
             index,
             desc,
@@ -109,7 +114,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: vk::DescriptorAddressInfoEXT,
         desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
-    ) {
+    ) -> usize {
         self.get_desc_and_place(
             index,
             desc,
@@ -128,7 +133,8 @@ impl DescriptorBuffer {
         desc_type: vk::DescriptorType,
         desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
         info_of: F,
-    ) where
+    ) -> usize
+    where
         F: FnOnce(*const T) -> vk::DescriptorDataEXT,
     {
         assert!(
