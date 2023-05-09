@@ -27,6 +27,7 @@ pub struct Pipeline {
     pub linear_sampler: Sampler,
     pub ubo_descriptors: DescriptorBuffer,
     pub image_descriptors: DescriptorBuffer,
+    pub input_descriptors: DescriptorBuffer,
     pub buffer_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
 }

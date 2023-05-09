@@ -1,13 +1,13 @@
-use ash::vk;
+use ash::vk::{self, DescriptorType};
 
 use std::{
     collections::{HashMap, HashSet},
     process::Command,
 };
 
-use super::file::*;
-use crate::pipeline::attachment::Attachment;
+use super::{descriptor::DescriptorBuffer, file::*, VulkanContext};
 use crate::shader;
+use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -17,8 +17,9 @@ impl Pipeline {
     }
 
     pub fn load(
-        device: &ash::Device,
-        memory_type_index: u32,
+        ctx: &VulkanContext,
+        device_mem: &mut DeviceAllocator,
+        descriptor_mem: &mut DeviceAllocator,
         default_attachment: Attachment,
         name: Option<&str>,
     ) -> crate::pipeline::Pipeline {
@@ -62,7 +63,7 @@ impl Pipeline {
                 (
                     &f.name,
                     shader::ShaderProgram::new(
-                        &device,
+                        &ctx.device,
                         f.name.clone(),
                         load_shader(&f.vertex),
                         load_shader(&f.fragment),
@@ -96,15 +97,15 @@ impl Pipeline {
                     sharing_mode: vk::SharingMode::EXCLUSIVE,
                     ..Default::default()
                 };
-                let image = unsafe { device.create_image(&texture_create_info, None) }.unwrap();
-                let texture_memory_req = unsafe { device.get_image_memory_requirements(image) };
+                let image = unsafe { ctx.device.create_image(&texture_create_info, None) }.unwrap();
+                let texture_memory_req = unsafe { ctx.device.get_image_memory_requirements(image) };
                 let texture_allocate_info = vk::MemoryAllocateInfo {
                     allocation_size: texture_memory_req.size,
-                    memory_type_index,
+                    memory_type_index: device_mem.buffer.type_index,
                     ..Default::default()
                 };
                 let memory = unsafe {
-                    device
+                    ctx.device
                         .allocate_memory(&texture_allocate_info, None)
                         .expect("failed image memory alloc")
                 };
@@ -134,10 +135,10 @@ impl Pipeline {
                     .format(format)
                     .view_type(vk::ImageViewType::TYPE_2D);
                 let view = unsafe {
-                    device
+                    ctx.device
                         .bind_image_memory(image, memory, 0)
                         .expect("failed image memory bind");
-                    device
+                    ctx.device
                         .create_image_view(&image_view_info, None)
                         .expect("failed image view")
                 };
@@ -151,6 +152,7 @@ impl Pipeline {
                         memory,
                         view,
                         extent,
+                        descriptor_offset: 0,
                     },
                 );
             })
@@ -158,6 +160,10 @@ impl Pipeline {
         let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(&default_attachment_name, default_attachment);
+            // If there are no inputs whatsoever, just use a dummy one sized buffer.
+        let max_input_descriptors: u32 =
+            std::cmp::max(1, pip.passes.iter().map(|e| e.inputs.len() as u32).sum());
+        let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
 
         let mut stages = Vec::<_>::with_capacity(pip.passes.len());
         for (passi, pass) in pip.passes.iter().enumerate() {
@@ -224,7 +230,8 @@ impl Pipeline {
             };
 
             let pipeline_layout = unsafe {
-                device.create_pipeline_layout(&vk::PipelineLayoutCreateInfo::default(), None)
+                ctx.device
+                    .create_pipeline_layout(&vk::PipelineLayoutCreateInfo::default(), None)
             }
             .unwrap();
             let multisample_state = vk::PipelineMultisampleStateCreateInfo {
@@ -252,7 +259,7 @@ impl Pipeline {
                 .push_next(&mut rendering_pipeline_info);
 
             let graphics_pipelines = unsafe {
-                device.create_graphics_pipelines(
+                ctx.device.create_graphics_pipelines(
                     vk::PipelineCache::null(),
                     &[graphic_pipeline_info.build()],
                     None,
@@ -263,11 +270,24 @@ impl Pipeline {
 
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
-            let get_attachment = |e: &String| -> Attachment {
-                attachments_by_name
+            let make_attachment_descriptor = |(i, e)| -> Attachment {
+                let tmp = attachments_by_name
                     .get(&e)
-                    .expect(&format!("missing attachment: {e}"))
-                    .clone()
+                    .expect(&format!("Missing input attachment: {e}!"))
+                    .clone();
+                let desc = vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
+                    .image_view(tmp.view)
+                    .build();
+                let descriptor_offset = input_descriptors.place_image_at(
+                    i as u32,
+                    desc,
+                    ctx.desc_buffer_instance.clone(),
+                );
+                Attachment {
+                    descriptor_offset,
+                    ..tmp
+                }
             };
             // Final passes have special rendering attachment info hanlding on render.
             let is_final = pass
@@ -279,9 +299,19 @@ impl Pipeline {
                 .inputs
                 .iter()
                 .map(|e| &e.name)
-                .map(get_attachment)
+                .enumerate()
+                .map(make_attachment_descriptor)
                 .collect();
-            let outputs: Vec<_> = pass.outputs.iter().map(get_attachment).collect();
+            let outputs: Vec<_> = pass
+                .outputs
+                .iter()
+                .map(|e| -> Attachment {
+                    attachments_by_name
+                        .get(&e)
+                        .expect(&format!("Missing output attachment: {e}!"))
+                        .clone()
+                })
+                .collect();
             let pre_rendering_color: Vec<_> = outputs
                 .iter()
                 .map(|e| vk::RenderingAttachmentInfo {
@@ -347,18 +377,67 @@ impl Pipeline {
             .flat_map(|e| e.shaders)
         {
             // No longer need them.
-            unsafe { device.destroy_shader_module(shader.info.module, None) };
+            unsafe { ctx.device.destroy_shader_module(shader.info.module, None) };
         }
-
+        let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
+        let image_descriptors = Self::init_images(ctx, descriptor_mem);
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
-            linear_sampler: crate::pipeline::sampler::Sampler::of_kind(device, SamplerKind::LINEAR),
+            linear_sampler: crate::pipeline::sampler::Sampler::of_kind(
+                &ctx.device,
+                SamplerKind::LINEAR,
+            ),
             nearest_sampler: crate::pipeline::sampler::Sampler::of_kind(
-                device,
+                &ctx.device,
                 SamplerKind::NEAREST,
             ),
+            ubo_descriptors,
+            image_descriptors,
+            input_descriptors,
+            buffer_allocator: device_mem.clone(),
+            descriptor_allocator: descriptor_mem.clone(),
         };
+    }
+
+    pub fn init_ubos(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
+        let desc_buffer = DescriptorBuffer::of(
+            ctx,
+            mem,
+            "ubos".to_string(),
+            DescriptorType::UNIFORM_BUFFER,
+            16,
+        );
+        // init global ubo
+        // init per draw ubo
+        desc_buffer
+    }
+
+    pub fn init_images(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
+        let desc_buffer = DescriptorBuffer::of(
+            ctx,
+            mem,
+            "images".to_string(),
+            DescriptorType::SAMPLED_IMAGE,
+            1024,
+        );
+        // missing ID/handle generator per image
+        desc_buffer
+    }
+
+    pub fn init_inputs(
+        ctx: &VulkanContext,
+        mem: &mut DeviceAllocator,
+        size: u32,
+    ) -> DescriptorBuffer {
+        let desc_buffer = DescriptorBuffer::of(
+            ctx,
+            mem,
+            "targets".to_string(),
+            DescriptorType::SAMPLED_IMAGE,
+            size,
+        );
+        desc_buffer
     }
 
     pub fn extent_of(

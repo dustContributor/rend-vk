@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::pipeline::attachment::Attachment;
+use ash::vk;
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -61,61 +61,32 @@ impl Stage {
         default_attachment: &Attachment,
         draw_commands: F,
     ) {
-        let default_output = vec![default_attachment.clone()];
-        let outputs = if self.is_final {
-            &default_output
-        } else {
-            &self.outputs
-        };
-        let pre_transition_barriers: Vec<_> = outputs
-            .iter()
-            .map(|e| {
-                let (msk, layout, aspect) = Self::mask_layout_aspect_for(e.format);
-                vk::ImageMemoryBarrier::builder()
-                    .image(e.image)
-                    .dst_access_mask(msk)
-                    .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(layout)
-                    .subresource_range(
-                        vk::ImageSubresourceRange::builder()
-                            .aspect_mask(aspect)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .build()
-            })
-            .collect();
-        unsafe {
-            device.cmd_pipeline_barrier(
-                command_buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &pre_transition_barriers,
-            );
-            let pre_rendering = if self.is_final {
-                vk::RenderingInfo::builder()
-                    .color_attachments(&[vk::RenderingAttachmentInfo {
-                        image_view: default_attachment.view.clone(),
-                        image_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                        load_op: vk::AttachmentLoadOp::CLEAR,
-                        store_op: vk::AttachmentStoreOp::STORE,
-                        ..Default::default()
-                    }])
-                    .render_area(vk::Rect2D {
-                        extent: default_attachment.extent,
-                        ..Default::default()
-                    })
-                    .layer_count(1)
-                    .build()
+        let default_image_barriers = vec![Attachment::default_attachment_write_barrier(
+            default_attachment.image,
+        )];
+        let default_rendering_attachment_infos =
+            vec![Attachment::default_attachment_rendering_attachment_info(
+                default_attachment,
+            )];
+        let barrier_dep_info = vk::DependencyInfo::builder()
+            .image_memory_barriers(if self.is_final {
+                &default_image_barriers
             } else {
-                self.pre_rendering
-            };
+                &self.image_barriers
+            })
+            .build();
+
+        let pre_rendering = if self.is_final {
+            vk::RenderingInfo::builder()
+                .color_attachments(&default_rendering_attachment_infos)
+                .render_area(default_attachment.render_area_no_offset())
+                .layer_count(1)
+                .build()
+        } else {
+            self.pre_rendering
+        };
+        unsafe {
+            device.cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
             device.cmd_begin_rendering(command_buffer, &pre_rendering);
             device.cmd_bind_pipeline(
                 command_buffer,
@@ -125,38 +96,19 @@ impl Stage {
             draw_commands(&device, command_buffer);
             device.cmd_end_rendering(command_buffer);
         }
-
-        let is_final = self.is_final;
-        let post_transition_barriers: Vec<_> = outputs
-            .iter()
-            .map(|e| {
-                vk::ImageMemoryBarrier::builder()
-                    .image(e.image)
-                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                    .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-                    .subresource_range(
-                        vk::ImageSubresourceRange::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .build()
-            })
-            .collect();
+        if !self.is_final {
+            // Nothing else to do
+            return;
+        }
+        // Need to transition for presenting
+        let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
+            default_attachment.image,
+        )];
+        let barrier_dep_info = vk::DependencyInfo::builder()
+            .image_memory_barriers(&present_image_barriers)
+            .build();
         unsafe {
-            device.cmd_pipeline_barrier(
-                command_buffer,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &post_transition_barriers,
-            );
+            device.cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
         }
     }
 }
