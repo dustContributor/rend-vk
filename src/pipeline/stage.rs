@@ -13,7 +13,7 @@ pub enum BatchType {
 #[derive(Clone)]
 pub struct Stage {
     pub name: String,
-    pub pre_rendering: vk::RenderingInfo,
+    pub rendering: Rendering,
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
     pub outputs: Vec<Attachment>,
@@ -24,36 +24,14 @@ pub struct Stage {
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
 }
 
-impl Stage {
-    fn mask_layout_aspect_for(
-        format: crate::format::Format,
-    ) -> (vk::AccessFlags, vk::ImageLayout, vk::ImageAspectFlags) {
-        if format.has_depth() {
-            let (layout, aspect) = if format.has_stencil() {
-                (
-                    vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
-                )
-            } else {
-                (
-                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
-                    vk::ImageAspectFlags::DEPTH,
-                )
-            };
-            (
-                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                layout,
-                aspect,
-            )
-        } else {
-            (
-                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::ImageAspectFlags::COLOR,
-            )
-        }
-    }
+#[derive(Clone)]
+pub struct Rendering {
+    pub attachments: Vec<vk::RenderingAttachmentInfo>,
+    pub depth_stencil: Option<vk::RenderingAttachmentInfo>,
+    pub default_attachment_index: Option<usize>,
+}
 
+impl Stage {
     pub fn render<F: FnOnce(&ash::Device, vk::CommandBuffer)>(
         &self,
         device: &ash::Device,
@@ -64,10 +42,6 @@ impl Stage {
         let default_image_barriers = vec![Attachment::default_attachment_write_barrier(
             default_attachment.image,
         )];
-        let default_rendering_attachment_infos =
-            vec![Attachment::default_attachment_rendering_attachment_info(
-                default_attachment,
-            )];
         let barrier_dep_info = vk::DependencyInfo::builder()
             .image_memory_barriers(if self.is_final {
                 &default_image_barriers
@@ -75,19 +49,37 @@ impl Stage {
                 &self.image_barriers
             })
             .build();
-
-        let pre_rendering = if self.is_final {
-            vk::RenderingInfo::builder()
-                .color_attachments(&default_rendering_attachment_infos)
-                .render_area(default_attachment.render_area_no_offset())
-                .layer_count(1)
-                .build()
+        let mut rendering_attachments = self.rendering.attachments.clone();
+        if let Some(dai) = self.rendering.default_attachment_index {
+            /*
+             * If default attachment is present, override
+             * the view with the current swapchain target
+             */
+            rendering_attachments[dai] = vk::RenderingAttachmentInfo {
+                image_view: default_attachment.view,
+                ..rendering_attachments[dai]
+            };
+        };
+        /*
+         * New rendering info because lifetimes for the
+         * arrays inside are too complex to keep around
+         */
+        let rendering_info_builder = vk::RenderingInfo::builder()
+            .color_attachments(&rendering_attachments)
+            .render_area(if let Some(att) = self.outputs.first() {
+                att.render_area_no_offset()
+            } else {
+                default_attachment.render_area_no_offset()
+            })
+            .layer_count(1);
+        let rendering_info = if let Some(att) = self.rendering.depth_stencil {
+            rendering_info_builder.depth_attachment(&att).build()
         } else {
-            self.pre_rendering
+            rendering_info_builder.build()
         };
         unsafe {
             device.cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
-            device.cmd_begin_rendering(command_buffer, &pre_rendering);
+            device.cmd_begin_rendering(command_buffer, &rendering_info);
             device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,

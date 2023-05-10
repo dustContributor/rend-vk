@@ -160,7 +160,7 @@ impl Pipeline {
         let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(&default_attachment_name, default_attachment);
-            // If there are no inputs whatsoever, just use a dummy one sized buffer.
+        // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let max_input_descriptors: u32 =
             std::cmp::max(1, pip.passes.iter().map(|e| e.inputs.len() as u32).sum());
         let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
@@ -290,11 +290,10 @@ impl Pipeline {
                 }
             };
             // Final passes have special rendering attachment info hanlding on render.
-            let is_final = pass
+            let default_attachment_index = pass
                 .outputs
                 .iter()
-                .find(|&e| Attachment::DEFAULT_NAME == e)
-                .is_some();
+                .position(|e| Attachment::DEFAULT_NAME == e);
             let inputs: Vec<_> = pass
                 .inputs
                 .iter()
@@ -312,63 +311,55 @@ impl Pipeline {
                         .clone()
                 })
                 .collect();
-            let pre_rendering_color: Vec<_> = outputs
+            let rendering_attachments: Vec<_> = outputs
                 .iter()
                 .map(|e| vk::RenderingAttachmentInfo {
                     image_view: e.view,
-                    image_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    load_op: clear_color_value.map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
-                        vk::AttachmentLoadOp::CLEAR
-                    }),
+                    image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
+                    load_op: clear_color_value
+                        .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR),
                     store_op: vk::AttachmentStoreOp::STORE,
                     clear_value: clear_color_value.unwrap_or_default(),
                     ..Default::default()
                 })
                 .collect();
-
-            let mut pre_rendering_builder =
-                vk::RenderingInfo::builder().color_attachments(&pre_rendering_color);
-            if !outputs.is_empty() {
-                pre_rendering_builder = pre_rendering_builder.render_area(vk::Rect2D {
-                    extent: outputs.first().unwrap().extent,
+            let depth_stencil_rendering = if writing.depth || writing.stencil {
+                // Only support depth only, or depth+stencil. No stencil only.
+                let depth_name = Attachment::DEPTH_NAME.to_string();
+                let depth = attachments_by_name
+                    .get(&depth_name)
+                    .expect("Missing depth attachment!");
+                let depth_info = vk::RenderingAttachmentInfo {
+                    image_view: depth.view,
+                    image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
+                    load_op: clear_depth_stencil_value
+                        .map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
+                            vk::AttachmentLoadOp::CLEAR
+                        }),
+                    clear_value: clear_depth_stencil_value.unwrap_or_default(),
                     ..Default::default()
-                });
-            }
-            let pre_rendering = match outputs.iter().find(|e| e.format.has_depth()) {
-                Some(depth) => {
-                    // Only support depth only, or depth+stencil. No stencil only.
-                    let depth_info = vk::RenderingAttachmentInfo {
-                        image_view: depth.view,
-                        image_layout: if depth.format.has_stencil() {
-                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                        } else {
-                            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
-                        },
-                        load_op: clear_depth_stencil_value
-                            .map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
-                                vk::AttachmentLoadOp::CLEAR
-                            }),
-                        clear_value: clear_depth_stencil_value.unwrap_or_default(),
-                        ..Default::default()
-                    };
-                    pre_rendering_builder.depth_attachment(&depth_info).build()
-                }
-                _ => pre_rendering_builder.build(),
+                };
+                Some(depth_info)
+            } else {
+                None
             };
-
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
 
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
-                pre_rendering,
+                rendering: super::stage::Rendering {
+                    attachments: rendering_attachments,
+                    depth_stencil: depth_stencil_rendering,
+                    default_attachment_index,
+                },
                 batch: pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
                 updaters: pass.updaters.clone(),
                 inputs,
                 outputs,
-                is_final,
+                is_final: default_attachment_index.is_some(),
                 image_barriers,
             });
         }
