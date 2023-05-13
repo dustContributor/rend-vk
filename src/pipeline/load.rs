@@ -164,6 +164,8 @@ impl Pipeline {
         let max_input_descriptors: u32 =
             std::cmp::max(1, pip.passes.iter().map(|e| e.inputs.len() as u32).sum());
         let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
+        let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
+        let image_descriptors = Self::init_images(ctx, descriptor_mem);
 
         let mut stages = Vec::<_>::with_capacity(pip.passes.len());
         for (passi, pass) in pip.passes.iter().enumerate() {
@@ -229,11 +231,6 @@ impl Pipeline {
                 b.build()
             };
 
-            let pipeline_layout = unsafe {
-                ctx.device
-                    .create_pipeline_layout(&vk::PipelineLayoutCreateInfo::default(), None)
-            }
-            .unwrap();
             let multisample_state = vk::PipelineMultisampleStateCreateInfo {
                 rasterization_samples: vk::SampleCountFlags::TYPE_1,
                 ..Default::default()
@@ -245,28 +242,6 @@ impl Pipeline {
                 .iter()
                 .map(|e| e.info)
                 .collect::<Vec<_>>();
-            let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
-                .stages(&shader_stages)
-                .vertex_input_state(&vertex_input_state_info)
-                .input_assembly_state(&vertex_input_assembly_state_info)
-                .viewport_state(&viewport_scissor_state)
-                .rasterization_state(&rasterization_state)
-                .multisample_state(&multisample_state)
-                .depth_stencil_state(&depth_stencil_state)
-                .color_blend_state(&blend_state)
-                .dynamic_state(&dynamic_state_info)
-                .layout(pipeline_layout)
-                .push_next(&mut rendering_pipeline_info);
-
-            let graphics_pipelines = unsafe {
-                ctx.device.create_graphics_pipelines(
-                    vk::PipelineCache::null(),
-                    &[graphic_pipeline_info.build()],
-                    None,
-                )
-            }
-            .expect("Unable to create graphics pipeline");
-            let graphics_pipeline = graphics_pipelines[0];
 
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
@@ -345,6 +320,36 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
+            let set_layouts = [input_descriptors.layout];
+            let pipeline_layout = unsafe {
+                let info = vk::PipelineLayoutCreateInfo::builder()
+                    .set_layouts(&set_layouts)
+                    .build();
+                ctx.device.create_pipeline_layout(&info, None)
+            }
+            .unwrap();
+            let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+                .stages(&shader_stages)
+                .vertex_input_state(&vertex_input_state_info)
+                .input_assembly_state(&vertex_input_assembly_state_info)
+                .viewport_state(&viewport_scissor_state)
+                .rasterization_state(&rasterization_state)
+                .multisample_state(&multisample_state)
+                .depth_stencil_state(&depth_stencil_state)
+                .color_blend_state(&blend_state)
+                .dynamic_state(&dynamic_state_info)
+                .layout(pipeline_layout)
+                .push_next(&mut rendering_pipeline_info);
+
+            let graphics_pipelines = unsafe {
+                ctx.device.create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    &[graphic_pipeline_info.build()],
+                    None,
+                )
+            }
+            .expect("Unable to create graphics pipeline");
+            let graphics_pipeline = graphics_pipelines[0];
 
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
@@ -370,8 +375,8 @@ impl Pipeline {
             // No longer need them.
             unsafe { ctx.device.destroy_shader_module(shader.info.module, None) };
         }
-        let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
-        let image_descriptors = Self::init_images(ctx, descriptor_mem);
+        // Write all descriptors into device memory before returning the pipeline
+        input_descriptors.into_device();
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),

@@ -34,7 +34,8 @@ pub struct Rendering {
 impl Stage {
     pub fn render<F: FnOnce(&ash::Device, vk::CommandBuffer)>(
         &self,
-        device: &ash::Device,
+        ctx: &super::VulkanContext,
+        pipeline: &super::Pipeline,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
         draw_commands: F,
@@ -77,16 +78,44 @@ impl Stage {
         } else {
             rendering_info_builder.build()
         };
+
         unsafe {
-            device.cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
-            device.cmd_begin_rendering(command_buffer, &rendering_info);
-            device.cmd_bind_pipeline(
+            if self.inputs.len() > 0 {
+                let desc_buffer_info = [vk::DescriptorBufferBindingInfoEXT::builder()
+                    .address(pipeline.input_descriptors.device.device_addr)
+                    .usage(pipeline.input_descriptors.device.kind.to_vk_usage_flags())
+                    .build()];
+                ctx.desc_buffer_instance
+                    .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
+                let desc_buffer_offsets: Vec<u64> = self
+                    .inputs
+                    .iter()
+                    .map(|e| {
+                        pipeline.input_descriptors.device.device_addr + e.descriptor_offset as u64
+                    })
+                    .collect();
+                let desc_buffer_indices = vec![0; self.inputs.len()];
+                ctx.desc_buffer_instance.cmd_set_descriptor_buffer_offsets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.layout,
+                    0,
+                    &desc_buffer_indices,
+                    &desc_buffer_offsets,
+                );
+            }
+
+            ctx.device
+                .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
+            ctx.device
+                .cmd_begin_rendering(command_buffer, &rendering_info);
+            ctx.device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            draw_commands(&device, command_buffer);
-            device.cmd_end_rendering(command_buffer);
+            draw_commands(&ctx.device, command_buffer);
+            ctx.device.cmd_end_rendering(command_buffer);
         }
         if !self.is_final {
             // Nothing else to do
@@ -100,7 +129,8 @@ impl Stage {
             .image_memory_barriers(&present_image_barriers)
             .build();
         unsafe {
-            device.cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
+            ctx.device
+                .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
         }
     }
 }

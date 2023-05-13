@@ -1,15 +1,17 @@
 use crate::buffer::{BufferKind, DeviceAllocator, DeviceSlice};
 use ash::vk;
+use bitvec::vec::BitVec;
 
 use super::VulkanContext;
 
 pub struct DescriptorBuffer {
-    name: String,
-    device: DeviceSlice,
+    pub name: String,
+    pub device: DeviceSlice,
+    pub layout: vk::DescriptorSetLayout,
+    pub descriptor_type: vk::DescriptorType,
+    pub descriptor_size: usize,
+    occupancy: BitVec,
     host: Box<[u8]>,
-    layout: vk::DescriptorSetLayout,
-    descriptor_type: vk::DescriptorType,
-    descriptor_size: usize,
 }
 
 impl DescriptorBuffer {
@@ -34,6 +36,7 @@ impl DescriptorBuffer {
             stage_flags: vk::ShaderStageFlags::ALL_GRAPHICS,
             ..Default::default()
         };
+
         let bindings = [binding];
         let info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&bindings)
@@ -54,6 +57,8 @@ impl DescriptorBuffer {
                 mem.available()
             )
         };
+        let mut occupancy = BitVec::new();
+        occupancy.reserve_exact(count as usize);
         Self {
             name,
             layout,
@@ -61,6 +66,7 @@ impl DescriptorBuffer {
             host: boxed,
             descriptor_type,
             descriptor_size,
+            occupancy,
         }
     }
 
@@ -87,11 +93,35 @@ impl DescriptorBuffer {
     pub fn place_at(&mut self, index: u32, data: &[u8]) -> usize {
         let offset = self.offset_of(index);
         self.host[offset..(offset + self.descriptor_size)].copy_from_slice(data);
+        self.occupancy.set(index as usize, true);
         offset
+    }
+
+    pub fn offsets(&self) -> Vec<u64> {
+        self.occupancy
+            .iter_ones()
+            .map(|i| self.device.device_addr + (self.descriptor_size * i) as u64)
+            .collect()
+    }
+
+    pub fn place(&mut self, data: &[u8]) -> usize {
+        self.place_at(self.next_free() as u32, data)
+    }
+
+    pub fn next_free(&self) -> usize {
+        self.occupancy.first_zero().unwrap()
     }
 
     pub fn offset_of(&self, index: u32) -> usize {
         index as usize * self.descriptor_size
+    }
+
+    pub fn place_image(
+        &mut self,
+        desc: vk::DescriptorImageInfo,
+        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+    ) -> usize {
+        self.place_image_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
 
     pub fn place_image_at(
@@ -107,6 +137,14 @@ impl DescriptorBuffer {
             desc_buffer_instance,
             |e| vk::DescriptorDataEXT { p_sampled_image: e },
         )
+    }
+
+    pub fn place_ubo(
+        &mut self,
+        desc: vk::DescriptorAddressInfoEXT,
+        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+    ) -> usize {
+        self.place_ubo_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
 
     pub fn place_ubo_at(

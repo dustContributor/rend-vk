@@ -17,6 +17,8 @@ pub struct DeviceSlice {
     pub offset: u64,
     pub alignment: u64,
     pub addr: *mut c_void,
+    pub device_addr: u64,
+    pub kind: BufferKind,
 }
 
 impl DeviceAllocator {
@@ -84,7 +86,7 @@ pub enum BufferKind {
 }
 
 impl BufferKind {
-    fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
+    pub fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
         use vk::BufferUsageFlags as Buf;
         match self {
             BufferKind::GENERAL => {
@@ -291,11 +293,14 @@ impl InnerDeviceAllocator {
                 addr = addr.offset(old_start as isize);
                 offset = addr.offset_from(self.buffer.addr) as u64;
             }
+            let device_addr = self.buffer.device_addr + offset;
             return Some(DeviceSlice {
                 addr,
                 size,
                 offset,
                 alignment: self.buffer.alignment,
+                device_addr,
+                kind: self.buffer.kind
             });
         }
         return None;
