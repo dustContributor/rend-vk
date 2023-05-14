@@ -1,4 +1,4 @@
-use crate::pipeline::attachment::Attachment;
+use crate::pipeline::{attachment::Attachment, descriptor::DescriptorBuffer};
 use ash::vk;
 
 #[derive(serde::Deserialize)]
@@ -81,20 +81,22 @@ impl Stage {
 
         unsafe {
             if self.inputs.len() > 0 {
-                let desc_buffer_info = [vk::DescriptorBufferBindingInfoEXT::builder()
-                    .address(pipeline.input_descriptors.device.device_addr)
-                    .usage(pipeline.input_descriptors.device.kind.to_vk_usage_flags())
-                    .build()];
+                fn buffer_binding_info_of(
+                    b: &DescriptorBuffer,
+                ) -> vk::DescriptorBufferBindingInfoEXT {
+                    vk::DescriptorBufferBindingInfoEXT::builder()
+                        .address(b.device.device_addr)
+                        .usage(b.device.kind.to_vk_usage_flags())
+                        .build()
+                }
+                let desc_buffer_info = [
+                    buffer_binding_info_of(&pipeline.sampler_descriptors),
+                    buffer_binding_info_of(&pipeline.input_descriptors),
+                ];
                 ctx.desc_buffer_instance
                     .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
-                let desc_buffer_offsets: Vec<u64> = self
-                    .inputs
-                    .iter()
-                    .map(|e| {
-                        pipeline.input_descriptors.device.device_addr + e.descriptor_offset as u64
-                    })
-                    .collect();
-                let desc_buffer_indices = vec![0; self.inputs.len()];
+                let desc_buffer_indices = [0, 1];
+                let desc_buffer_offsets = [0, 0];
                 ctx.desc_buffer_instance.cmd_set_descriptor_buffer_offsets(
                     command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,

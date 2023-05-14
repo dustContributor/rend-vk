@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{descriptor::DescriptorBuffer, file::*, VulkanContext};
+use crate::pipeline::sampler;
 use crate::shader;
 use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
 
@@ -38,15 +39,30 @@ impl Pipeline {
         for src_out in &shaders_by_name {
             let name = src_out.0;
             let args = [&format!("shader/{}", name), "-V", "-o", &src_out.1];
+            println!("Compiling shader {} with args {:?}...", name, args);
             let res = Command::new("glslangValidator")
                 .args(args)
                 .spawn()
-                .expect(format!("failed to start {}", &name).as_str())
+                .expect(format!("Failed to start {}", &name).as_str())
                 // TODO: Could launch all of these these concurrently and wait for them all.
                 .wait();
-            if let Err(e) = res {
-                panic!("error compiling shader {}, error {}", name, e)
+            if res.is_err() {
+                panic!(
+                    "Error compiling shader {}, error {}",
+                    name,
+                    res.unwrap_err()
+                )
             }
+            match res {
+                Err(e) => {
+                    panic!("Error compiling shader {}, error {}", name, e)
+                }
+                Ok(e) if !e.success() => {
+                    panic!("Failed compiling shader {}, error {}", name, e);
+                }
+                _ => {}
+            }
+            println!("Shader {} compiled!", name);
         }
         let load_shader = |name: &String| {
             shaders_by_name.get(name).map(|v| {
@@ -163,6 +179,25 @@ impl Pipeline {
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let max_input_descriptors: u32 =
             std::cmp::max(1, pip.passes.iter().map(|e| e.inputs.len() as u32).sum());
+        let linear_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Linear);
+        let nearest_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Nearest);
+        let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
+        let linear_sampler = sampler::Sampler {
+            descriptor_offset: sampler_descriptors.place_sampler_at(
+                0,
+                linear_sampler.sampler,
+                &ctx.desc_buffer_instance,
+            ),
+            ..linear_sampler
+        };
+        let nearest_sampler = sampler::Sampler {
+            descriptor_offset: sampler_descriptors.place_sampler_at(
+                0,
+                nearest_sampler.sampler,
+                &ctx.desc_buffer_instance,
+            ),
+            ..nearest_sampler
+        };
         let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
         let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
         let image_descriptors = Self::init_images(ctx, descriptor_mem);
@@ -254,11 +289,8 @@ impl Pipeline {
                     .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .image_view(tmp.view)
                     .build();
-                let descriptor_offset = input_descriptors.place_image_at(
-                    i as u32,
-                    desc,
-                    ctx.desc_buffer_instance.clone(),
-                );
+                let descriptor_offset =
+                    input_descriptors.place_image_at(i as u32, desc, &ctx.desc_buffer_instance);
                 Attachment {
                     descriptor_offset,
                     ..tmp
@@ -320,7 +352,7 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
-            let set_layouts = [input_descriptors.layout];
+            let set_layouts = [sampler_descriptors.layout, input_descriptors.layout];
             let pipeline_layout = unsafe {
                 let info = vk::PipelineLayoutCreateInfo::builder()
                     .set_layouts(&set_layouts)
@@ -329,6 +361,7 @@ impl Pipeline {
             }
             .unwrap();
             let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+                .flags(vk::PipelineCreateFlags::DESCRIPTOR_BUFFER_EXT)
                 .stages(&shader_stages)
                 .vertex_input_state(&vertex_input_state_info)
                 .input_assembly_state(&vertex_input_assembly_state_info)
@@ -339,12 +372,13 @@ impl Pipeline {
                 .color_blend_state(&blend_state)
                 .dynamic_state(&dynamic_state_info)
                 .layout(pipeline_layout)
-                .push_next(&mut rendering_pipeline_info);
+                .push_next(&mut rendering_pipeline_info)
+                .build();
 
             let graphics_pipelines = unsafe {
                 ctx.device.create_graphics_pipelines(
                     vk::PipelineCache::null(),
-                    &[graphic_pipeline_info.build()],
+                    &[graphic_pipeline_info],
                     None,
                 )
             }
@@ -380,17 +414,12 @@ impl Pipeline {
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
-            linear_sampler: crate::pipeline::sampler::Sampler::of_kind(
-                &ctx.device,
-                SamplerKind::LINEAR,
-            ),
-            nearest_sampler: crate::pipeline::sampler::Sampler::of_kind(
-                &ctx.device,
-                SamplerKind::NEAREST,
-            ),
+            linear_sampler,
+            nearest_sampler,
             ubo_descriptors,
             image_descriptors,
             input_descriptors,
+            sampler_descriptors,
             buffer_allocator: device_mem.clone(),
             descriptor_allocator: descriptor_mem.clone(),
         };
@@ -403,6 +432,7 @@ impl Pipeline {
             "ubos".to_string(),
             DescriptorType::UNIFORM_BUFFER,
             16,
+            false,
         );
         // init global ubo
         // init per draw ubo
@@ -416,6 +446,7 @@ impl Pipeline {
             "images".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             1024,
+            true,
         );
         // missing ID/handle generator per image
         desc_buffer
@@ -432,6 +463,23 @@ impl Pipeline {
             "targets".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             size,
+            false,
+        );
+        desc_buffer
+    }
+
+    pub fn init_samplers(
+        ctx: &VulkanContext,
+        mem: &mut DeviceAllocator,
+        size: u32,
+    ) -> DescriptorBuffer {
+        let desc_buffer = DescriptorBuffer::of(
+            ctx,
+            mem,
+            "samplers".to_string(),
+            DescriptorType::SAMPLER,
+            size,
+            false,
         );
         desc_buffer
     }

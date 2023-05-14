@@ -28,6 +28,7 @@ pub struct Pipeline {
     pub ubo_descriptors: DescriptorBuffer,
     pub image_descriptors: DescriptorBuffer,
     pub input_descriptors: DescriptorBuffer,
+    pub sampler_descriptors: DescriptorBuffer,
     pub buffer_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
 }
@@ -35,6 +36,20 @@ pub struct Pipeline {
 impl Pipeline {
     pub fn destroy(&self, device: &ash::Device) {
         unsafe {
+            for e in [
+                &self.ubo_descriptors,
+                &self.image_descriptors,
+                &self.input_descriptors,
+                &self.sampler_descriptors,
+            ] {
+                e.destroy(device);
+            }
+            for e in [&self.buffer_allocator, &self.descriptor_allocator] {
+                e.destroy(device);
+            }
+            for e in [&self.linear_sampler, &self.nearest_sampler] {
+                e.destroy(device);
+            }
             for stage in &self.stages {
                 device.destroy_pipeline(stage.pipeline, None);
                 device.destroy_pipeline_layout(stage.layout, None);

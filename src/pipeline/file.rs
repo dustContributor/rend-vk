@@ -284,8 +284,8 @@ pub enum U32OrF32 {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone, strum_macros::Display)]
 pub enum SamplerKind {
-    NEAREST,
-    LINEAR,
+    Nearest,
+    Linear,
 }
 
 

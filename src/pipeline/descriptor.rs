@@ -21,6 +21,7 @@ impl DescriptorBuffer {
         name: String,
         descriptor_type: vk::DescriptorType,
         count: u32,
+        is_array: bool,
     ) -> Self {
         assert!(count > 0, "Cant have zero sized descriptor buffers!");
         assert!(
@@ -30,14 +31,26 @@ impl DescriptorBuffer {
             BufferKind::DESCRIPTOR
         );
         let descriptor_size = Self::size_of(descriptor_type, &ctx.instance, &ctx.physical_device);
-        let binding = vk::DescriptorSetLayoutBinding {
-            descriptor_type,
-            descriptor_count: count,
-            stage_flags: vk::ShaderStageFlags::ALL_GRAPHICS,
-            ..Default::default()
+        let bindings: Vec<_> = if is_array {
+            vec![vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(descriptor_type)
+                .descriptor_count(count)
+                .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
+                .build()]
+        } else {
+            (0..count)
+                .into_iter()
+                .map(|e| {
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(e)
+                        .descriptor_type(descriptor_type)
+                        .descriptor_count(1)
+                        .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
+                        .build()
+                })
+                .collect()
         };
-
-        let bindings = [binding];
         let info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&bindings)
             .flags(vk::DescriptorSetLayoutCreateFlags::DESCRIPTOR_BUFFER_EXT)
@@ -57,8 +70,7 @@ impl DescriptorBuffer {
                 mem.available()
             )
         };
-        let mut occupancy = BitVec::new();
-        occupancy.reserve_exact(count as usize);
+        let occupancy = BitVec::repeat(false, count as usize);
         Self {
             name,
             layout,
@@ -116,10 +128,33 @@ impl DescriptorBuffer {
         index as usize * self.descriptor_size
     }
 
+    pub fn place_sampler(
+        &mut self,
+        desc: vk::Sampler,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
+    ) -> usize {
+        self.place_sampler_at(self.next_free() as u32, desc, desc_buffer_instance)
+    }
+
+    pub fn place_sampler_at(
+        &mut self,
+        index: u32,
+        desc: vk::Sampler,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
+    ) -> usize {
+        self.get_desc_and_place(
+            index,
+            desc,
+            vk::DescriptorType::SAMPLER,
+            desc_buffer_instance,
+            |e| vk::DescriptorDataEXT { p_sampler: e },
+        )
+    }
+
     pub fn place_image(
         &mut self,
         desc: vk::DescriptorImageInfo,
-        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> usize {
         self.place_image_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
@@ -128,7 +163,7 @@ impl DescriptorBuffer {
         &mut self,
         index: u32,
         desc: vk::DescriptorImageInfo,
-        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> usize {
         self.get_desc_and_place(
             index,
@@ -142,7 +177,7 @@ impl DescriptorBuffer {
     pub fn place_ubo(
         &mut self,
         desc: vk::DescriptorAddressInfoEXT,
-        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> usize {
         self.place_ubo_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
@@ -151,7 +186,7 @@ impl DescriptorBuffer {
         &mut self,
         index: u32,
         desc: vk::DescriptorAddressInfoEXT,
-        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> usize {
         self.get_desc_and_place(
             index,
@@ -169,7 +204,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: T,
         desc_type: vk::DescriptorType,
-        desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
         info_of: F,
     ) -> usize
     where
@@ -204,5 +239,11 @@ impl DescriptorBuffer {
             )
         };
         device_buffer_slice.copy_from_slice(&self.host);
+    }
+
+    pub fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_descriptor_set_layout(self.layout, None);
+        }
     }
 }
