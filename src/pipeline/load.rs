@@ -159,6 +159,9 @@ impl Pipeline {
                         .create_image_view(&image_view_info, None)
                         .expect("failed image view")
                 };
+                ctx.try_set_debug_name(&f.name, image);
+                ctx.try_set_debug_name(&f.name, memory);
+                ctx.try_set_debug_name(&f.name, view);
                 return (
                     &f.name,
                     Attachment {
@@ -392,6 +395,7 @@ impl Pipeline {
             let graphics_pipeline = graphics_pipelines[0];
 
             ctx.try_set_debug_name(&pass.name, graphics_pipeline);
+            ctx.try_set_debug_name(&pass.name, pipeline_layout);
 
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
