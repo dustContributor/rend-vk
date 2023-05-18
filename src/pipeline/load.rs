@@ -183,8 +183,8 @@ impl Pipeline {
             1,
             enabled_passes.iter().map(|e| e.inputs.len() as u32).sum(),
         );
-        let linear_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Linear);
-        let nearest_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Nearest);
+        let linear_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Linear);
+        let nearest_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Nearest);
         let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
         let linear_sampler = sampler::Sampler {
             descriptor_offset: sampler_descriptors.place_sampler_at(
@@ -390,6 +390,8 @@ impl Pipeline {
             }
             .expect("Unable to create graphics pipeline");
             let graphics_pipeline = graphics_pipelines[0];
+
+            ctx.try_set_debug_name(&pass.name, graphics_pipeline);
 
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),

@@ -18,11 +18,20 @@ pub struct ExtensionContext {
     pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
 }
 
+impl VulkanContext {
+    pub fn try_set_debug_name<T: 'static>(&self, name: &str, obj: T) -> bool
+    where
+        T: vk::Handle,
+    {
+        self.extensions.try_set_debug_name(&self.device, name, obj)
+    }
+}
+
 impl ExtensionContext {
     pub fn try_set_debug_name<T: 'static>(
         &self,
         device: &ash::Device,
-        name: &String,
+        name: &str,
         obj: T,
     ) -> bool
     where

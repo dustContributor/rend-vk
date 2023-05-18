@@ -5,6 +5,8 @@ use std::marker::Copy;
 use std::os::raw::c_void;
 use std::rc::Rc;
 
+use crate::context::VulkanContext;
+
 #[derive(Clone)]
 pub struct DeviceAllocator {
     inner: Rc<RefCell<InnerDeviceAllocator>>,
@@ -22,38 +24,16 @@ pub struct DeviceSlice {
 }
 
 impl DeviceAllocator {
-    pub fn new_general(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        size: u64,
-    ) -> Self {
-        Self::new(instance, physical_device, device, size, BufferKind::GENERAL)
+    pub fn new_general(ctx: &VulkanContext, size: u64) -> Self {
+        Self::new(ctx, size, BufferKind::General)
     }
 
-    pub fn new_descriptor(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        size: u64,
-    ) -> Self {
-        Self::new(
-            instance,
-            physical_device,
-            device,
-            size,
-            BufferKind::DESCRIPTOR,
-        )
+    pub fn new_descriptor(ctx: &VulkanContext, size: u64) -> Self {
+        Self::new(ctx, size, BufferKind::Descriptor)
     }
 
-    pub fn new(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        size: u64,
-        kind: BufferKind,
-    ) -> Self {
-        let inner = InnerDeviceAllocator::new(instance, physical_device, device, size, kind);
+    pub fn new(ctx: &VulkanContext, size: u64, kind: BufferKind) -> Self {
+        let inner = InnerDeviceAllocator::new(ctx, size, kind);
         let buffer = inner.buffer.clone();
         let refc = Rc::new(RefCell::new(inner));
         Self {
@@ -81,15 +61,15 @@ impl DeviceAllocator {
 
 #[derive(Copy, Clone, PartialEq, strum_macros::Display)]
 pub enum BufferKind {
-    GENERAL,
-    DESCRIPTOR,
+    General,
+    Descriptor,
 }
 
 impl BufferKind {
     pub fn to_vk_usage_flags(&self) -> vk::BufferUsageFlags {
         use vk::BufferUsageFlags as Buf;
         match self {
-            BufferKind::GENERAL => {
+            BufferKind::General => {
                 Buf::SHADER_DEVICE_ADDRESS
                     | Buf::VERTEX_BUFFER
                     | Buf::INDEX_BUFFER
@@ -98,7 +78,7 @@ impl BufferKind {
                     | Buf::TRANSFER_SRC
                     | Buf::TRANSFER_DST
             }
-            BufferKind::DESCRIPTOR => {
+            BufferKind::Descriptor => {
                 Buf::SHADER_DEVICE_ADDRESS
                     | Buf::RESOURCE_DESCRIPTOR_BUFFER_EXT
                     | Buf::SAMPLER_DESCRIPTOR_BUFFER_EXT
@@ -140,13 +120,7 @@ impl DeviceBuffer {
     // Max alignment a buffer of any type can have
     const MAX_ALIGNMENT: u64 = 256;
 
-    pub fn new(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        size: u64,
-        kind: BufferKind,
-    ) -> Self {
+    pub fn new(ctx: &VulkanContext, size: u64, kind: BufferKind) -> Self {
         use vk::MemoryPropertyFlags as Mpf;
         let usage_flags = kind.to_vk_usage_flags();
         let mem_flags = Mpf::DEVICE_LOCAL | Mpf::HOST_VISIBLE | Mpf::HOST_COHERENT;
@@ -159,22 +133,25 @@ impl DeviceBuffer {
         let buffer: vk::Buffer;
         let mem_reqs: vk::MemoryRequirements;
         unsafe {
-            buffer = device.create_buffer(&buffer_info, None).unwrap();
-            mem_reqs = device.get_buffer_memory_requirements(buffer);
+            buffer = ctx.device.create_buffer(&buffer_info, None).unwrap();
+            mem_reqs = ctx.device.get_buffer_memory_requirements(buffer);
         }
-        let alignment = if BufferKind::DESCRIPTOR == kind {
+        let alignment = if BufferKind::Descriptor == kind {
             /*
              * Descriptor offset alignment may be wider than the actual memory
              * alignment, defensively use the bigger of the two.
              */
             std::cmp::max(
                 mem_reqs.alignment,
-                Self::get_descriptor_offset_alignment(instance, physical_device),
+                Self::get_descriptor_offset_alignment(&ctx.instance, &ctx.physical_device),
             )
         } else {
             mem_reqs.alignment
         };
-        let mem_props = unsafe { instance.get_physical_device_memory_properties(*physical_device) };
+        let mem_props = unsafe {
+            ctx.instance
+                .get_physical_device_memory_properties(ctx.physical_device)
+        };
 
         let memi = Self::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
             .expect("Unable to find suitable memorytype for the buffer");
@@ -195,13 +172,18 @@ impl DeviceBuffer {
         let addr: *mut c_void;
         let device_addr: u64;
         unsafe {
-            mem = device.allocate_memory(&mem_info, None).unwrap();
-            addr = device
+            mem = ctx.device.allocate_memory(&mem_info, None).unwrap();
+            addr = ctx
+                .device
                 .map_memory(mem, 0, mem_reqs.size, vk::MemoryMapFlags::empty())
                 .unwrap();
-            device.bind_buffer_memory(buffer, mem, 0).unwrap();
-            device_addr = device.get_buffer_device_address(&device_addr_info);
+            ctx.device.bind_buffer_memory(buffer, mem, 0).unwrap();
+            device_addr = ctx.device.get_buffer_device_address(&device_addr_info);
         }
+
+        let name = kind.to_string();
+        ctx.try_set_debug_name(&name, buffer);
+
         return Self {
             type_index: memi,
             buffer,
@@ -251,14 +233,8 @@ impl DeviceBuffer {
 }
 
 impl InnerDeviceAllocator {
-    fn new(
-        instance: &ash::Instance,
-        physical_device: &vk::PhysicalDevice,
-        device: &ash::Device,
-        size: u64,
-        kind: BufferKind,
-    ) -> Self {
-        let buffer = DeviceBuffer::new(instance, physical_device, device, size, kind);
+    fn new(ctx: &VulkanContext, size: u64, kind: BufferKind) -> Self {
+        let buffer = DeviceBuffer::new(ctx, size, kind);
         Self::wrap(buffer)
     }
 
@@ -300,7 +276,7 @@ impl InnerDeviceAllocator {
                 offset,
                 alignment: self.buffer.alignment,
                 device_addr,
-                kind: self.buffer.kind
+                kind: self.buffer.kind,
             });
         }
         return None;

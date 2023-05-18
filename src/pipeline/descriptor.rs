@@ -25,10 +25,10 @@ impl DescriptorBuffer {
     ) -> Self {
         assert!(count > 0, "Cant have zero sized descriptor buffers!");
         assert!(
-            BufferKind::DESCRIPTOR == mem.buffer.kind,
+            BufferKind::Descriptor == mem.buffer.kind,
             "Allocator with kind {} passed, kind {} needed!",
             mem.buffer.kind,
-            BufferKind::DESCRIPTOR
+            BufferKind::Descriptor
         );
         let descriptor_size = Self::size_of(descriptor_type, &ctx.instance, &ctx.physical_device);
         let bindings: Vec<_> = if is_array {
@@ -72,8 +72,7 @@ impl DescriptorBuffer {
             )
         };
         let occupancy = BitVec::repeat(false, count as usize);
-        ctx.extensions
-            .try_set_debug_name(&ctx.device, &name, layout);
+        ctx.try_set_debug_name(&name, layout);
         Self {
             name,
             layout,

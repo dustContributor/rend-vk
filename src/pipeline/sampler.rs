@@ -1,5 +1,7 @@
 use ash::vk;
 
+use crate::context::VulkanContext;
+
 use super::file::SamplerKind;
 
 #[derive(Clone)]
@@ -10,9 +12,10 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub fn of(device: &ash::Device, name: String, is_linear: bool) -> Self {
+    pub fn of(ctx: &VulkanContext, name: String, is_linear: bool) -> Self {
         let info = Self::info_of(is_linear);
-        let sampler = unsafe { device.create_sampler(&info, None) }.unwrap();
+        let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
+        ctx.try_set_debug_name(&name, sampler);
         Self {
             name,
             sampler,
@@ -20,14 +23,13 @@ impl Sampler {
         }
     }
 
-    pub fn of_kind(device: &ash::Device, kind: SamplerKind) -> Self {
+    pub fn of_kind(ctx: &VulkanContext, kind: SamplerKind) -> Self {
         let name = kind.to_string();
         let is_linear = match kind {
             SamplerKind::Linear => true,
             SamplerKind::Nearest => false,
-            _ => panic!(),
         };
-        Self::of(device, name, is_linear)
+        Self::of(ctx, name, is_linear)
     }
 
     fn info_of(is_linear: bool) -> vk::SamplerCreateInfo {
