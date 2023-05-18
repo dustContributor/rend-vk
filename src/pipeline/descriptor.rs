@@ -72,6 +72,8 @@ impl DescriptorBuffer {
             )
         };
         let occupancy = BitVec::repeat(false, count as usize);
+        ctx.extensions
+            .try_set_debug_name(&ctx.device, &name, layout);
         Self {
             name,
             layout,
