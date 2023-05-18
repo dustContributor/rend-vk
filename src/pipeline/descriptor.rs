@@ -2,7 +2,7 @@ use crate::buffer::{BufferKind, DeviceAllocator, DeviceSlice};
 use ash::vk;
 use bitvec::vec::BitVec;
 
-use super::VulkanContext;
+use crate::context::VulkanContext;
 
 pub struct DescriptorBuffer {
     pub name: String,
@@ -57,7 +57,8 @@ impl DescriptorBuffer {
             .build();
         let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
         let layout_size = unsafe {
-            ctx.desc_buffer_instance
+            ctx.extensions
+                .descriptor_buffer
                 .get_descriptor_set_layout_size(layout)
         };
         let boxed: Box<[u8]> = vec![0; layout_size as usize].into_boxed_slice();

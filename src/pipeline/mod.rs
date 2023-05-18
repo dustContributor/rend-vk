@@ -12,13 +12,6 @@ pub mod sampler;
 pub mod stage;
 mod state;
 
-pub struct VulkanContext {
-    pub instance: ash::Instance,
-    pub device: ash::Device,
-    pub physical_device: ash::vk::PhysicalDevice,
-    pub desc_buffer_instance: ash::extensions::ext::DescriptorBuffer,
-}
-
 // #[derive(Clone)]
 pub struct Pipeline {
     pub stages: Vec<Stage>,

@@ -34,7 +34,7 @@ pub struct Rendering {
 impl Stage {
     pub fn render<F: FnOnce(&ash::Device, vk::CommandBuffer)>(
         &self,
-        ctx: &super::VulkanContext,
+        ctx: &crate::context::VulkanContext,
         pipeline: &super::Pipeline,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
@@ -93,18 +93,21 @@ impl Stage {
                     buffer_binding_info_of(&pipeline.sampler_descriptors),
                     buffer_binding_info_of(&pipeline.input_descriptors),
                 ];
-                ctx.desc_buffer_instance
+                ctx.extensions
+                    .descriptor_buffer
                     .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
                 let desc_buffer_indices = [0, 1];
                 let desc_buffer_offsets = [0, 0];
-                ctx.desc_buffer_instance.cmd_set_descriptor_buffer_offsets(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    self.layout,
-                    0,
-                    &desc_buffer_indices,
-                    &desc_buffer_offsets,
-                );
+                ctx.extensions
+                    .descriptor_buffer
+                    .cmd_set_descriptor_buffer_offsets(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.layout,
+                        0,
+                        &desc_buffer_indices,
+                        &desc_buffer_offsets,
+                    );
             }
 
             ctx.device

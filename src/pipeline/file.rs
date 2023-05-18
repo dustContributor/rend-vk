@@ -39,6 +39,8 @@ pub struct Pass {
     pub inputs: Vec<AttachmentInput>,
     pub updaters: Vec<String>,
     pub state: State,
+    #[serde(default)]
+    pub is_disabled: bool,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -287,7 +289,6 @@ pub enum SamplerKind {
     Nearest,
     Linear,
 }
-
 
 pub trait Predefined<T> {
     fn def() -> T {

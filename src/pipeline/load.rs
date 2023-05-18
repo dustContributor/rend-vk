@@ -5,7 +5,8 @@ use std::{
     process::Command,
 };
 
-use super::{descriptor::DescriptorBuffer, file::*, VulkanContext};
+use super::{descriptor::DescriptorBuffer, file::*};
+use crate::context::VulkanContext;
 use crate::pipeline::sampler;
 use crate::shader;
 use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
@@ -177,8 +178,11 @@ impl Pipeline {
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(&default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
-        let max_input_descriptors: u32 =
-            std::cmp::max(1, pip.passes.iter().map(|e| e.inputs.len() as u32).sum());
+        let enabled_passes: Vec<_> = pip.passes.into_iter().filter(|e| !e.is_disabled).collect();
+        let max_input_descriptors: u32 = std::cmp::max(
+            1,
+            enabled_passes.iter().map(|e| e.inputs.len() as u32).sum(),
+        );
         let linear_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Linear);
         let nearest_sampler = sampler::Sampler::of_kind(&ctx.device, SamplerKind::Nearest);
         let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
@@ -186,7 +190,7 @@ impl Pipeline {
             descriptor_offset: sampler_descriptors.place_sampler_at(
                 0,
                 linear_sampler.sampler,
-                &ctx.desc_buffer_instance,
+                &ctx.extensions.descriptor_buffer,
             ),
             ..linear_sampler
         };
@@ -194,16 +198,15 @@ impl Pipeline {
             descriptor_offset: sampler_descriptors.place_sampler_at(
                 0,
                 nearest_sampler.sampler,
-                &ctx.desc_buffer_instance,
+                &ctx.extensions.descriptor_buffer,
             ),
             ..nearest_sampler
         };
         let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
         let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
         let image_descriptors = Self::init_images(ctx, descriptor_mem);
-
-        let mut stages = Vec::<_>::with_capacity(pip.passes.len());
-        for (passi, pass) in pip.passes.iter().enumerate() {
+        let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
+        for (passi, pass) in enabled_passes.iter().enumerate() {
             let writing = Self::handle_option(pass.state.writing.clone());
             let depth = Self::handle_option(pass.state.depth.clone());
             let blending = Self::handle_option(pass.state.blending.clone());
@@ -289,8 +292,11 @@ impl Pipeline {
                     .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .image_view(tmp.view)
                     .build();
-                let descriptor_offset =
-                    input_descriptors.place_image_at(i as u32, desc, &ctx.desc_buffer_instance);
+                let descriptor_offset = input_descriptors.place_image_at(
+                    i as u32,
+                    desc,
+                    &ctx.extensions.descriptor_buffer,
+                );
                 Attachment {
                     descriptor_offset,
                     ..tmp
@@ -351,7 +357,7 @@ impl Pipeline {
                 None
             };
             let image_barriers =
-                Self::gen_image_barriers_for(passi, &inputs, &outputs, &pip.passes);
+                Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
             let set_layouts = [sampler_descriptors.layout, input_descriptors.layout];
             let pipeline_layout = unsafe {
                 let info = vk::PipelineLayoutCreateInfo::builder()
