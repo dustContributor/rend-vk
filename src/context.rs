@@ -6,16 +6,19 @@ use crate::DEBUG_ENABLED;
 
 #[derive(Clone)]
 pub struct VulkanContext {
+    pub entry: ash::Entry,
     pub instance: ash::Instance,
     pub device: ash::Device,
     pub physical_device: ash::vk::PhysicalDevice,
-    pub extensions: ExtensionContext,
+    pub extension: ExtensionContext,
 }
 
 #[derive(Clone)]
 pub struct ExtensionContext {
     pub descriptor_buffer: ash::extensions::ext::DescriptorBuffer,
     pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
+    pub swapchain: ash::extensions::khr::Swapchain,
+    pub surface: ash::extensions::khr::Surface,
 }
 
 impl VulkanContext {
@@ -23,17 +26,12 @@ impl VulkanContext {
     where
         T: vk::Handle,
     {
-        self.extensions.try_set_debug_name(&self.device, name, obj)
+        self.extension.try_set_debug_name(&self.device, name, obj)
     }
 }
 
 impl ExtensionContext {
-    pub fn try_set_debug_name<T: 'static>(
-        &self,
-        device: &ash::Device,
-        name: &str,
-        obj: T,
-    ) -> bool
+    pub fn try_set_debug_name<T: 'static>(&self, device: &ash::Device, name: &str, obj: T) -> bool
     where
         T: vk::Handle,
     {

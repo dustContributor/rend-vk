@@ -57,7 +57,7 @@ impl DescriptorBuffer {
             .build();
         let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
         let layout_size = unsafe {
-            ctx.extensions
+            ctx.extension
                 .descriptor_buffer
                 .get_descriptor_set_layout_size(layout)
         };

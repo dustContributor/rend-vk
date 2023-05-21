@@ -93,12 +93,12 @@ impl Stage {
                     buffer_binding_info_of(&pipeline.sampler_descriptors),
                     buffer_binding_info_of(&pipeline.input_descriptors),
                 ];
-                ctx.extensions
+                ctx.extension
                     .descriptor_buffer
                     .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
                 let desc_buffer_indices = [0, 1];
                 let desc_buffer_offsets = [0, 0];
-                ctx.extensions
+                ctx.extension
                     .descriptor_buffer
                     .cmd_set_descriptor_buffer_offsets(
                         command_buffer,

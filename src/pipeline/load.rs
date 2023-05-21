@@ -193,7 +193,7 @@ impl Pipeline {
             descriptor_offset: sampler_descriptors.place_sampler_at(
                 0,
                 linear_sampler.sampler,
-                &ctx.extensions.descriptor_buffer,
+                &ctx.extension.descriptor_buffer,
             ),
             ..linear_sampler
         };
@@ -201,7 +201,7 @@ impl Pipeline {
             descriptor_offset: sampler_descriptors.place_sampler_at(
                 0,
                 nearest_sampler.sampler,
-                &ctx.extensions.descriptor_buffer,
+                &ctx.extension.descriptor_buffer,
             ),
             ..nearest_sampler
         };
@@ -298,7 +298,7 @@ impl Pipeline {
                 let descriptor_offset = input_descriptors.place_image_at(
                     i as u32,
                     desc,
-                    &ctx.extensions.descriptor_buffer,
+                    &ctx.extension.descriptor_buffer,
                 );
                 Attachment {
                     descriptor_offset,
