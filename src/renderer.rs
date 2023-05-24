@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::{alloc::Layout, ffi::CStr};
 
 use ash::{
     extensions::{
@@ -47,19 +47,52 @@ impl Renderer {
 //     let resources = resources as *const u8;
 //     let slice = unsafe { std::slice::from_raw_parts(resources, resources_len as usize) };
 // }
+// test.Testing.make_renderer
+#[no_mangle]
+pub extern "C" fn Java_test_Testing_init(_unused_jnienv: usize, _unused_jclazz: usize) {
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+    log_panics::init();
+}
 
 #[no_mangle]
-pub extern "C" fn make(
-    surface: u64,
-    instance_extensions: *const *const i8,
+pub extern "C" fn Java_test_Testing_make_1renderer(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    window: u64,
+    instance_extensions: u64,
     instance_extensions_len: u64,
+    glfw_create_window_surface: u64,
 ) -> u64 {
-    let surface: vk::SurfaceKHR = unsafe { std::mem::transmute(surface) };
-    let entry = Entry::linked();
-    let instance_extensions = unsafe {
-        std::slice::from_raw_parts(instance_extensions, instance_extensions_len as usize)
+    log::trace!("entering make_renderer");
+    /*
+     * VkResult glfwCreateWindowSurface (
+     * VkInstance instance,
+     * GLFWwindow *window,
+     * const VkAllocationCallbacks *allocator,
+     * VkSurfaceKHR *surface)
+     */
+    let glfw_create_window_surface = unsafe {
+        std::mem::transmute::<
+            _,
+            extern "C" fn(vk::Instance, u64, u64, *mut vk::SurfaceKHR) -> vk::Result,
+        >(glfw_create_window_surface as *const ())
     };
+    log::trace!("creating entry...");
+    let entry = Entry::linked();
+    log::trace!("entry created!");
+    let instance_extensions = unsafe {
+        if instance_extensions_len == 0 {
+            &[]
+        } else {
+            std::slice::from_raw_parts(
+                instance_extensions as *const *const i8,
+                instance_extensions_len as usize,
+            )
+        }
+    };
+    log::trace!("creating instance...");
     let instance = make_instance(&entry, instance_extensions);
+    log::trace!("instance created!");
 
     let debug_context = if crate::DEBUG_ENABLED {
         Some(DebugContext::new(&entry, &instance))
@@ -72,12 +105,24 @@ pub extern "C" fn make(
     } else {
         None
     };
-
-    let instance = make_instance(&entry, instance_extensions);
+    log::trace!("creating surface...");
+    let surface_layout = Layout::new::<vk::SurfaceKHR>();
+    let surface = unsafe { std::alloc::alloc(surface_layout) as *mut vk::SurfaceKHR };
+    let create_surface_result = glfw_create_window_surface(instance.handle(), window, 0, surface);
+    if create_surface_result != vk::Result::SUCCESS {
+        panic!("error creating surface: {}", create_surface_result);
+    }
+    let surface = unsafe { *surface };
+    log::trace!("surface created!");
     let surface_extension = khr::Surface::new(&entry, &instance);
+    // let make_surface = func: unsafe extern "C" fn(u64, *mut c_void),
+    log::trace!("selecting physical device...");
     let (physical_device, queue_family_index) =
         select_physical_device(&instance, &surface_extension, surface);
+    log::trace!("physical device selected!");
+    log::trace!("creating device...");
     let device = make_device(&instance, physical_device, queue_family_index);
+    log::trace!("device created!");
 
     let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
     let descriptor_buffer_ext = ash::extensions::ext::DescriptorBuffer::new(&instance, &device);
@@ -95,16 +140,19 @@ pub extern "C" fn make(
         },
     };
 
+    log::trace!("creating allocators...");
     let mut allocator = DeviceAllocator::new_general(&vulkan_context, 16 * 1024);
-
     let mut desc_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 128 * 1024);
+    log::trace!("allocators created!");
 
+    log::trace!("creating swapchain...");
     let present_mode = swapchain::present_mode(&vulkan_context, surface);
     let surface_extent = swapchain::surface_extent(&vulkan_context, surface, 0, 0);
     let surface_format = swapchain::surface_format(&vulkan_context, surface);
     let swapchain = swapchain::swapchain(&vulkan_context, surface, surface_extent);
     let swapchain_attachments =
         swapchain::attachments(&vulkan_context, surface, swapchain, surface_extent);
+    log::trace!("swapchain created!");
 
     let swapchain_context = swapchain::SwapchainContext {
         present_mode,
@@ -115,6 +163,7 @@ pub extern "C" fn make(
         attachments: swapchain_attachments,
     };
 
+    log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
         &vulkan_context,
         &mut allocator,
@@ -122,7 +171,9 @@ pub extern "C" fn make(
         swapchain_context.attachments[0].clone(),
         Some("triangle_pipeline.json"),
     );
+    log::trace!("pipeline created!");
 
+    log::trace!("finishing renderer...");
     let renderer = Renderer {
         pipeline: pip,
         // batches_by_task_type: Vec::new(),
@@ -131,7 +182,9 @@ pub extern "C" fn make(
         vulkan_context,
     };
     let boxed = Box::from(renderer);
-    return Box::into_raw(boxed) as u64;
+    let ptr = Box::into_raw(boxed) as u64;
+    log::trace!("renderer finished!");
+    return ptr;
 }
 
 pub fn make_device(
