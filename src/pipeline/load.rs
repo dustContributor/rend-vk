@@ -14,8 +14,10 @@ use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
         let name = name.unwrap_or("pipeline.json");
-        let file = std::fs::File::open(name).expect("failed opening the pipeline");
-        return serde_json::from_reader(file).expect("couldn't parse the pipeline");
+        let file = std::fs::File::open(name)
+            .expect(format!("failed opening the pipeline at {}", name).as_str());
+        return serde_json::from_reader(file)
+            .expect(format!("couldn't parse the pipeline at {}", name).as_str());
     }
 
     pub fn load(
