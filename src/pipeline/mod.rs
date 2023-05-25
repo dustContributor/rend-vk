@@ -1,5 +1,5 @@
 use self::descriptor::DescriptorBuffer;
-use crate::buffer::DeviceAllocator;
+
 use crate::pipeline::attachment::Attachment;
 use crate::pipeline::sampler::Sampler;
 use crate::pipeline::stage::Stage;
@@ -22,8 +22,6 @@ pub struct Pipeline {
     pub image_descriptors: DescriptorBuffer,
     pub input_descriptors: DescriptorBuffer,
     pub sampler_descriptors: DescriptorBuffer,
-    pub buffer_allocator: DeviceAllocator,
-    pub descriptor_allocator: DeviceAllocator,
 }
 
 impl Pipeline {
@@ -35,9 +33,6 @@ impl Pipeline {
                 &self.input_descriptors,
                 &self.sampler_descriptors,
             ] {
-                e.destroy(device);
-            }
-            for e in [&self.buffer_allocator, &self.descriptor_allocator] {
                 e.destroy(device);
             }
             for e in [&self.linear_sampler, &self.nearest_sampler] {

@@ -12,6 +12,23 @@ pub struct SwapchainContext {
 }
 
 impl SwapchainContext {
+    pub fn make(vulkan_context: &VulkanContext, surface: vk::SurfaceKHR) -> Self {
+        let present_mode = present_mode(&vulkan_context, surface);
+        let surface_extent = surface_extent(&vulkan_context, surface, 0, 0);
+        let surface_format = surface_format(&vulkan_context, surface);
+        let swapchain = swapchain(&vulkan_context, surface, surface_extent);
+        let swapchain_attachments =
+            attachments(&vulkan_context, surface, swapchain, surface_extent);
+        Self {
+            present_mode,
+            surface,
+            surface_extent,
+            surface_format,
+            swapchain,
+            attachments: swapchain_attachments,
+        }
+    }
+
     pub fn destroy(&self, ctx: &VulkanContext) {
         for att in self.attachments.iter() {
             unsafe {

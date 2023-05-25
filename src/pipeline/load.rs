@@ -433,9 +433,7 @@ impl Pipeline {
             ubo_descriptors,
             image_descriptors,
             input_descriptors,
-            sampler_descriptors,
-            buffer_allocator: device_mem.clone(),
-            descriptor_allocator: descriptor_mem.clone(),
+            sampler_descriptors
         };
     }
 
