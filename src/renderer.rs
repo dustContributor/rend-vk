@@ -1,32 +1,229 @@
-use std::{alloc::Layout, ffi::CStr};
+use std::{alloc::Layout, ffi::CStr, mem::align_of};
 
 use ash::{
     extensions::{
         ext::{self, DebugUtils},
         khr,
     },
+    util::Align,
     vk, Entry,
 };
 
 use crate::{
-    buffer::DeviceAllocator,
+    buffer::{DeviceAllocator, DeviceSlice},
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     pipeline::{self, Pipeline},
+    render_task::RenderTask,
+    shader,
     // render_task::{RenderTask},
     swapchain,
 };
 
+struct Mesh {
+    vertices: DeviceSlice,
+    colors: DeviceSlice,
+    indices: DeviceSlice,
+    indices_count: u32,
+}
+
 pub struct Renderer {
     pub pipeline: Pipeline,
-    // pub batches_by_task_type: Vec<Vec<RenderTask>>,
+    pub batches_by_task_type: Vec<Vec<RenderTask>>,
     pub swapchain_context: swapchain::SwapchainContext,
     pub vulkan_context: context::VulkanContext,
     pub debug_context: Option<debug::DebugContext>,
+    pub buffer_allocator: DeviceAllocator,
+    pub descriptor_allocator: DeviceAllocator,
+
+    present_queue: vk::Queue,
+
+    pool: vk::CommandPool,
+    draw_command_buffer: vk::CommandBuffer,
+    setup_command_buffer: vk::CommandBuffer,
+
+    present_complete_semaphore: vk::Semaphore,
+    rendering_complete_semaphore: vk::Semaphore,
+
+    draw_commands_reuse_fence: vk::Fence,
+    setup_commands_reuse_fence: vk::Fence,
+
+    test_triangle: Mesh,
 }
 
 impl Renderer {
-    // pub fn add_to_queue(&self, task: RenderTask) {}
+    pub fn destroy(&mut self, device: &ash::Device) {
+        log::trace!("destroying renderer...");
+        self.pipeline.destroy(device);
+        for e in [&self.buffer_allocator, &self.descriptor_allocator] {
+            e.destroy(device);
+        }
+        unsafe {
+            let destroy_semaphore = |s| self.vulkan_context.device.destroy_semaphore(s, None);
+            let destroy_fence = |s| self.vulkan_context.device.destroy_fence(s, None);
+            self.vulkan_context.device.device_wait_idle().unwrap();
+            destroy_semaphore(self.present_complete_semaphore);
+            destroy_semaphore(self.rendering_complete_semaphore);
+            destroy_fence(self.draw_commands_reuse_fence);
+            destroy_fence(self.setup_commands_reuse_fence);
+            self.vulkan_context
+                .device
+                .destroy_command_pool(self.pool, None);
+            self.swapchain_context.destroy(&self.vulkan_context);
+            self.vulkan_context.device.destroy_device(None);
+        }
+        // TODO: Read about Drop
+        if self.debug_context.is_some() {
+            let d = self.debug_context.as_mut().unwrap();
+            d.destroy();
+        }
+        unsafe { self.vulkan_context.instance.destroy_instance(None) };
+        log::trace!("renderer destroyed!");
+    }
+
+    pub fn add_to_queue(&mut self, task: RenderTask) {
+        if let Some(batch) = self.batches_by_task_type.get_mut(task.kind as usize) {
+            batch.push(task)
+        }
+    }
+
+    pub fn render(&self) {
+        unsafe {
+            let (present_index, _) = self
+                .vulkan_context
+                .extension
+                .swapchain
+                .acquire_next_image(
+                    self.swapchain_context.swapchain,
+                    std::u64::MAX,
+                    self.present_complete_semaphore,
+                    vk::Fence::null(),
+                )
+                .unwrap();
+            self.record_submit_commandbuffer(
+                self.draw_command_buffer,
+                self.draw_commands_reuse_fence,
+                self.present_queue,
+                &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+                &[self.present_complete_semaphore],
+                &[self.rendering_complete_semaphore],
+                |draw_command_buffer| {
+                    let default_attachment =
+                        self.swapchain_context.attachments[present_index as usize].clone();
+                    for stage in &self.pipeline.stages {
+                        stage.render(
+                            &self.vulkan_context,
+                            &self.pipeline,
+                            draw_command_buffer,
+                            &default_attachment,
+                            |device, command_buffer| {
+                                device.cmd_bind_vertex_buffers(
+                                    command_buffer,
+                                    shader::ATTRIB_LOC_POSITION,
+                                    &[self.buffer_allocator.buffer.buffer],
+                                    &[self.test_triangle.vertices.offset],
+                                );
+                                device.cmd_bind_vertex_buffers(
+                                    command_buffer,
+                                    shader::ATTRIB_LOC_COLOR,
+                                    &[self.buffer_allocator.buffer.buffer],
+                                    &[self.test_triangle.colors.offset],
+                                );
+                                device.cmd_bind_index_buffer(
+                                    command_buffer,
+                                    self.buffer_allocator.buffer.buffer,
+                                    self.test_triangle.indices.offset,
+                                    vk::IndexType::UINT32,
+                                );
+                                device.cmd_draw_indexed(
+                                    command_buffer,
+                                    self.test_triangle.indices_count,
+                                    1,
+                                    0,
+                                    0,
+                                    1,
+                                );
+                            },
+                        );
+                    }
+                },
+            );
+            let wait_semaphors = [self.rendering_complete_semaphore];
+            let swapchains = [self.swapchain_context.swapchain];
+            let image_indices = [present_index];
+            let present_info = vk::PresentInfoKHR::builder()
+                .wait_semaphores(&wait_semaphors)
+                .swapchains(&swapchains)
+                .image_indices(&image_indices);
+
+            self.vulkan_context
+                .extension
+                .swapchain
+                .queue_present(self.present_queue, &present_info)
+                .unwrap();
+        }
+    }
+
+    fn record_submit_commandbuffer<F: FnOnce(vk::CommandBuffer)>(
+        &self,
+        command_buffer: vk::CommandBuffer,
+        command_buffer_reuse_fence: vk::Fence,
+        submit_queue: vk::Queue,
+        wait_mask: &[vk::PipelineStageFlags],
+        wait_semaphores: &[vk::Semaphore],
+        signal_semaphores: &[vk::Semaphore],
+        f: F,
+    ) {
+        unsafe {
+            self.vulkan_context
+                .device
+                .wait_for_fences(&[command_buffer_reuse_fence], true, std::u64::MAX)
+                .expect("fence wait failed!");
+
+            self.vulkan_context
+                .device
+                .reset_fences(&[command_buffer_reuse_fence])
+                .expect("fence reset failed!");
+
+            self.vulkan_context
+                .device
+                .reset_command_buffer(
+                    command_buffer,
+                    vk::CommandBufferResetFlags::RELEASE_RESOURCES,
+                )
+                .expect("reset command buffer failed!");
+
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            self.vulkan_context
+                .device
+                .begin_command_buffer(command_buffer, &command_buffer_begin_info)
+                .expect("begin commandbuffer failed!");
+            f(command_buffer);
+            self.vulkan_context
+                .device
+                .end_command_buffer(command_buffer)
+                .expect("end command buffer failed!");
+
+            let command_buffers = vec![command_buffer];
+
+            let submit_info = vk::SubmitInfo::builder()
+                .wait_semaphores(wait_semaphores)
+                .wait_dst_stage_mask(wait_mask)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(signal_semaphores);
+
+            self.vulkan_context
+                .device
+                .queue_submit(
+                    submit_queue,
+                    &[submit_info.build()],
+                    command_buffer_reuse_fence,
+                )
+                .expect("queue submit failed!");
+        }
+    }
 }
 
 // #[no_mangle]
@@ -52,6 +249,17 @@ impl Renderer {
 pub extern "C" fn Java_test_Testing_init(_unused_jnienv: usize, _unused_jclazz: usize) {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
     log_panics::init();
+}
+
+#[no_mangle]
+pub extern "C" fn Java_test_Testing_render(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+) {
+    let renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    renderer.render();
+    Box::leak(renderer);
 }
 
 #[no_mangle]
@@ -127,6 +335,57 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
     let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
     let descriptor_buffer_ext = ash::extensions::ext::DescriptorBuffer::new(&instance, &device);
 
+    log::trace!("creating command buffers...");
+    let present_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
+
+    let pool_create_info = vk::CommandPoolCreateInfo::builder()
+        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+        .queue_family_index(queue_family_index);
+
+    let pool = unsafe { device.create_command_pool(&pool_create_info, None).unwrap() };
+
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
+        .command_buffer_count(2)
+        .command_pool(pool)
+        .level(vk::CommandBufferLevel::PRIMARY);
+
+    let command_buffers = unsafe {
+        device
+            .allocate_command_buffers(&command_buffer_allocate_info)
+            .unwrap()
+    };
+    let setup_command_buffer = command_buffers[0];
+    let draw_command_buffer = command_buffers[1];
+    log::trace!("command buffers created!");
+
+    log::trace!("creating fences...");
+    let fence_create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+    let draw_commands_reuse_fence = unsafe {
+        device
+            .create_fence(&fence_create_info, None)
+            .expect("Create fence failed.")
+    };
+    let setup_commands_reuse_fence = unsafe {
+        device
+            .create_fence(&fence_create_info, None)
+            .expect("Create fence failed.")
+    };
+    log::trace!("fences created!");
+
+    log::trace!("creating semaphores...");
+    let semaphore_create_info = vk::SemaphoreCreateInfo::default();
+    let present_complete_semaphore = unsafe {
+        device
+            .create_semaphore(&semaphore_create_info, None)
+            .unwrap()
+    };
+    let rendering_complete_semaphore = unsafe {
+        device
+            .create_semaphore(&semaphore_create_info, None)
+            .unwrap()
+    };
+    log::trace!("semaphores created!");
+
     let vulkan_context = VulkanContext {
         entry,
         device,
@@ -146,22 +405,8 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
-    let present_mode = swapchain::present_mode(&vulkan_context, surface);
-    let surface_extent = swapchain::surface_extent(&vulkan_context, surface, 0, 0);
-    let surface_format = swapchain::surface_format(&vulkan_context, surface);
-    let swapchain = swapchain::swapchain(&vulkan_context, surface, surface_extent);
-    let swapchain_attachments =
-        swapchain::attachments(&vulkan_context, surface, swapchain, surface_extent);
+    let swapchain_context = swapchain::SwapchainContext::make(&vulkan_context, surface);
     log::trace!("swapchain created!");
-
-    let swapchain_context = swapchain::SwapchainContext {
-        present_mode,
-        surface,
-        surface_extent,
-        surface_format,
-        swapchain,
-        attachments: swapchain_attachments,
-    };
 
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
@@ -173,13 +418,28 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
     );
     log::trace!("pipeline created!");
 
+    log::trace!("creating test triangle...");
+    let test_triangle = make_test_triangle(&mut allocator);
+    log::trace!("test triangle created!");
+
     log::trace!("finishing renderer...");
     let renderer = Renderer {
         pipeline: pip,
-        // batches_by_task_type: Vec::new(),
+        batches_by_task_type: Vec::new(),
         debug_context,
         swapchain_context,
         vulkan_context,
+        buffer_allocator: allocator,
+        descriptor_allocator: desc_allocator,
+        draw_command_buffer,
+        present_queue,
+        setup_command_buffer,
+        rendering_complete_semaphore,
+        present_complete_semaphore,
+        setup_commands_reuse_fence,
+        draw_commands_reuse_fence,
+        pool,
+        test_triangle,
     };
     let boxed = Box::from(renderer);
     let ptr = Box::into_raw(boxed) as u64;
@@ -325,4 +585,72 @@ pub fn select_physical_device(
             }
         })
         .expect("Couldn't find a suitable physical device!")
+}
+
+fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> Mesh {
+    #[derive(Clone, Debug, Copy)]
+    struct Attrib {
+        values: [f32; 3],
+    }
+
+    let indices = [0u32, 1, 2];
+    let vertices = [
+        Attrib {
+            values: [-1.0, 1.0, 0.0],
+        },
+        Attrib {
+            values: [1.0, 1.0, 0.0],
+        },
+        Attrib {
+            values: [0.0, -1.0, 0.0],
+        },
+    ];
+    let colors = [
+        Attrib {
+            values: [0.0, 1.0, 1.0],
+        },
+        Attrib {
+            values: [0.0, 0.0, 1.0],
+        },
+        Attrib {
+            values: [1.0, 0.0, 0.0],
+        },
+    ];
+    unsafe {
+        let index_buffer = buffer_allocator
+            .alloc(std::mem::size_of_val(&indices) as u64)
+            .expect("couldn't allocate index buffer");
+        let mut index_slice = Align::new(
+            index_buffer.addr,
+            align_of::<u32>() as u64,
+            buffer_allocator.buffer.alignment,
+        );
+        index_slice.copy_from_slice(&indices);
+        let vertex_buffer = buffer_allocator
+            .alloc((vertices.len() * std::mem::size_of::<Attrib>()) as u64)
+            .expect("couldn't allocate vertex buffer");
+        let mut vertex_slice = Align::new(
+            vertex_buffer.addr,
+            align_of::<u32>() as u64,
+            buffer_allocator.buffer.alignment,
+        );
+        vertex_slice.copy_from_slice(&vertices);
+
+        let color_buffer = buffer_allocator
+            .alloc((colors.len() * std::mem::size_of::<Attrib>()) as u64)
+            .expect("couldn't allocate vertex buffer");
+        let mut color_slice = Align::new(
+            color_buffer.addr,
+            align_of::<u32>() as u64,
+            buffer_allocator.buffer.alignment,
+        );
+        color_slice.copy_from_slice(&colors);
+
+        Mesh {
+            colors: color_buffer,
+            vertices: vertex_buffer,
+            indices: index_buffer,
+            indices_count: indices.len() as u32,
+        }
+    }
 }
