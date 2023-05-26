@@ -81,7 +81,7 @@ impl Renderer {
         log::trace!("renderer destroyed!");
     }
 
-    pub fn add_to_queue(&mut self, task: RenderTask) {
+    pub fn add_task_to_queue(&mut self, task: RenderTask) {
         if let Some(batch) = self.batches_by_task_type.get_mut(task.kind as usize) {
             batch.push(task)
         }
@@ -245,27 +245,8 @@ impl Renderer {
 //     let slice = unsafe { std::slice::from_raw_parts(resources, resources_len as usize) };
 // }
 // test.Testing.make_renderer
-#[no_mangle]
-pub extern "C" fn Java_test_Testing_init(_unused_jnienv: usize, _unused_jclazz: usize) {
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-    log_panics::init();
-}
 
-#[no_mangle]
-pub extern "C" fn Java_test_Testing_render(
-    _unused_jnienv: usize,
-    _unused_jclazz: usize,
-    renderer: u64,
-) {
-    let renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
-    renderer.render();
-    Box::leak(renderer);
-}
-
-#[no_mangle]
-pub extern "C" fn Java_test_Testing_make_1renderer(
-    _unused_jnienv: usize,
-    _unused_jclazz: usize,
+pub fn make_renderer(
     window: u64,
     instance_extensions: u64,
     instance_extensions_len: u64,
