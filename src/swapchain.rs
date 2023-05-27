@@ -44,14 +44,6 @@ impl SwapchainContext {
     }
 }
 
-pub fn surface(
-    entry: &ash::Entry,
-    instance: &ash::Instance,
-    window: &winit::window::Window,
-) -> vk::SurfaceKHR {
-    unsafe { ash_window::create_surface(entry, instance, window, None) }.unwrap()
-}
-
 pub fn attachments(
     ctx: &VulkanContext,
     surface: vk::SurfaceKHR,
