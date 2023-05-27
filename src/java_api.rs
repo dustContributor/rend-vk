@@ -1,3 +1,4 @@
+use ash::vk;
 use bitvec::{prelude::Msb0, view::BitView};
 
 use crate::{
@@ -17,12 +18,36 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
     instance_extensions_len: u64,
     glfw_create_window_surface: u64,
 ) -> u64 {
-    renderer::make_renderer(
-        window,
-        instance_extensions,
-        instance_extensions_len,
-        glfw_create_window_surface,
-    )
+    /*
+     * VkResult glfwCreateWindowSurface (
+     * VkInstance instance,
+     * GLFWwindow *window,
+     * const VkAllocationCallbacks *allocator,
+     * VkSurfaceKHR *surface)
+     */
+    let glfw_create_window_surface = unsafe {
+        std::mem::transmute::<
+            _,
+            extern "C" fn(vk::Instance, u64, u64, *mut vk::SurfaceKHR) -> vk::Result,
+        >(glfw_create_window_surface as *const ())
+    };
+    let instance_extensions: &[*const i8] = unsafe {
+        if instance_extensions_len == 0 {
+            &[]
+        } else {
+            std::slice::from_raw_parts(
+                instance_extensions as *const *const i8,
+                instance_extensions_len as usize,
+            )
+        }
+    };
+    let renderer = renderer::make_renderer(instance_extensions, |_, instance, surface| {
+        glfw_create_window_surface(instance.handle(), window, 0, surface)
+    });
+    let boxed = Box::from(renderer);
+    let ptr = Box::into_raw(boxed) as u64;
+    log::trace!("renderer finished!");
+    return ptr;
 }
 
 #[no_mangle]

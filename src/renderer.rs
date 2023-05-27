@@ -244,41 +244,16 @@ impl Renderer {
 //     let resources = resources as *const u8;
 //     let slice = unsafe { std::slice::from_raw_parts(resources, resources_len as usize) };
 // }
-// test.Testing.make_renderer
 
-pub fn make_renderer(
-    window: u64,
-    instance_extensions: u64,
-    instance_extensions_len: u64,
-    glfw_create_window_surface: u64,
-) -> u64 {
+pub fn make_renderer<F>(instance_extensions: &[*const i8], create_surface: F) -> Renderer
+where
+    F: FnOnce(&ash::Entry, &ash::Instance, *mut vk::SurfaceKHR) -> vk::Result,
+{
     log::trace!("entering make_renderer");
-    /*
-     * VkResult glfwCreateWindowSurface (
-     * VkInstance instance,
-     * GLFWwindow *window,
-     * const VkAllocationCallbacks *allocator,
-     * VkSurfaceKHR *surface)
-     */
-    let glfw_create_window_surface = unsafe {
-        std::mem::transmute::<
-            _,
-            extern "C" fn(vk::Instance, u64, u64, *mut vk::SurfaceKHR) -> vk::Result,
-        >(glfw_create_window_surface as *const ())
-    };
+
     log::trace!("creating entry...");
     let entry = Entry::linked();
     log::trace!("entry created!");
-    let instance_extensions = unsafe {
-        if instance_extensions_len == 0 {
-            &[]
-        } else {
-            std::slice::from_raw_parts(
-                instance_extensions as *const *const i8,
-                instance_extensions_len as usize,
-            )
-        }
-    };
     log::trace!("creating instance...");
     let instance = make_instance(&entry, instance_extensions);
     log::trace!("instance created!");
@@ -297,7 +272,7 @@ pub fn make_renderer(
     log::trace!("creating surface...");
     let surface_layout = Layout::new::<vk::SurfaceKHR>();
     let surface = unsafe { std::alloc::alloc(surface_layout) as *mut vk::SurfaceKHR };
-    let create_surface_result = glfw_create_window_surface(instance.handle(), window, 0, surface);
+    let create_surface_result = create_surface(&entry, &instance, surface);
     if create_surface_result != vk::Result::SUCCESS {
         panic!("error creating surface: {}", create_surface_result);
     }
@@ -422,10 +397,8 @@ pub fn make_renderer(
         pool,
         test_triangle,
     };
-    let boxed = Box::from(renderer);
-    let ptr = Box::into_raw(boxed) as u64;
     log::trace!("renderer finished!");
-    return ptr;
+    return renderer;
 }
 
 pub fn make_device(
