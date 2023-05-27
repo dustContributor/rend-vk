@@ -52,11 +52,11 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn destroy(&mut self, device: &ash::Device) {
+    pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");
-        self.pipeline.destroy(device);
+        self.pipeline.destroy(&self.vulkan_context.device);
         for e in [&self.buffer_allocator, &self.descriptor_allocator] {
-            e.destroy(device);
+            e.destroy(&self.vulkan_context.device);
         }
         unsafe {
             let destroy_semaphore = |s| self.vulkan_context.device.destroy_semaphore(s, None);
