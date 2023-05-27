@@ -42,7 +42,7 @@ impl Pipeline {
         for src_out in &shaders_by_name {
             let name = src_out.0;
             let args = [&format!("shader/{}", name), "-V", "-o", &src_out.1];
-            println!("Compiling shader {} with args {:?}...", name, args);
+            log::info!("compiling shader {} with args {:?}...", name, args);
             let res = Command::new("glslangValidator")
                 .args(args)
                 .spawn()
@@ -65,7 +65,7 @@ impl Pipeline {
                 }
                 _ => {}
             }
-            println!("Shader {} compiled!", name);
+            log::info!("shader {} compiled!", name);
         }
         let load_shader = |name: &String| {
             shaders_by_name.get(name).map(|v| {
@@ -438,6 +438,12 @@ impl Pipeline {
     }
 
     pub fn init_ubos(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
+        let props = unsafe {
+            ctx.instance
+                .get_physical_device_properties(ctx.physical_device)
+        };
+        // props.limits.un
+        // mem_props.
         let desc_buffer = DescriptorBuffer::of(
             ctx,
             mem,
@@ -447,6 +453,8 @@ impl Pipeline {
             false,
         );
         // init global ubo
+        // let global_uniform = vk::DescriptorAddressInfoEXT::builder()
+        // .address(address)
         // init per draw ubo
         desc_buffer
     }

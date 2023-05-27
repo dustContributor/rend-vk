@@ -450,13 +450,13 @@ pub fn make_device(
         .push_next(&mut features2)
         .build();
 
-    log::info!("Initializing Device...");
+    log::info!("initializing Device...");
     let device: ash::Device = unsafe {
         instance
             .create_device(physical_device, &device_create_info, None)
-            .expect("Couldn't create the device!")
+            .expect("couldn't create the device!")
     };
-    log::info!("Device initialized!");
+    log::info!("device initialized!");
     return device;
 }
 
@@ -487,13 +487,13 @@ pub fn make_instance(entry: &ash::Entry, extensions: &[*const i8]) -> ash::Insta
         .enabled_layer_names(&layers_names_raw)
         .enabled_extension_names(&instance_extensions);
 
-    log::info!("Initializing Instance...");
+    log::info!("initializing Instance...");
     let instance: ash::Instance = unsafe {
         entry
             .create_instance(&create_info, None)
-            .expect("Instance creation error")
+            .expect("instance creation error!")
     };
-    log::info!("Instance initialized!");
+    log::info!("instance initialized!");
     return instance;
 }
 

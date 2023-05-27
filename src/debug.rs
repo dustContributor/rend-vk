@@ -21,7 +21,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     } else {
         CStr::from_ptr(callback_data.p_message).to_string_lossy()
     };
-    println!(
+    log::info!(
         "{:?}:\n{:?} [{} ({})] : {}\n",
         message_severity,
         message_type,
