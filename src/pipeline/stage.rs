@@ -10,7 +10,6 @@ pub enum BatchType {
     PointLight,
 }
 
-#[derive(Clone)]
 pub struct Stage {
     pub name: String,
     pub rendering: Rendering,
@@ -19,6 +18,7 @@ pub struct Stage {
     pub outputs: Vec<Attachment>,
     pub inputs: Vec<Attachment>,
     pub updaters: Vec<String>,
+    pub input_descriptors: Option<Box<DescriptorBuffer>>,
     pub batch: BatchType,
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
@@ -40,15 +40,14 @@ impl Stage {
         default_attachment: &Attachment,
         draw_commands: F,
     ) {
-        let default_image_barriers = vec![Attachment::default_attachment_write_barrier(
-            default_attachment.image,
-        )];
+        let mut image_barriers = self.image_barriers.clone();
+        if self.is_final {
+            image_barriers.push(Attachment::default_attachment_write_barrier(
+                default_attachment.image,
+            ));
+        }
         let barrier_dep_info = vk::DependencyInfo::builder()
-            .image_memory_barriers(if self.is_final {
-                &default_image_barriers
-            } else {
-                &self.image_barriers
-            })
+            .image_memory_barriers(&image_barriers)
             .build();
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
@@ -89,15 +88,18 @@ impl Stage {
                         .usage(b.device.kind.to_vk_usage_flags())
                         .build()
                 }
-                let desc_buffer_info = [
-                    buffer_binding_info_of(&pipeline.sampler_descriptors),
-                    buffer_binding_info_of(&pipeline.input_descriptors),
-                ];
+                let mut desc_buffer_info =
+                    vec![buffer_binding_info_of(&pipeline.sampler_descriptors)];
+                let mut desc_buffer_indices = vec![0];
+                let mut desc_buffer_offsets = vec![pipeline.sampler_descriptors.device.offset];
+                if let Some(desc) = &self.input_descriptors {
+                    desc_buffer_info.push(buffer_binding_info_of(desc));
+                    desc_buffer_indices.push(1);
+                    desc_buffer_offsets.push(0);
+                }
                 ctx.extension
                     .descriptor_buffer
                     .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
-                let desc_buffer_indices = [0, 1];
-                let desc_buffer_offsets = [0, 0];
                 ctx.extension
                     .descriptor_buffer
                     .cmd_set_descriptor_buffer_offsets(

@@ -175,6 +175,7 @@ impl Pipeline {
                         view,
                         extent,
                         descriptor_offset: 0,
+                        descriptor_index: 0,
                     },
                 );
             })
@@ -184,32 +185,23 @@ impl Pipeline {
         attachments_by_name.insert(&default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let enabled_passes: Vec<_> = pip.passes.into_iter().filter(|e| !e.is_disabled).collect();
-        let max_input_descriptors: u32 = std::cmp::max(
-            1,
-            enabled_passes.iter().map(|e| e.inputs.len() as u32).sum(),
-        );
         let linear_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Linear);
         let nearest_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Nearest);
         let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
         let linear_sampler = sampler::Sampler {
-            descriptor_offset: sampler_descriptors.place_sampler_at(
-                0,
-                linear_sampler.sampler,
-                &ctx.extension.descriptor_buffer,
-            ),
+            descriptor_offset: sampler_descriptors
+                .place_sampler_at(0, linear_sampler.sampler, &ctx.extension.descriptor_buffer)
+                .0,
             ..linear_sampler
         };
         let nearest_sampler = sampler::Sampler {
-            descriptor_offset: sampler_descriptors.place_sampler_at(
-                0,
-                nearest_sampler.sampler,
-                &ctx.extension.descriptor_buffer,
-            ),
+            descriptor_offset: sampler_descriptors
+                .place_sampler_at(1, nearest_sampler.sampler, &ctx.extension.descriptor_buffer)
+                .0,
             ..nearest_sampler
         };
-        let mut input_descriptors = Self::init_inputs(ctx, descriptor_mem, max_input_descriptors);
-        let ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
-        let image_descriptors = Self::init_images(ctx, descriptor_mem);
+        let mut ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
+        let mut image_descriptors = Self::init_images(ctx, descriptor_mem);
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         for (passi, pass) in enabled_passes.iter().enumerate() {
             let writing = Self::handle_option(pass.state.writing.clone());
@@ -286,6 +278,14 @@ impl Pipeline {
                 .map(|e| e.info)
                 .collect::<Vec<_>>();
 
+            let mut input_descriptors = (pass.inputs.len() > 0).then(|| {
+                Box::new(Self::init_inputs(
+                    ctx,
+                    descriptor_mem,
+                    pass.inputs.len() as u32,
+                ))
+            });
+
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
             let make_attachment_descriptor = |(i, e)| -> Attachment {
@@ -297,13 +297,13 @@ impl Pipeline {
                     .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .image_view(tmp.view)
                     .build();
-                let descriptor_offset = input_descriptors.place_image_at(
-                    i as u32,
-                    desc,
-                    &ctx.extension.descriptor_buffer,
-                );
+                let (descriptor_offset, descriptor_index) = input_descriptors
+                    .as_mut()
+                    .unwrap()
+                    .place_image(desc, &ctx.extension.descriptor_buffer);
                 Attachment {
                     descriptor_offset,
+                    descriptor_index,
                     ..tmp
                 }
             };
@@ -363,7 +363,10 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
-            let set_layouts = [sampler_descriptors.layout, input_descriptors.layout];
+            let set_layouts = match &input_descriptors {
+                Some(d) => vec![sampler_descriptors.layout, d.layout],
+                None => vec![sampler_descriptors.layout],
+            };
             let pipeline_layout = unsafe {
                 let info = vk::PipelineLayoutCreateInfo::builder()
                     .set_layouts(&set_layouts)
@@ -399,6 +402,10 @@ impl Pipeline {
             ctx.try_set_debug_name(&pass.name, graphics_pipeline);
             ctx.try_set_debug_name(&pass.name, pipeline_layout);
 
+            if let Some(d) = &mut input_descriptors {
+                // If there are any input descriptors, write them into device memory
+                d.into_device()
+            }
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
                 rendering: super::stage::Rendering {
@@ -414,6 +421,7 @@ impl Pipeline {
                 outputs,
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
+                input_descriptors,
             });
         }
         for shader in shader_programs_by_name
@@ -423,8 +431,11 @@ impl Pipeline {
             // No longer need them.
             unsafe { ctx.device.destroy_shader_module(shader.info.module, None) };
         }
-        // Write all descriptors into device memory before returning the pipeline
-        input_descriptors.into_device();
+
+        // ubo_descriptors.into_device();
+        sampler_descriptors.into_device();
+        // image_descriptors.into_device();
+
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
@@ -432,8 +443,7 @@ impl Pipeline {
             nearest_sampler,
             ubo_descriptors,
             image_descriptors,
-            input_descriptors,
-            sampler_descriptors
+            sampler_descriptors,
         };
     }
 
@@ -548,7 +558,7 @@ impl Pipeline {
                     break;
                 }
                 let prev = &passes[i];
-                if !prev.inputs.iter().any(|e| e.name.eq(&input.name)) {
+                if prev.inputs.iter().any(|e| e.name.eq(&input.name)) {
                     // Already issued barrier before
                     break;
                 }

@@ -20,7 +20,6 @@ pub struct Pipeline {
     pub linear_sampler: Sampler,
     pub ubo_descriptors: DescriptorBuffer,
     pub image_descriptors: DescriptorBuffer,
-    pub input_descriptors: DescriptorBuffer,
     pub sampler_descriptors: DescriptorBuffer,
 }
 
@@ -30,7 +29,6 @@ impl Pipeline {
             for e in [
                 &self.ubo_descriptors,
                 &self.image_descriptors,
-                &self.input_descriptors,
                 &self.sampler_descriptors,
             ] {
                 e.destroy(device);
@@ -41,6 +39,9 @@ impl Pipeline {
             for stage in &self.stages {
                 device.destroy_pipeline(stage.pipeline, None);
                 device.destroy_pipeline_layout(stage.layout, None);
+                if let Some(desc) = &stage.input_descriptors {
+                    desc.destroy(device)
+                }
             }
             for attachment in &self.attachments {
                 if attachment.is_default() {

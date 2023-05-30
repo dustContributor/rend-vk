@@ -11,6 +11,7 @@ pub struct Attachment {
     pub view: vk::ImageView,
     pub extent: vk::Extent2D,
     pub descriptor_offset: usize,
+    pub descriptor_index: u32,
 }
 
 impl Attachment {
@@ -32,6 +33,7 @@ impl Attachment {
             view: image_view,
             extent,
             descriptor_offset: 0,
+            descriptor_index: 0,
         }
     }
 

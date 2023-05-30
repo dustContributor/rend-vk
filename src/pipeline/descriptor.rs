@@ -10,6 +10,7 @@ pub struct DescriptorBuffer {
     pub layout: vk::DescriptorSetLayout,
     pub descriptor_type: vk::DescriptorType,
     pub descriptor_size: usize,
+    pub count: u32,
     occupancy: BitVec,
     host: Box<[u8]>,
 }
@@ -61,7 +62,7 @@ impl DescriptorBuffer {
                 .descriptor_buffer
                 .get_descriptor_set_layout_size(layout)
         };
-        let boxed: Box<[u8]> = vec![0; layout_size as usize].into_boxed_slice();
+        let host = vec![0u8; layout_size as usize].into_boxed_slice();
         let buffer = if let Some(buffer) = mem.alloc(layout_size) {
             buffer
         } else {
@@ -77,10 +78,11 @@ impl DescriptorBuffer {
             name,
             layout,
             device: buffer,
-            host: boxed,
+            host,
             descriptor_type,
             descriptor_size,
             occupancy,
+            count,
         }
     }
 
@@ -104,11 +106,11 @@ impl DescriptorBuffer {
         }
     }
 
-    pub fn place_at(&mut self, index: u32, data: &[u8]) -> usize {
+    pub fn place_at(&mut self, index: u32, data: &[u8]) -> (usize, u32) {
         let offset = self.offset_of(index);
         self.host[offset..(offset + self.descriptor_size)].copy_from_slice(data);
         self.occupancy.set(index as usize, true);
-        offset
+        (offset, index)
     }
 
     pub fn offsets(&self) -> Vec<u64> {
@@ -118,7 +120,7 @@ impl DescriptorBuffer {
             .collect()
     }
 
-    pub fn place(&mut self, data: &[u8]) -> usize {
+    pub fn place(&mut self, data: &[u8]) -> (usize, u32) {
         self.place_at(self.next_free() as u32, data)
     }
 
@@ -130,11 +132,15 @@ impl DescriptorBuffer {
         index as usize * self.descriptor_size
     }
 
+    pub fn remove_at(&mut self, index: u32) {
+        self.occupancy.set(index as usize, false);
+    }
+
     pub fn place_sampler(
         &mut self,
         desc: vk::Sampler,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.place_sampler_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
 
@@ -143,7 +149,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: vk::Sampler,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
             desc,
@@ -157,7 +163,7 @@ impl DescriptorBuffer {
         &mut self,
         desc: vk::DescriptorImageInfo,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.place_image_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
 
@@ -166,7 +172,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: vk::DescriptorImageInfo,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
             desc,
@@ -180,7 +186,7 @@ impl DescriptorBuffer {
         &mut self,
         desc: vk::DescriptorAddressInfoEXT,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.place_ubo_at(self.next_free() as u32, desc, desc_buffer_instance)
     }
 
@@ -189,7 +195,7 @@ impl DescriptorBuffer {
         index: u32,
         desc: vk::DescriptorAddressInfoEXT,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
-    ) -> usize {
+    ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
             desc,
@@ -208,7 +214,7 @@ impl DescriptorBuffer {
         desc_type: vk::DescriptorType,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
         info_of: F,
-    ) -> usize
+    ) -> (usize, u32)
     where
         F: FnOnce(*const T) -> vk::DescriptorDataEXT,
     {
@@ -233,14 +239,12 @@ impl DescriptorBuffer {
     }
 
     pub fn into_device(&mut self) {
-        let mut device_buffer_slice = unsafe {
-            ash::util::Align::new(
-                self.device.addr,
-                self.descriptor_size as u64,
-                self.host.len() as u64,
-            )
+        unsafe {
+            let src = self.host.as_ptr();
+            let dst = self.device.addr as *mut u8;
+            let len = self.host.len();
+            std::ptr::copy_nonoverlapping(src, dst, len)
         };
-        device_buffer_slice.copy_from_slice(&self.host);
     }
 
     pub fn destroy(&self, device: &ash::Device) {
