@@ -57,6 +57,25 @@ impl DeviceAllocator {
     pub fn available(&self) -> u64 {
         self.inner.borrow().available()
     }
+
+    pub fn alignment(&self) -> u64 {
+        self.inner.borrow().buffer.alignment
+    }
+
+    pub fn size(&self) -> u64 {
+        self.inner.borrow().buffer.size
+    }
+
+    pub fn kind(&self) -> BufferKind {
+        self.inner.borrow().buffer.kind
+    }
+
+    ///
+    /// Just go to town with it if you want
+    ///
+    pub fn buffer(&self) -> DeviceBuffer {
+        self.inner.borrow().buffer.clone()
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, strum_macros::Display)]
