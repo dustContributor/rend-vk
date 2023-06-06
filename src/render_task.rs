@@ -1,6 +1,6 @@
 use std::mem::{align_of, size_of};
 
-use glam::{Mat3, Mat4, Vec3};
+use glam::{Mat4, Vec3};
 
 #[derive(Copy, Clone)]
 pub enum TaskKind {
@@ -26,7 +26,9 @@ pub enum TaskKind {
 }
 
 impl TaskKind {
-    const MAX_VALUE: u8 = unsafe { std::mem::transmute(TaskKind::Nuklear) };
+    pub const MAX_VALUE: u8 = unsafe { std::mem::transmute(TaskKind::Nuklear) };
+    pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
+    pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
 
     pub fn of_u32(v: u32) -> Self {
         if v > (Self::MAX_VALUE as u32) {
@@ -50,11 +52,13 @@ pub enum ResourceKind {
     Joint = 7,
     Sky = 8,
     StaticShadow = 9,
-    TransformExtra = ResourceKind::MAX_VALUE,
+    TransformExtra = 10,
 }
 
 impl ResourceKind {
-    const MAX_VALUE: u8 = 10;
+    pub const MAX_VALUE: u8 = unsafe { std::mem::transmute(ResourceKind::TransformExtra) };
+    pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
+    pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
 
     fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
@@ -84,19 +88,19 @@ impl ResourceKind {
         }
     }
 
-    pub fn to_u8(&self) -> u8 {
-        *self as u8
+    pub fn to_u8(self) -> u8 {
+        self as u8
     }
 
-    pub fn to_u32(&self) -> u32 {
-        *self as u32
+    pub fn to_u32(self) -> u32 {
+        self as u32
     }
 
-    pub fn to_usize(&self) -> usize {
-        *self as usize
+    pub fn to_usize(self) -> usize {
+        self as usize
     }
 
-    pub fn resource_align(&self) -> usize {
+    pub fn resource_align(self) -> usize {
         match self {
             ResourceKind::Transform => align_of::<Transform>(),
             ResourceKind::Material => align_of::<Material>(),
@@ -127,6 +131,23 @@ impl ResourceKind {
             ResourceKind::TransformExtra => size_of::<TransformExtra>(),
         }
     }
+}
+
+impl IntoDeviceBuffer for Transform {
+    fn into_device(&self, dst: *mut std::ffi::c_void) {
+        let slice = unsafe {
+            std::slice::from_raw_parts_mut(
+                dst as *mut f32,
+                size_of::<Transform>() / size_of::<f32>(),
+            )
+        };
+        self.mvp.write_cols_to_slice(slice);
+        // self.mv.write_cols_to_slice(slice);
+    }
+}
+
+pub trait IntoDeviceBuffer {
+    fn into_device(&self, dst: *mut std::ffi::c_void);
 }
 
 #[derive(Clone)]
@@ -235,7 +256,6 @@ impl WrapResource<DirLight> for ResourceWrapper {
 //  */
 // public final int indicesOffset;
 // public final int primitive;
-const MAX_RESOURCES_SIZE: usize = ResourceKind::MAX_VALUE as usize + 1;
 pub struct RenderTask {
     pub kind: TaskKind,
     pub mesh_id: u32,
@@ -243,10 +263,10 @@ pub struct RenderTask {
     pub vertex_count: u32,
     pub base_vertex: u32,
     pub indices_offset: u32,
-    pub resources: [ResourceWrapper; MAX_RESOURCES_SIZE],
+    pub resources: [ResourceWrapper; ResourceKind::MAX_LEN],
 }
 
-pub fn resource_array() -> [ResourceWrapper; MAX_RESOURCES_SIZE] {
+pub fn resource_array() -> [ResourceWrapper; ResourceKind::MAX_LEN] {
     return [
         ResourceWrapper::Transform(Vec::new()),
         ResourceWrapper::Material(Vec::new()),
