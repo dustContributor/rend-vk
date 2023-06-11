@@ -14,10 +14,8 @@ use crate::{
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     pipeline::{self, Pipeline},
-    render_task::RenderTask,
-    shader,
-    // render_task::{RenderTask},
-    swapchain,
+    render_task::{RenderTask, TaskKind},
+    shader, swapchain,
 };
 
 struct Mesh {
@@ -44,11 +42,14 @@ pub struct Renderer {
 
     present_complete_semaphore: vk::Semaphore,
     rendering_complete_semaphore: vk::Semaphore,
+    pass_timeline_semaphore: vk::Semaphore,
 
     draw_commands_reuse_fence: vk::Fence,
     setup_commands_reuse_fence: vk::Fence,
 
     test_triangle: Mesh,
+
+    current_frame: u64,
 }
 
 impl Renderer {
@@ -64,6 +65,7 @@ impl Renderer {
             self.vulkan_context.device.device_wait_idle().unwrap();
             destroy_semaphore(self.present_complete_semaphore);
             destroy_semaphore(self.rendering_complete_semaphore);
+            destroy_semaphore(self.pass_timeline_semaphore);
             destroy_fence(self.draw_commands_reuse_fence);
             destroy_fence(self.setup_commands_reuse_fence);
             self.vulkan_context
@@ -87,7 +89,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&self) {
+    pub fn render(&mut self) {
         unsafe {
             let (present_index, _) = self
                 .vulkan_context
@@ -100,6 +102,8 @@ impl Renderer {
                     vk::Fence::null(),
                 )
                 .unwrap();
+            let default_attachment =
+                self.swapchain_context.attachments[present_index as usize].clone();
             self.record_submit_commandbuffer(
                 self.draw_command_buffer,
                 self.draw_commands_reuse_fence,
@@ -108,9 +112,27 @@ impl Renderer {
                 &[self.present_complete_semaphore],
                 &[self.rendering_complete_semaphore],
                 |draw_command_buffer| {
-                    let default_attachment =
-                        self.swapchain_context.attachments[present_index as usize].clone();
                     for stage in &self.pipeline.stages {
+                        let wait_value = [self.current_frame * self.pipeline.stages.len() as u64
+                            + stage.index as u64];
+                        let pass_timeline_semaphores = [self.pass_timeline_semaphore];
+                        let wait_info = vk::SemaphoreWaitInfo::builder()
+                            .values(&wait_value)
+                            .semaphores(&pass_timeline_semaphores)
+                            .build();
+                        /*
+                         * If validation layers are enabled, don't wait the first frame to avoid
+                         * a validation false positive that locks the main thread for a few seconds
+                         */
+                        if !crate::VALIDATION_LAYER_ENABLED || self.current_frame > 0 {
+                            self.vulkan_context
+                                .device
+                                .wait_semaphores(
+                                    &wait_info,
+                                    std::time::Duration::from_secs(1).as_nanos() as u64,
+                                )
+                                .unwrap();
+                        }
                         stage.render(
                             &self.vulkan_context,
                             &self.pipeline,
@@ -145,6 +167,25 @@ impl Renderer {
                                 );
                             },
                         );
+                        let signal_value = ((self.current_frame + 1)
+                            * self.pipeline.stages.len() as u64)
+                            + stage.index as u64;
+                        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
+                            .semaphore(self.pass_timeline_semaphore)
+                            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
+                            .value(signal_value)
+                            .build()];
+                        let signal_submit_infos = [vk::SubmitInfo2::builder()
+                            .signal_semaphore_infos(&pass_semaphore_signal_info)
+                            .build()];
+                        self.vulkan_context
+                            .device
+                            .queue_submit2(
+                                self.present_queue,
+                                &signal_submit_infos,
+                                vk::Fence::null(),
+                            )
+                            .unwrap();
                     }
                 },
             );
@@ -155,12 +196,12 @@ impl Renderer {
                 .wait_semaphores(&wait_semaphors)
                 .swapchains(&swapchains)
                 .image_indices(&image_indices);
-
             self.vulkan_context
                 .extension
                 .swapchain
                 .queue_present(self.present_queue, &present_info)
                 .unwrap();
+            self.current_frame += 1;
         }
     }
 
@@ -340,6 +381,18 @@ where
             .create_semaphore(&semaphore_create_info, None)
             .unwrap()
     };
+    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::builder()
+        .initial_value(0)
+        .semaphore_type(vk::SemaphoreType::TIMELINE)
+        .build();
+    let timeline_semaphore_create_info = vk::SemaphoreCreateInfo::builder()
+        .push_next(&mut timeline_semaphore_type_create_info)
+        .build();
+    let pass_timeline_semaphore = unsafe {
+        device
+            .create_semaphore(&timeline_semaphore_create_info, None)
+            .unwrap()
+    };
     log::trace!("semaphores created!");
 
     let vulkan_context = VulkanContext {
@@ -377,11 +430,14 @@ where
     log::trace!("creating test triangle...");
     let test_triangle = make_test_triangle(&mut allocator);
     log::trace!("test triangle created!");
-
+    let mut batches_by_task_type = Vec::with_capacity(TaskKind::MAX_SIZE + 1);
+    (0..(TaskKind::MAX_SIZE + 1)).for_each(|_| {
+        batches_by_task_type.push(Vec::new());
+    });
     log::trace!("finishing renderer...");
     let renderer = Renderer {
         pipeline: pip,
-        batches_by_task_type: Vec::new(),
+        batches_by_task_type,
         debug_context,
         swapchain_context,
         vulkan_context,
@@ -391,11 +447,13 @@ where
         present_queue,
         setup_command_buffer,
         rendering_complete_semaphore,
+        pass_timeline_semaphore,
         present_complete_semaphore,
         setup_commands_reuse_fence,
         draw_commands_reuse_fence,
         pool,
         test_triangle,
+        current_frame: 0,
     };
     log::trace!("renderer finished!");
     return renderer;

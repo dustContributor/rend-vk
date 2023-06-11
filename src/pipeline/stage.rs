@@ -20,6 +20,7 @@ pub struct Stage {
     pub updaters: Vec<String>,
     pub input_descriptors: Option<Box<DescriptorBuffer>>,
     pub batch: BatchType,
+    pub index: u32,
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
 }

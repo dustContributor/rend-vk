@@ -190,19 +190,30 @@ impl Pipeline {
         let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
         let linear_sampler = sampler::Sampler {
             descriptor_offset: sampler_descriptors
-                .place_sampler_at(0, linear_sampler.sampler, &ctx.extension.descriptor_buffer)
+                .place_sampler_at(
+                    0,
+                    0,
+                    linear_sampler.sampler,
+                    &ctx.extension.descriptor_buffer,
+                )
                 .0,
             ..linear_sampler
         };
         let nearest_sampler = sampler::Sampler {
             descriptor_offset: sampler_descriptors
-                .place_sampler_at(1, nearest_sampler.sampler, &ctx.extension.descriptor_buffer)
+                .place_sampler_at(
+                    1,
+                    0,
+                    nearest_sampler.sampler,
+                    &ctx.extension.descriptor_buffer,
+                )
                 .0,
             ..nearest_sampler
         };
         let mut ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
         let mut image_descriptors = Self::init_images(ctx, descriptor_mem);
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
+        let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {
             let writing = Self::handle_option(pass.state.writing.clone());
             let depth = Self::handle_option(pass.state.depth.clone());
@@ -300,7 +311,7 @@ impl Pipeline {
                 let (descriptor_offset, descriptor_index) = input_descriptors
                     .as_mut()
                     .unwrap()
-                    .place_image(desc, &ctx.extension.descriptor_buffer);
+                    .place_image(0, desc, &ctx.extension.descriptor_buffer);
                 Attachment {
                     descriptor_offset,
                     descriptor_index,
@@ -363,10 +374,10 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
-            let set_layouts = match &input_descriptors {
-                Some(d) => vec![sampler_descriptors.layout, d.layout],
-                None => vec![sampler_descriptors.layout],
-            };
+            let mut set_layouts = vec![sampler_descriptors.layout];
+            if let Some(d) = &input_descriptors {
+                set_layouts.push(d.layout)
+            }
             let pipeline_layout = unsafe {
                 let info = vk::PipelineLayoutCreateInfo::builder()
                     .set_layouts(&set_layouts)
@@ -419,10 +430,13 @@ impl Pipeline {
                 updaters: pass.updaters.clone(),
                 inputs,
                 outputs,
+                index: stage_index,
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
                 input_descriptors,
             });
+            // Increment for next stage
+            stage_index += 1;
         }
         for shader in shader_programs_by_name
             .into_values()
@@ -460,6 +474,7 @@ impl Pipeline {
             "ubos".to_string(),
             DescriptorType::UNIFORM_BUFFER,
             16,
+            1,
             false,
         );
         // init global ubo
@@ -476,6 +491,7 @@ impl Pipeline {
             "images".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             1024,
+            1,
             true,
         );
         // missing ID/handle generator per image
@@ -493,6 +509,7 @@ impl Pipeline {
             "targets".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             size,
+            1,
             false,
         );
         desc_buffer
@@ -509,6 +526,7 @@ impl Pipeline {
             "samplers".to_string(),
             DescriptorType::SAMPLER,
             size,
+            1,
             false,
         );
         desc_buffer

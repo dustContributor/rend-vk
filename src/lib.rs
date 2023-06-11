@@ -13,7 +13,8 @@ pub mod render_task;
 pub mod renderer;
 pub mod shader;
 pub mod swapchain;
+// pub mod uniform;
 pub mod window;
 
 pub const DEBUG_ENABLED: bool = true;
-pub const VALIDATION_LAYER_ENABLED: bool = true;
+pub const VALIDATION_LAYER_ENABLED: bool = false;

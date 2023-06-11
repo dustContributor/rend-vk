@@ -10,7 +10,7 @@ fn main() {
     let window_context = WindowContext::new(1280, 720);
     let instance_extensions =
         ash_window::enumerate_required_extensions(&window_context.window).unwrap();
-    let renderer = renderer::make_renderer(instance_extensions, |entry, instance, surface| {
+    let mut renderer = renderer::make_renderer(instance_extensions, |entry, instance, surface| {
         let surface_maybe =
             unsafe { ash_window::create_surface(entry, instance, &window_context.window, None) };
         match surface_maybe {

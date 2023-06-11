@@ -82,7 +82,7 @@ pub extern "C" fn Java_test_Testing_render(
     _unused_jclazz: usize,
     renderer: u64,
 ) {
-    let renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
     renderer.render();
     Box::leak(renderer);
 }

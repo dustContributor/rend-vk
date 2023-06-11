@@ -28,7 +28,7 @@ impl WindowContext {
             event_loop: RefCell::new(event_loop)
         }
     }
-    pub fn event_loop<F: Fn()>(&self, on_event: F) {
+    pub fn event_loop<F: FnMut()>(&self, mut on_event: F) {
         self.event_loop
             .borrow_mut()
             .run_return(|event, _, control_flow| {

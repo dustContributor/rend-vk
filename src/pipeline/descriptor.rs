@@ -11,8 +11,18 @@ pub struct DescriptorBuffer {
     pub descriptor_type: vk::DescriptorType,
     pub descriptor_size: usize,
     pub count: u32,
+    pub subsets: u32,
+    subset_size: u32,
     occupancy: BitVec,
     host: Box<[u8]>,
+}
+
+fn next_mul_u32(v: u32, mul: u32) -> u32 {
+    ((v + mul - 1) / mul) * mul
+}
+
+fn next_mul_u64(v: u64, mul: u64) -> u64 {
+    ((v + mul - 1) / mul) * mul
 }
 
 impl DescriptorBuffer {
@@ -22,6 +32,7 @@ impl DescriptorBuffer {
         name: String,
         descriptor_type: vk::DescriptorType,
         count: u32,
+        subsets: u32,
         is_array: bool,
     ) -> Self {
         assert!(count > 0, "Cant have zero sized descriptor buffers!");
@@ -32,6 +43,7 @@ impl DescriptorBuffer {
             BufferKind::Descriptor
         );
         let descriptor_size = Self::size_of(descriptor_type, &ctx.instance, &ctx.physical_device);
+        let subsets = subsets.max(1);
         let bindings: Vec<_> = if is_array {
             vec![vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
@@ -57,18 +69,20 @@ impl DescriptorBuffer {
             .flags(vk::DescriptorSetLayoutCreateFlags::DESCRIPTOR_BUFFER_EXT)
             .build();
         let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
-        let layout_size = unsafe {
-            ctx.extension
-                .descriptor_buffer
-                .get_descriptor_set_layout_size(layout)
-        };
-        let host = vec![0u8; layout_size as usize].into_boxed_slice();
-        let buffer = if let Some(buffer) = mem.alloc(layout_size) {
+        /*
+         * Layout buffer size will depend on an individual layout, aligned so immediately after
+         * you can bind another one, multiplied by how many "subsets" will be buffered inside this
+         * descriptor buffer.
+         */
+        let subset_size = next_mul_u64(Self::layout_size_of(ctx, layout), mem.alignment()) as u32;
+        let buffer_size = subset_size as u64 * subsets as u64;
+        let host = vec![0u8; subset_size as usize].into_boxed_slice();
+        let device = if let Some(buffer) = mem.alloc(buffer_size) {
             buffer
         } else {
             panic!(
                 "Not enough memory for the descriptor! Requested: {}, available: {}",
-                layout_size,
+                buffer_size,
                 mem.available()
             )
         };
@@ -77,12 +91,23 @@ impl DescriptorBuffer {
         Self {
             name,
             layout,
-            device: buffer,
+            device,
+            subset_size,
             host,
             descriptor_type,
             descriptor_size,
             occupancy,
             count,
+            subsets,
+        }
+    }
+
+    fn layout_size_of(vulkan_context: &VulkanContext, layout: vk::DescriptorSetLayout) -> u64 {
+        unsafe {
+            vulkan_context
+                .extension
+                .descriptor_buffer
+                .get_descriptor_set_layout_size(layout)
         }
     }
 
@@ -106,11 +131,15 @@ impl DescriptorBuffer {
         }
     }
 
-    pub fn place_at(&mut self, index: u32, data: &[u8]) -> (usize, u32) {
-        let offset = self.offset_of(index);
-        self.host[offset..(offset + self.descriptor_size)].copy_from_slice(data);
-        self.occupancy.set(index as usize, true);
-        (offset, index)
+    pub fn place_at(&mut self, index: u32, subset: u32, data: &[u8]) -> (usize, u32) {
+        let device_offset = self.offset_of(index, subset);
+        let host_offset = self.offset_of(index, 0);
+        self.host[host_offset..(host_offset + self.descriptor_size)].copy_from_slice(data);
+        self.occupancy.set(
+            (subset as usize * self.count as usize) + index as usize,
+            true,
+        );
+        (device_offset, index)
     }
 
     pub fn offsets(&self) -> Vec<u64> {
@@ -120,16 +149,16 @@ impl DescriptorBuffer {
             .collect()
     }
 
-    pub fn place(&mut self, data: &[u8]) -> (usize, u32) {
-        self.place_at(self.next_free() as u32, data)
+    pub fn place(&mut self, subset: u32, data: &[u8]) -> (usize, u32) {
+        self.place_at(self.next_free() as u32, subset, data)
     }
 
     pub fn next_free(&self) -> usize {
         self.occupancy.first_zero().unwrap()
     }
 
-    pub fn offset_of(&self, index: u32) -> usize {
-        index as usize * self.descriptor_size
+    pub fn offset_of(&self, index: u32, subset: u32) -> usize {
+        (subset as usize * self.subset_size as usize) + (index as usize * self.descriptor_size)
     }
 
     pub fn remove_at(&mut self, index: u32) {
@@ -138,20 +167,23 @@ impl DescriptorBuffer {
 
     pub fn place_sampler(
         &mut self,
+        subset: u32,
         desc: vk::Sampler,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
-        self.place_sampler_at(self.next_free() as u32, desc, desc_buffer_instance)
+        self.place_sampler_at(self.next_free() as u32, subset, desc, desc_buffer_instance)
     }
 
     pub fn place_sampler_at(
         &mut self,
         index: u32,
+        subset: u32,
         desc: vk::Sampler,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
+            subset,
             desc,
             vk::DescriptorType::SAMPLER,
             desc_buffer_instance,
@@ -161,20 +193,23 @@ impl DescriptorBuffer {
 
     pub fn place_image(
         &mut self,
+        subset: u32,
         desc: vk::DescriptorImageInfo,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
-        self.place_image_at(self.next_free() as u32, desc, desc_buffer_instance)
+        self.place_image_at(self.next_free() as u32, subset, desc, desc_buffer_instance)
     }
 
     pub fn place_image_at(
         &mut self,
         index: u32,
+        subset: u32,
         desc: vk::DescriptorImageInfo,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
+            subset,
             desc,
             vk::DescriptorType::SAMPLED_IMAGE,
             desc_buffer_instance,
@@ -184,20 +219,23 @@ impl DescriptorBuffer {
 
     pub fn place_ubo(
         &mut self,
+        subset: u32,
         desc: vk::DescriptorAddressInfoEXT,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
-        self.place_ubo_at(self.next_free() as u32, desc, desc_buffer_instance)
+        self.place_ubo_at(self.next_free() as u32, subset, desc, desc_buffer_instance)
     }
 
     pub fn place_ubo_at(
         &mut self,
         index: u32,
+        subset: u32,
         desc: vk::DescriptorAddressInfoEXT,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
     ) -> (usize, u32) {
         self.get_desc_and_place(
             index,
+            subset,
             desc,
             vk::DescriptorType::UNIFORM_BUFFER,
             desc_buffer_instance,
@@ -210,6 +248,7 @@ impl DescriptorBuffer {
     fn get_desc_and_place<T, F>(
         &mut self,
         index: u32,
+        subset: u32,
         desc: T,
         desc_type: vk::DescriptorType,
         desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
@@ -235,7 +274,7 @@ impl DescriptorBuffer {
         unsafe {
             desc_buffer_instance.get_descriptor(&info, &mut data);
         }
-        self.place_at(index, &data)
+        self.place_at(index, subset, &data)
     }
 
     pub fn into_device(&mut self) {
