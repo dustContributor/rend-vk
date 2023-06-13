@@ -12,7 +12,6 @@ pub mod sampler;
 pub mod stage;
 mod state;
 
-// #[derive(Clone)]
 pub struct Pipeline {
     pub stages: Vec<Stage>,
     pub attachments: Vec<Attachment>,
@@ -24,6 +23,10 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
+    pub fn total_stages(&self) -> u32 {
+        self.stages.len() as u32
+    }
+
     pub fn destroy(&self, device: &ash::Device) {
         unsafe {
             for e in [

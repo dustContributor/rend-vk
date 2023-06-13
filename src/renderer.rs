@@ -113,26 +113,12 @@ impl Renderer {
                 &[self.rendering_complete_semaphore],
                 |draw_command_buffer| {
                     for stage in &self.pipeline.stages {
-                        let wait_value = [self.current_frame * self.pipeline.stages.len() as u64
-                            + stage.index as u64];
-                        let pass_timeline_semaphores = [self.pass_timeline_semaphore];
-                        let wait_info = vk::SemaphoreWaitInfo::builder()
-                            .values(&wait_value)
-                            .semaphores(&pass_timeline_semaphores)
-                            .build();
-                        /*
-                         * If validation layers are enabled, don't wait the first frame to avoid
-                         * a validation false positive that locks the main thread for a few seconds
-                         */
-                        if !crate::VALIDATION_LAYER_ENABLED || self.current_frame > 0 {
-                            self.vulkan_context
-                                .device
-                                .wait_semaphores(
-                                    &wait_info,
-                                    std::time::Duration::from_secs(1).as_nanos() as u64,
-                                )
-                                .unwrap();
-                        }
+                        stage.wait_for_previous_frame(
+                            &self.vulkan_context.device,
+                            self.current_frame,
+                            self.pipeline.total_stages(),
+                            self.pass_timeline_semaphore,
+                        );
                         stage.render(
                             &self.vulkan_context,
                             &self.pipeline,
@@ -167,25 +153,13 @@ impl Renderer {
                                 );
                             },
                         );
-                        let signal_value = ((self.current_frame + 1)
-                            * self.pipeline.stages.len() as u64)
-                            + stage.index as u64;
-                        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
-                            .semaphore(self.pass_timeline_semaphore)
-                            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
-                            .value(signal_value)
-                            .build()];
-                        let signal_submit_infos = [vk::SubmitInfo2::builder()
-                            .signal_semaphore_infos(&pass_semaphore_signal_info)
-                            .build()];
-                        self.vulkan_context
-                            .device
-                            .queue_submit2(
-                                self.present_queue,
-                                &signal_submit_infos,
-                                vk::Fence::null(),
-                            )
-                            .unwrap();
+                        stage.signal_next_frame(
+                            &self.vulkan_context.device,
+                            self.current_frame,
+                            self.pipeline.total_stages(),
+                            self.pass_timeline_semaphore,
+                            self.present_queue,
+                        );
                     }
                 },
             );
