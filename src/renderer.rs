@@ -446,35 +446,34 @@ pub fn make_device(
         shader_clip_distance: 1,
         ..Default::default()
     };
-    let mut dynamic_rendering_feature = vk::PhysicalDeviceDynamicRenderingFeatures {
-        dynamic_rendering: 1,
+    let mut features12 = vk::PhysicalDeviceVulkan12Features {
+        descriptor_indexing: 1,
+        timeline_semaphore: 1,
+        buffer_device_address: 1,
         ..Default::default()
     };
-    let mut physical_device_address_feature = vk::PhysicalDeviceBufferDeviceAddressFeatures {
-        buffer_device_address: 1,
-        buffer_device_address_capture_replay: 1,
+    let mut features13 = vk::PhysicalDeviceVulkan13Features {
+        dynamic_rendering: 1,
+        synchronization2: 1,
         ..Default::default()
     };
     let mut descriptor_buffer_feature = vk::PhysicalDeviceDescriptorBufferFeaturesEXT {
         descriptor_buffer: 1,
         ..Default::default()
     };
-    let mut synchronization_2_feature = vk::PhysicalDeviceSynchronization2FeaturesKHR {
-        synchronization2: 1,
-        ..Default::default()
-    };
     let mut features2 = vk::PhysicalDeviceFeatures2::builder()
         .features(features)
-        .push_next(&mut dynamic_rendering_feature)
+        .push_next(&mut features12)
+        .push_next(&mut features13)
         .push_next(&mut descriptor_buffer_feature)
-        .push_next(&mut physical_device_address_feature)
-        .push_next(&mut synchronization_2_feature);
+        .build();
 
     let priorities = [1.0];
 
     let queue_info = vk::DeviceQueueCreateInfo::builder()
         .queue_family_index(queue_family_index)
-        .queue_priorities(&priorities);
+        .queue_priorities(&priorities)
+        .build();
 
     let device_create_info = vk::DeviceCreateInfo::builder()
         .queue_create_infos(std::slice::from_ref(&queue_info))
