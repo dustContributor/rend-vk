@@ -210,7 +210,6 @@ impl Pipeline {
                 .0,
             ..nearest_sampler
         };
-        let mut ubo_descriptors = Self::init_ubos(ctx, descriptor_mem);
         let mut image_descriptors = Self::init_images(ctx, descriptor_mem);
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
@@ -417,6 +416,14 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
+            let mut ubo_descriptors = (pass.updaters.len() > 0).then(|| {
+                Box::new(Self::init_ubo_desc_buffer(
+                    ctx,
+                    descriptor_mem,
+                    &pass.name,
+                    pass.updaters.len() as u32,
+                ))
+            });
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
                 rendering: super::stage::Rendering {
@@ -427,7 +434,8 @@ impl Pipeline {
                 batch: pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
-                updaters: pass.updaters.clone(),
+                updaters: pass.updaters.iter().map(|e| e.to_resource_kind()).collect(),
+                ubo_descriptors,
                 inputs,
                 outputs,
                 index: stage_index,
@@ -455,32 +463,28 @@ impl Pipeline {
             attachments: attachments_by_name.into_values().collect(),
             linear_sampler,
             nearest_sampler,
-            ubo_descriptors,
             image_descriptors,
             sampler_descriptors,
         };
     }
 
-    pub fn init_ubos(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
-        let props = unsafe {
-            ctx.instance
-                .get_physical_device_properties(ctx.physical_device)
-        };
-        // props.limits.un
-        // mem_props.
+    pub fn init_ubo_desc_buffer(
+        ctx: &VulkanContext,
+        mem: &mut DeviceAllocator,
+        stage_name: &str,
+        bindings: u32,
+    ) -> DescriptorBuffer {
+        const MAX_SUBSETS: u32 = 64;
+        let name = format!("{stage_name}_ubos").to_string();
         let desc_buffer = DescriptorBuffer::of(
             ctx,
             mem,
-            "ubos".to_string(),
+            name,
             DescriptorType::UNIFORM_BUFFER,
-            16,
-            1,
+            bindings,
+            MAX_SUBSETS,
             false,
         );
-        // init global ubo
-        // let global_uniform = vk::DescriptorAddressInfoEXT::builder()
-        // .address(address)
-        // init per draw ubo
         desc_buffer
     }
 

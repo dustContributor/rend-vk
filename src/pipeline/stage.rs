@@ -1,4 +1,4 @@
-use crate::pipeline::{attachment::Attachment, descriptor::DescriptorBuffer};
+use crate::{pipeline::{attachment::Attachment, descriptor::DescriptorBuffer}, render_task::ResourceKind};
 use ash::vk;
 
 #[derive(serde::Deserialize)]
@@ -17,8 +17,9 @@ pub struct Stage {
     pub layout: vk::PipelineLayout,
     pub outputs: Vec<Attachment>,
     pub inputs: Vec<Attachment>,
-    pub updaters: Vec<String>,
+    pub updaters: Vec<ResourceKind>,
     pub input_descriptors: Option<Box<DescriptorBuffer>>,
+    pub ubo_descriptors: Option<Box<DescriptorBuffer>>,
     pub batch: BatchType,
     pub index: u32,
     pub is_final: bool,
@@ -81,20 +82,11 @@ impl Stage {
 
         unsafe {
             if self.inputs.len() > 0 {
-                fn buffer_binding_info_of(
-                    b: &DescriptorBuffer,
-                ) -> vk::DescriptorBufferBindingInfoEXT {
-                    vk::DescriptorBufferBindingInfoEXT::builder()
-                        .address(b.device.device_addr)
-                        .usage(b.device.kind.to_vk_usage_flags())
-                        .build()
-                }
-                let mut desc_buffer_info =
-                    vec![buffer_binding_info_of(&pipeline.sampler_descriptors)];
+                let mut desc_buffer_info = vec![pipeline.sampler_descriptors.binding_info()];
                 let mut desc_buffer_indices = vec![0];
                 let mut desc_buffer_offsets = vec![pipeline.sampler_descriptors.device.offset];
                 if let Some(desc) = &self.input_descriptors {
-                    desc_buffer_info.push(buffer_binding_info_of(desc));
+                    desc_buffer_info.push(desc.binding_info());
                     desc_buffer_indices.push(1);
                     desc_buffer_offsets.push(0);
                 }

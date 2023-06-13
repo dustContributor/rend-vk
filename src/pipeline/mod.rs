@@ -17,7 +17,6 @@ pub struct Pipeline {
     pub attachments: Vec<Attachment>,
     pub nearest_sampler: Sampler,
     pub linear_sampler: Sampler,
-    pub ubo_descriptors: DescriptorBuffer,
     pub image_descriptors: DescriptorBuffer,
     pub sampler_descriptors: DescriptorBuffer,
 }
@@ -29,11 +28,7 @@ impl Pipeline {
 
     pub fn destroy(&self, device: &ash::Device) {
         unsafe {
-            for e in [
-                &self.ubo_descriptors,
-                &self.image_descriptors,
-                &self.sampler_descriptors,
-            ] {
+            for e in [&self.image_descriptors, &self.sampler_descriptors] {
                 e.destroy(device);
             }
             for e in [&self.linear_sampler, &self.nearest_sampler] {
@@ -43,6 +38,9 @@ impl Pipeline {
                 device.destroy_pipeline(stage.pipeline, None);
                 device.destroy_pipeline_layout(stage.layout, None);
                 if let Some(desc) = &stage.input_descriptors {
+                    desc.destroy(device)
+                }
+                if let Some(desc) = &stage.ubo_descriptors {
                     desc.destroy(device)
                 }
             }

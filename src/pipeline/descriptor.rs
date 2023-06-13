@@ -132,8 +132,8 @@ impl DescriptorBuffer {
     }
 
     pub fn place_at(&mut self, index: u32, subset: u32, data: &[u8]) -> (usize, u32) {
-        let device_offset = self.offset_of(index, subset);
-        let host_offset = self.offset_of(index, 0);
+        let device_offset = self.offset_at(index, subset);
+        let host_offset = self.offset_at(index, 0);
         self.host[host_offset..(host_offset + self.descriptor_size)].copy_from_slice(data);
         self.occupancy.set(
             (subset as usize * self.count as usize) + index as usize,
@@ -157,7 +157,7 @@ impl DescriptorBuffer {
         self.occupancy.first_zero().unwrap()
     }
 
-    pub fn offset_of(&self, index: u32, subset: u32) -> usize {
+    pub fn offset_at(&self, index: u32, subset: u32) -> usize {
         (subset as usize * self.subset_size as usize) + (index as usize * self.descriptor_size)
     }
 
@@ -278,12 +278,35 @@ impl DescriptorBuffer {
     }
 
     pub fn into_device(&mut self) {
+        self.into_device_at(0)
+    }
+
+    pub fn into_device_at(&mut self, subset: u32) {
+        assert!(
+            subset < self.subsets,
+            "Subset {} out of bounds! Total subsets {}",
+            subset,
+            self.subset_size
+        );
+        let offset = self.offset_at(0, subset);
         unsafe {
             let src = self.host.as_ptr();
-            let dst = self.device.addr as *mut u8;
+            let dst = self.device.addr.add(offset) as *mut u8;
             let len = self.host.len();
             std::ptr::copy_nonoverlapping(src, dst, len)
         };
+    }
+
+    pub fn binding_info(&self) -> vk::DescriptorBufferBindingInfoEXT {
+        self.binding_info_at(0)
+    }
+
+    pub fn binding_info_at(&self, subset: u32) -> vk::DescriptorBufferBindingInfoEXT {
+        let offset = self.offset_at(0, subset) as u64;
+        vk::DescriptorBufferBindingInfoEXT::builder()
+            .address(self.device.device_addr + offset)
+            .usage(self.device.kind.to_vk_usage_flags())
+            .build()
     }
 
     pub fn destroy(&self, device: &ash::Device) {

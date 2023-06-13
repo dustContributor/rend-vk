@@ -2,7 +2,7 @@ use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::format;
+use crate::{format, render_task::ResourceKind};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,7 +11,6 @@ pub struct Pipeline {
     pub programs: Vec<Program>,
     pub passes: Vec<Pass>,
 }
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Target {
@@ -21,14 +20,12 @@ pub struct Target {
     pub width: U32OrF32,
     pub height: U32OrF32,
 }
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInput {
     pub name: String,
     pub sampler: SamplerKind,
 }
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pass {
@@ -37,10 +34,26 @@ pub struct Pass {
     pub batch: crate::pipeline::stage::BatchType,
     pub outputs: Vec<String>,
     pub inputs: Vec<AttachmentInput>,
-    pub updaters: Vec<String>,
+    pub updaters: Vec<UpdaterKind>,
     pub state: State,
     #[serde(default)]
     pub is_disabled: bool,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone)]
+pub enum UpdaterKind {
+    Transform = 0,
+    Material = 1,
+    DirLight = 2,
+    Frustum = 3,
+    ViewRay = 4,
+    PointLight = 5,
+    SpotLight = 6,
+    Joint = 7,
+    Sky = 8,
+    StaticShadow = 9,
+    TransformExtra = 10,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,7 +144,6 @@ pub struct BlendDesc {
     pub src_factor: BlendFactor,
     pub dst_factor: BlendFactor,
 }
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
@@ -139,6 +151,26 @@ pub struct ClearDesc {
     pub color: Option<u32>,
     pub depth: Option<f32>,
     pub stencil: Option<u32>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone, strum_macros::Display)]
+pub enum SamplerKind {
+    Nearest,
+    Linear,
+}
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[derive(Copy, Clone)]
+pub enum U32OrF32 {
+    U32(u32),
+    F32(f32),
+}
+
+impl UpdaterKind {
+    pub fn to_resource_kind(self) -> ResourceKind {
+        ResourceKind::of_u32(self as u32)
+    }
 }
 
 impl Predefined<TriangleDesc> for TriangleDesc {
@@ -272,22 +304,6 @@ impl Predefined<WriteDesc> for WriteDesc {
             stencil: false,
         }
     }
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-#[derive(Copy, Clone)]
-pub enum U32OrF32 {
-    U32(u32),
-    F32(f32),
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone, strum_macros::Display)]
-pub enum SamplerKind {
-    Nearest,
-    Linear,
 }
 
 pub trait Predefined<T> {
