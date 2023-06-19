@@ -133,7 +133,7 @@ impl Stage {
                         command_buffer,
                         mesh_buffer.indices.buffer,
                         mesh_buffer.indices.offset,
-                        vk::IndexType::UINT16,
+                        vk::IndexType::UINT32,
                     );
                     ctx.device.cmd_draw_indexed(
                         command_buffer,

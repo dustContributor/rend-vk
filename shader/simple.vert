@@ -4,14 +4,14 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
 
-layout(scalar, std430, buffer_reference, buffer_reference_align = 8) readonly buffer Vertices
+layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Vertices
 {
-    vec3 items[];
+    vec4 items[];
 };
 
-layout(scalar, std430, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
+layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
 {
-    vec3 items[];
+    vec4 items[];
 };
 
 layout(push_constant) uniform Registers
@@ -23,8 +23,8 @@ layout(push_constant) uniform Registers
 layout (location = 0) out vec3 passColor;
 
 void main() {
-    restrict vec3 inPos = registers.vertices.items[gl_VertexIndex];
+    restrict vec3 inPos = registers.vertices.items[gl_VertexIndex].xyz;
     // restrict vec3 normals = registers.normals.items[gl_VertexIndex];
-    passColor = inPos.xyz;
-    gl_Position = vec4(inPos, 1.0);
+    passColor = (inPos + vec3(1.0)) * vec3(0.5);
+    gl_Position = vec4(inPos, 1);
 }

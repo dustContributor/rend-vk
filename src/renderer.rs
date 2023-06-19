@@ -362,7 +362,7 @@ where
     };
 
     log::trace!("creating allocators...");
-    let mut general_allocator = DeviceAllocator::new_general(&vulkan_context, 1 * 1024 * 1024);
+    let mut general_allocator = DeviceAllocator::new_general(&vulkan_context, 64 * 1024 * 1024);
     let mut descriptor_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 128 * 1024);
     log::trace!("allocators created!");
 
@@ -559,30 +559,30 @@ pub fn select_physical_device(
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     #[derive(Clone, Debug, Copy)]
     struct Attrib {
-        values: [f32; 3],
+        values: [f32; 4],
     }
 
     let indices = [0u32, 1, 2];
     let vertices = [
         Attrib {
-            values: [-1.0, 1.0, 0.0],
+            values: [-1.0, 1.0, 0.0, 0.0],
         },
         Attrib {
-            values: [1.0, 1.0, 0.0],
+            values: [1.0, 1.0, 0.0, 0.0],
         },
         Attrib {
-            values: [0.0, -1.0, 0.0],
+            values: [0.0, -1.0, 0.0, 0.0],
         },
     ];
     let colors = [
         Attrib {
-            values: [0.0, 1.0, 1.0],
+            values: [0.0, 1.0, 1.0, 0.0],
         },
         Attrib {
-            values: [0.0, 0.0, 1.0],
+            values: [0.0, 0.0, 1.0, 0.0],
         },
         Attrib {
-            values: [1.0, 0.0, 0.0],
+            values: [1.0, 0.0, 0.0, 0.0],
         },
     ];
     unsafe {
