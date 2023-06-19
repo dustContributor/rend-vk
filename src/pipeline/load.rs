@@ -1,4 +1,4 @@
-use ash::vk::{self, DescriptorType};
+use ash::vk::{self, DescriptorType, ShaderStageFlags};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -232,15 +232,8 @@ impl Pipeline {
                 .viewports(&viewports);
             let rasterization_state = triangle.to_vk();
 
-            let vertex_input_binding_descriptions = Self::default_vertex_inputs();
-            let binding_descs = vertex_input_binding_descriptions
-                .iter()
-                .map(|f| f.0)
-                .collect::<Vec<_>>();
-            let attrib_descs = vertex_input_binding_descriptions
-                .iter()
-                .map(|f| f.1)
-                .collect::<Vec<_>>();
+            let binding_descs = [];
+            let attrib_descs = [];
             let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
                 .vertex_binding_descriptions(&binding_descs)
                 .vertex_attribute_descriptions(&attrib_descs);
@@ -298,7 +291,7 @@ impl Pipeline {
 
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
-            let make_attachment_descriptor = |(i, e)| -> Attachment {
+            let make_attachment_descriptor = |(_, e)| -> Attachment {
                 let tmp = attachments_by_name
                     .get(&e)
                     .expect(&format!("Missing input attachment: {e}!"))
@@ -378,8 +371,14 @@ impl Pipeline {
                 set_layouts.push(d.layout)
             }
             let pipeline_layout = unsafe {
+                let push_constant_ranges = [vk::PushConstantRange::builder()
+                    .offset(0)
+                    .size(128)
+                    .stage_flags(ShaderStageFlags::ALL_GRAPHICS)
+                    .build()];
                 let info = vk::PipelineLayoutCreateInfo::builder()
                     .set_layouts(&set_layouts)
+                    .push_constant_ranges(&push_constant_ranges)
                     .build();
                 ctx.device.create_pipeline_layout(&info, None)
             }
@@ -431,7 +430,7 @@ impl Pipeline {
                     depth_stencil: depth_stencil_rendering,
                     default_attachment_index,
                 },
-                batch: pass.batch,
+                task_kind: pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
                 updaters: pass.updaters.iter().map(|e| e.to_resource_kind()).collect(),

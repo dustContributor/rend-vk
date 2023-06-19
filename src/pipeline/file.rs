@@ -31,7 +31,7 @@ pub struct AttachmentInput {
 pub struct Pass {
     pub name: String,
     pub program: String,
-    pub batch: crate::pipeline::stage::BatchType,
+    pub batch: crate::render_task::TaskKind,
     pub outputs: Vec<String>,
     pub inputs: Vec<AttachmentInput>,
     pub updaters: Vec<UpdaterKind>,

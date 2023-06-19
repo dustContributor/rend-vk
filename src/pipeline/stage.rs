@@ -1,14 +1,8 @@
-use crate::{pipeline::{attachment::Attachment, descriptor::DescriptorBuffer}, render_task::ResourceKind};
-use ash::vk;
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone)]
-pub enum BatchType {
-    Opaque,
-    Fullscreen,
-    PointLight,
-}
+use crate::{
+    pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
+    render_task::{ResourceKind, TaskKind},
+};
+use ash::vk::{self, ShaderStageFlags};
 
 pub struct Stage {
     pub name: String,
@@ -20,7 +14,7 @@ pub struct Stage {
     pub updaters: Vec<ResourceKind>,
     pub input_descriptors: Option<Box<DescriptorBuffer>>,
     pub ubo_descriptors: Option<Box<DescriptorBuffer>>,
-    pub batch: BatchType,
+    pub task_kind: TaskKind,
     pub index: u32,
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
@@ -34,13 +28,13 @@ pub struct Rendering {
 }
 
 impl Stage {
-    pub fn render<F: FnOnce(&ash::Device, vk::CommandBuffer)>(
+    pub fn render(
         &self,
         ctx: &crate::context::VulkanContext,
+        renderer: &crate::renderer::Renderer,
         pipeline: &super::Pipeline,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
-        draw_commands: F,
     ) {
         let mut image_barriers = self.image_barriers.clone();
         if self.is_final {
@@ -114,7 +108,43 @@ impl Stage {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            draw_commands(&ctx.device, command_buffer);
+            if self.task_kind == TaskKind::Fullscreen {
+                ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0);
+            } else {
+                let tasks = &renderer.batches_by_task_type[self.task_kind.to_usize()];
+                for task in tasks {
+                    let mesh_buffer = renderer
+                        .mesh_buffers_by_id
+                        .get(&task.mesh_buffer_id)
+                        .unwrap();
+                    let push_constants = vec![
+                        mesh_buffer.vertices.device_addr,
+                        mesh_buffer.normals.device_addr,
+                    ];
+                    let push_constants = push_constants.align_to::<u8>().1;
+                    ctx.device.cmd_push_constants(
+                        command_buffer,
+                        self.layout,
+                        ShaderStageFlags::ALL_GRAPHICS,
+                        0u32,
+                        &push_constants,
+                    );
+                    ctx.device.cmd_bind_index_buffer(
+                        command_buffer,
+                        mesh_buffer.indices.buffer,
+                        mesh_buffer.indices.offset,
+                        vk::IndexType::UINT16,
+                    );
+                    ctx.device.cmd_draw_indexed(
+                        command_buffer,
+                        mesh_buffer.count,
+                        task.instance_count,
+                        0,
+                        0,
+                        0,
+                    );
+                }
+            }
             ctx.device.cmd_end_rendering(command_buffer);
         }
         if !self.is_final {

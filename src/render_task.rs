@@ -2,7 +2,10 @@ use std::mem::{align_of, size_of};
 
 use glam::{Mat4, Vec3};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[repr(u8)]
 pub enum TaskKind {
     MeshStatic,
     MeshAnimated,
@@ -30,12 +33,44 @@ impl TaskKind {
     pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
     pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
 
+    fn mask(self) -> u32 {
+        !(u32::MAX << self as u32)
+    }
+
+    pub fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v) }
+        }
+    }
+
     pub fn of_u32(v: u32) -> Self {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
             unsafe { std::mem::transmute(v as u8) }
         }
+    }
+
+    pub fn of_usize(v: usize) -> Self {
+        if v > (Self::MAX_VALUE as usize) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub fn to_u32(self) -> u32 {
+        self as u32
+    }
+
+    pub fn to_usize(self) -> usize {
+        self as usize
     }
 }
 
@@ -258,11 +293,8 @@ impl WrapResource<DirLight> for ResourceWrapper {
 // public final int primitive;
 pub struct RenderTask {
     pub kind: TaskKind,
-    pub mesh_id: u32,
+    pub mesh_buffer_id: u32,
     pub instance_count: u32,
-    pub vertex_count: u32,
-    pub base_vertex: u32,
-    pub indices_offset: u32,
     pub resources: [ResourceWrapper; ResourceKind::MAX_LEN],
 }
 

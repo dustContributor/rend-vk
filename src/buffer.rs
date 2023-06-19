@@ -15,12 +15,27 @@ pub struct DeviceAllocator {
 
 #[derive(Copy, Clone)]
 pub struct DeviceSlice {
+    pub buffer: vk::Buffer,
     pub size: u64,
     pub offset: u64,
     pub alignment: u64,
     pub addr: *mut c_void,
     pub device_addr: u64,
     pub kind: BufferKind,
+}
+
+impl DeviceSlice {
+    pub fn empty() -> Self {
+        Self {
+            buffer: vk::Buffer::null(),
+            size: 0,
+            offset: 0,
+            alignment: 0,
+            addr: std::ptr::null_mut(),
+            device_addr: 0,
+            kind: BufferKind::Undefined,
+        }
+    }
 }
 
 impl DeviceAllocator {
@@ -80,6 +95,7 @@ impl DeviceAllocator {
 
 #[derive(Copy, Clone, PartialEq, strum_macros::Display)]
 pub enum BufferKind {
+    Undefined,
     General,
     Descriptor,
 }
@@ -102,6 +118,7 @@ impl BufferKind {
                     | Buf::RESOURCE_DESCRIPTOR_BUFFER_EXT
                     | Buf::SAMPLER_DESCRIPTOR_BUFFER_EXT
             }
+            _ => unreachable!(),
         }
     }
 }
@@ -290,6 +307,7 @@ impl InnerDeviceAllocator {
             }
             let device_addr = self.buffer.device_addr + offset;
             return Some(DeviceSlice {
+                buffer: self.buffer.buffer,
                 addr,
                 size,
                 offset,

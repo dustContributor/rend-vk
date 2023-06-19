@@ -1,4 +1,4 @@
-use std::{alloc::Layout, ffi::CStr, mem::align_of};
+use std::{alloc::Layout, collections::HashMap, ffi::CStr, mem::align_of};
 
 use ash::{
     extensions::{
@@ -15,14 +15,14 @@ use crate::{
     debug::{self, DebugContext},
     pipeline::{self, Pipeline},
     render_task::{RenderTask, TaskKind},
-    shader, swapchain,
+    swapchain,
 };
 
-struct Mesh {
-    vertices: DeviceSlice,
-    colors: DeviceSlice,
-    indices: DeviceSlice,
-    indices_count: u32,
+pub struct MeshBuffer {
+    pub vertices: DeviceSlice,
+    pub normals: DeviceSlice,
+    pub indices: DeviceSlice,
+    pub count: u32,
 }
 
 pub struct Renderer {
@@ -31,8 +31,9 @@ pub struct Renderer {
     pub swapchain_context: swapchain::SwapchainContext,
     pub vulkan_context: context::VulkanContext,
     pub debug_context: Option<debug::DebugContext>,
-    pub buffer_allocator: DeviceAllocator,
+    pub general_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
+    pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
 
     present_queue: vk::Queue,
 
@@ -47,16 +48,16 @@ pub struct Renderer {
     draw_commands_reuse_fence: vk::Fence,
     setup_commands_reuse_fence: vk::Fence,
 
-    test_triangle: Mesh,
-
     current_frame: u64,
 }
 
 impl Renderer {
+    pub const ID_TEST_TRIANGLE: u32 = 1;
+
     pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");
         self.pipeline.destroy(&self.vulkan_context.device);
-        for e in [&self.buffer_allocator, &self.descriptor_allocator] {
+        for e in [&self.general_allocator, &self.descriptor_allocator] {
             e.destroy(&self.vulkan_context.device);
         }
         unsafe {
@@ -121,37 +122,10 @@ impl Renderer {
                         );
                         stage.render(
                             &self.vulkan_context,
+                            &self,
                             &self.pipeline,
                             draw_command_buffer,
                             &default_attachment,
-                            |device, command_buffer| {
-                                device.cmd_bind_vertex_buffers(
-                                    command_buffer,
-                                    shader::ATTRIB_LOC_POSITION,
-                                    &[self.buffer_allocator.buffer.buffer],
-                                    &[self.test_triangle.vertices.offset],
-                                );
-                                device.cmd_bind_vertex_buffers(
-                                    command_buffer,
-                                    shader::ATTRIB_LOC_COLOR,
-                                    &[self.buffer_allocator.buffer.buffer],
-                                    &[self.test_triangle.colors.offset],
-                                );
-                                device.cmd_bind_index_buffer(
-                                    command_buffer,
-                                    self.buffer_allocator.buffer.buffer,
-                                    self.test_triangle.indices.offset,
-                                    vk::IndexType::UINT32,
-                                );
-                                device.cmd_draw_indexed(
-                                    command_buffer,
-                                    self.test_triangle.indices_count,
-                                    1,
-                                    0,
-                                    0,
-                                    1,
-                                );
-                            },
                         );
                         stage.signal_next_frame(
                             &self.vulkan_context.device,
@@ -163,11 +137,11 @@ impl Renderer {
                     }
                 },
             );
-            let wait_semaphors = [self.rendering_complete_semaphore];
+            let wait_semaphores = [self.rendering_complete_semaphore];
             let swapchains = [self.swapchain_context.swapchain];
             let image_indices = [present_index];
             let present_info = vk::PresentInfoKHR::builder()
-                .wait_semaphores(&wait_semaphors)
+                .wait_semaphores(&wait_semaphores)
                 .swapchains(&swapchains)
                 .image_indices(&image_indices);
             self.vulkan_context
@@ -175,7 +149,12 @@ impl Renderer {
                 .swapchain
                 .queue_present(self.present_queue, &present_info)
                 .unwrap();
+            // Next frame ID
             self.current_frame += 1;
+            // Clear batch queues for next frame
+            for batch in &mut self.batches_by_task_type {
+                batch.clear();
+            }
         }
     }
 
@@ -383,8 +362,8 @@ where
     };
 
     log::trace!("creating allocators...");
-    let mut allocator = DeviceAllocator::new_general(&vulkan_context, 16 * 1024);
-    let mut desc_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 128 * 1024);
+    let mut general_allocator = DeviceAllocator::new_general(&vulkan_context, 1 * 1024 * 1024);
+    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 128 * 1024);
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
@@ -394,18 +373,22 @@ where
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
         &vulkan_context,
-        &mut allocator,
-        &mut desc_allocator,
+        &mut general_allocator,
+        &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
         Some("triangle_pipeline.json"),
     );
     log::trace!("pipeline created!");
 
     log::trace!("creating test triangle...");
-    let test_triangle = make_test_triangle(&mut allocator);
+    let test_triangle = make_test_triangle(&mut general_allocator);
+
+    let mut mesh_buffers_by_id = HashMap::new();
+    mesh_buffers_by_id.insert(Renderer::ID_TEST_TRIANGLE, test_triangle);
+
     log::trace!("test triangle created!");
     let mut batches_by_task_type = Vec::with_capacity(TaskKind::MAX_SIZE + 1);
-    (0..(TaskKind::MAX_SIZE + 1)).for_each(|_| {
+    (0..TaskKind::MAX_LEN).for_each(|_| {
         batches_by_task_type.push(Vec::new());
     });
     log::trace!("finishing renderer...");
@@ -415,8 +398,9 @@ where
         debug_context,
         swapchain_context,
         vulkan_context,
-        buffer_allocator: allocator,
-        descriptor_allocator: desc_allocator,
+        general_allocator,
+        descriptor_allocator,
+        mesh_buffers_by_id,
         draw_command_buffer,
         present_queue,
         setup_command_buffer,
@@ -426,7 +410,6 @@ where
         setup_commands_reuse_fence,
         draw_commands_reuse_fence,
         pool,
-        test_triangle,
         current_frame: 0,
     };
     log::trace!("renderer finished!");
@@ -450,6 +433,7 @@ pub fn make_device(
         descriptor_indexing: 1,
         timeline_semaphore: 1,
         buffer_device_address: 1,
+        scalar_block_layout: 1,
         ..Default::default()
     };
     let mut features13 = vk::PhysicalDeviceVulkan13Features {
@@ -572,7 +556,7 @@ pub fn select_physical_device(
         .expect("Couldn't find a suitable physical device!")
 }
 
-fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> Mesh {
+fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     #[derive(Clone, Debug, Copy)]
     struct Attrib {
         values: [f32; 3],
@@ -631,11 +615,11 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> Mesh {
         );
         color_slice.copy_from_slice(&colors);
 
-        Mesh {
-            colors: color_buffer,
+        MeshBuffer {
             vertices: vertex_buffer,
             indices: index_buffer,
-            indices_count: indices.len() as u32,
+            normals: DeviceSlice::empty(),
+            count: indices.len() as u32,
         }
     }
 }

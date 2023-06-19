@@ -57,7 +57,7 @@ pub extern "C" fn Java_test_Testing_init(_unused_jnienv: usize, _unused_jclazz: 
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_align_of(
+pub extern "C" fn Java_test_Testing_align_1of(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
@@ -67,7 +67,7 @@ pub extern "C" fn Java_test_Testing_align_of(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_size_of(
+pub extern "C" fn Java_test_Testing_size_1of(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
@@ -88,16 +88,13 @@ pub extern "C" fn Java_test_Testing_render(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_add_task_to_queue(
+pub extern "C" fn Java_test_Testing_add_1task_1to_1queue(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     renderer: u64,
     kind: u32,
     mesh_id: u32,
     instance_count: u32,
-    vertex_count: u32,
-    base_vertex: u32,
-    indices_offset: u32,
     resource_bits: u32,
     resources: u64,
     resources_len: u64,
@@ -110,11 +107,8 @@ pub extern "C" fn Java_test_Testing_add_task_to_queue(
     let task = render_task::RenderTask {
         kind,
         resources,
-        base_vertex,
-        indices_offset,
         instance_count,
-        mesh_id,
-        vertex_count,
+        mesh_buffer_id: mesh_id,
     };
     renderer.add_task_to_queue(task);
     Box::leak(renderer);

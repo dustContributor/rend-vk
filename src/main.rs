@@ -22,6 +22,20 @@ fn main() {
         }
     });
     window_context.event_loop(|| {
+        let test_task = render_task::RenderTask {
+            mesh_buffer_id: 1,
+            instance_count: 1,
+            kind: render_task::TaskKind::MeshStatic,
+            resources: render_task::resource_array()
+        };
+        let fullscreen_task = render_task::RenderTask {
+            mesh_buffer_id: 1,
+            instance_count: 1,
+            kind: render_task::TaskKind::Fullscreen,
+            resources: render_task::resource_array()
+        };
+        renderer.add_task_to_queue(test_task);
+        renderer.add_task_to_queue(fullscreen_task);
         renderer.render();
     });
     unsafe { renderer.vulkan_context.device.device_wait_idle().unwrap() };
