@@ -559,67 +559,48 @@ pub fn select_physical_device(
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     #[derive(Clone, Debug, Copy)]
     struct Attrib {
-        values: [f32; 4],
+        pub values: [f32; 3],
     }
-
-    let indices = [0u32, 1, 2];
     let vertices = [
         Attrib {
-            values: [-1.0, 1.0, 0.0, 0.0],
+            values: [-1.0, 1.0, 0.0],
         },
         Attrib {
-            values: [1.0, 1.0, 0.0, 0.0],
+            values: [1.0, 1.0, 0.0],
         },
         Attrib {
-            values: [0.0, -1.0, 0.0, 0.0],
+            values: [0.0, -1.0, 0.0],
         },
     ];
-    let colors = [
-        Attrib {
-            values: [0.0, 1.0, 1.0, 0.0],
-        },
-        Attrib {
-            values: [0.0, 0.0, 1.0, 0.0],
-        },
-        Attrib {
-            values: [1.0, 0.0, 0.0, 0.0],
-        },
-    ];
-    unsafe {
-        let index_buffer = buffer_allocator
-            .alloc(std::mem::size_of_val(&indices) as u64)
-            .expect("couldn't allocate index buffer");
-        let mut index_slice = Align::new(
+    let indices = [0u32, 1, 2];
+    let index_buffer = buffer_allocator
+        .alloc(std::mem::size_of_val(&indices) as u64)
+        .expect("couldn't allocate index buffer");
+    let mut index_slice = unsafe {
+        Align::new(
             index_buffer.addr,
             align_of::<u32>() as u64,
             buffer_allocator.buffer.alignment,
-        );
-        index_slice.copy_from_slice(&indices);
-        let vertex_buffer = buffer_allocator
-            .alloc((vertices.len() * std::mem::size_of::<Attrib>()) as u64)
-            .expect("couldn't allocate vertex buffer");
-        let mut vertex_slice = Align::new(
+        )
+    };
+    index_slice.copy_from_slice(&indices);
+
+    let vertex_buffer = buffer_allocator
+        .alloc((vertices.len() * std::mem::size_of::<Attrib>()) as u64)
+        .expect("couldn't allocate vertex buffer");
+    let mut vertex_slice = unsafe {
+        Align::new(
             vertex_buffer.addr,
-            align_of::<u32>() as u64,
+            align_of::<f32>() as u64,
             buffer_allocator.buffer.alignment,
-        );
-        vertex_slice.copy_from_slice(&vertices);
+        )
+    };
+    vertex_slice.copy_from_slice(&vertices);
 
-        let color_buffer = buffer_allocator
-            .alloc((colors.len() * std::mem::size_of::<Attrib>()) as u64)
-            .expect("couldn't allocate vertex buffer");
-        let mut color_slice = Align::new(
-            color_buffer.addr,
-            align_of::<u32>() as u64,
-            buffer_allocator.buffer.alignment,
-        );
-        color_slice.copy_from_slice(&colors);
-
-        MeshBuffer {
-            vertices: vertex_buffer,
-            indices: index_buffer,
-            normals: DeviceSlice::empty(),
-            count: indices.len() as u32,
-        }
+    MeshBuffer {
+        vertices: vertex_buffer,
+        indices: index_buffer,
+        normals: DeviceSlice::empty(),
+        count: indices.len() as u32,
     }
 }

@@ -4,14 +4,14 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
 
-layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Vertices
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Vertices
 {
-    vec4 items[];
+    vec3 items[];
 };
 
-layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
 {
-    vec4 items[];
+    vec3 items[];
 };
 
 layout(push_constant) uniform Registers
