@@ -30,7 +30,7 @@ pub struct Renderer {
     pub batches_by_task_type: Vec<Vec<RenderTask>>,
     pub swapchain_context: swapchain::SwapchainContext,
     pub vulkan_context: context::VulkanContext,
-    pub debug_context: Option<debug::DebugContext>,
+    pub debug_context: Option<Box<debug::DebugContext>>,
     pub general_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
     pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
@@ -253,7 +253,7 @@ where
     log::trace!("instance created!");
 
     let debug_context = if crate::DEBUG_ENABLED {
-        Some(DebugContext::new(&entry, &instance))
+        Some(Box::new(DebugContext::new(&entry, &instance)))
     } else {
         None
     };
