@@ -87,16 +87,16 @@ impl Stage {
          */
         self.release_reserved_buffers(&buffer_allocator);
 
-        unsafe {
-            if self.inputs.len() > 0 {
-                let mut desc_buffer_info = vec![sampler_descriptors.binding_info()];
-                let mut desc_buffer_indices = vec![0];
-                let mut desc_buffer_offsets = vec![sampler_descriptors.device.offset];
-                if let Some(desc) = &self.input_descriptors {
-                    desc_buffer_info.push(desc.binding_info());
-                    desc_buffer_indices.push(1);
-                    desc_buffer_offsets.push(0);
-                }
+        if self.inputs.len() > 0 {
+            let mut desc_buffer_info = vec![sampler_descriptors.binding_info()];
+            let mut desc_buffer_indices = vec![0];
+            let mut desc_buffer_offsets = vec![sampler_descriptors.device.offset];
+            if let Some(desc) = &self.input_descriptors {
+                desc_buffer_info.push(desc.binding_info());
+                desc_buffer_indices.push(1);
+                desc_buffer_offsets.push(0);
+            }
+            unsafe {
                 ctx.extension
                     .descriptor_buffer
                     .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
@@ -111,7 +111,8 @@ impl Stage {
                         &desc_buffer_offsets,
                     );
             }
-
+        }
+        unsafe {
             ctx.device
                 .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
             ctx.device
@@ -121,19 +122,22 @@ impl Stage {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            if self.task_kind == TaskKind::Fullscreen {
-                ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0);
-            } else {
-                let tasks = &batches_by_task_type[self.task_kind.to_usize()];
-                for task in tasks {
-                    /* Upload all the per-instance data for this task */
-                    self.reserve_and_fill_buffers(&buffer_allocator, task);
-
-                    let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
-                    let push_constants = vec![
-                        mesh_buffer.vertices.device_addr,
-                        mesh_buffer.normals.device_addr,
-                    ];
+        }
+        if self.task_kind == TaskKind::Fullscreen {
+            unsafe { ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0) }
+        } else {
+            let tasks = &batches_by_task_type[self.task_kind.to_usize()];
+            for task in tasks {
+                /* Upload all the per-instance data for this task */
+                let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
+                let mut push_constants = vec![
+                    mesh_buffer.vertices.device_addr,
+                    mesh_buffer.normals.device_addr,
+                ];
+                // Append resource buffer addresses in the order they appear
+                push_constants.append(&mut self.reserve_and_fill_buffers(&buffer_allocator, task));
+                unsafe {
+                    // Upload push constants
                     let push_constants = push_constants.align_to::<u8>().1;
                     ctx.device.cmd_push_constants(
                         command_buffer,
@@ -158,8 +162,9 @@ impl Stage {
                     );
                 }
             }
-            ctx.device.cmd_end_rendering(command_buffer);
         }
+        // End drawing this stage
+        unsafe { ctx.device.cmd_end_rendering(command_buffer) }
         if !self.is_final {
             // Nothing else to do
             return;
@@ -241,10 +246,17 @@ impl Stage {
         }
     }
 
-    fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) {
+    fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {
+        // We'll need the addresses to pass them to the shaders later
+        let mut device_addrs = Vec::new();
+        device_addrs.reserve_exact(self.updaters.len());
+
         for kind in self.updaters.clone() {
             let buffer = updater::alloc_and_fill(mem, task, kind.clone());
+            device_addrs.push(buffer.device_addr);
             self.reserved_buffers.push(buffer);
         }
+
+        device_addrs
     }
 }
