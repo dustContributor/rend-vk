@@ -2,8 +2,7 @@ use std::mem::{align_of, size_of};
 
 use glam::{Mat4, Vec3};
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-#[derive(serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, serde::Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum TaskKind {
@@ -33,11 +32,11 @@ impl TaskKind {
     pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
     pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
 
-    fn mask(self) -> u32 {
+    const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
 
-    pub fn of_u8(v: u8) -> Self {
+    pub const fn of_u8(v: u8) -> Self {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
@@ -45,7 +44,7 @@ impl TaskKind {
         }
     }
 
-    pub fn of_u32(v: u32) -> Self {
+    pub const fn of_u32(v: u32) -> Self {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
@@ -53,7 +52,7 @@ impl TaskKind {
         }
     }
 
-    pub fn of_usize(v: usize) -> Self {
+    pub const fn of_usize(v: usize) -> Self {
         if v > (Self::MAX_VALUE as usize) {
             panic!()
         } else {
@@ -61,15 +60,15 @@ impl TaskKind {
         }
     }
 
-    pub fn to_u8(self) -> u8 {
+    pub const fn to_u8(self) -> u8 {
         self as u8
     }
 
-    pub fn to_u32(self) -> u32 {
+    pub const fn to_u32(self) -> u32 {
         self as u32
     }
 
-    pub fn to_usize(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self as usize
     }
 }
@@ -95,11 +94,11 @@ impl ResourceKind {
     pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
     pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
 
-    fn mask(self) -> u32 {
+    const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
 
-    pub fn of_u8(v: u8) -> Self {
+    pub const fn of_u8(v: u8) -> Self {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
@@ -107,7 +106,7 @@ impl ResourceKind {
         }
     }
 
-    pub fn of_u32(v: u32) -> Self {
+    pub const fn of_u32(v: u32) -> Self {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
@@ -115,7 +114,7 @@ impl ResourceKind {
         }
     }
 
-    pub fn of_usize(v: usize) -> Self {
+    pub const fn of_usize(v: usize) -> Self {
         if v > (Self::MAX_VALUE as usize) {
             panic!()
         } else {
@@ -123,19 +122,19 @@ impl ResourceKind {
         }
     }
 
-    pub fn to_u8(self) -> u8 {
+    pub const fn to_u8(self) -> u8 {
         self as u8
     }
 
-    pub fn to_u32(self) -> u32 {
+    pub const fn to_u32(self) -> u32 {
         self as u32
     }
 
-    pub fn to_usize(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self as usize
     }
 
-    pub fn resource_align(self) -> usize {
+    pub const fn resource_align(self) -> usize {
         match self {
             ResourceKind::Transform => align_of::<Transform>(),
             ResourceKind::Material => align_of::<Material>(),
@@ -151,7 +150,7 @@ impl ResourceKind {
         }
     }
 
-    pub fn resource_size(&self) -> usize {
+    pub const fn resource_size(&self) -> usize {
         match self {
             ResourceKind::Transform => size_of::<Transform>(),
             ResourceKind::Material => size_of::<Material>(),
