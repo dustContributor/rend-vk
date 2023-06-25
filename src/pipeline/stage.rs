@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    buffer::DeviceSlice,
+    buffer::{DeviceAllocator, DeviceSlice},
     pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
     render_task::{RenderTask, ResourceKind, TaskKind},
     renderer::MeshBuffer,
+    updater,
 };
 use ash::vk::{self, ShaderStageFlags};
 
@@ -39,6 +40,7 @@ impl Stage {
         batches_by_task_type: &Vec<Vec<RenderTask>>,
         mesh_buffers_by_id: &HashMap<u32, MeshBuffer>,
         sampler_descriptors: &DescriptorBuffer,
+        buffer_allocator: &DeviceAllocator,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
     ) {
@@ -79,6 +81,11 @@ impl Stage {
         } else {
             rendering_info_builder.build()
         };
+        /*
+         *  At this point we already waited for the previous stage invocation to finish,
+         *  we can free the buffers used back then.
+         */
+        self.release_reserved_buffers(&buffer_allocator);
 
         unsafe {
             if self.inputs.len() > 0 {
@@ -119,6 +126,9 @@ impl Stage {
             } else {
                 let tasks = &batches_by_task_type[self.task_kind.to_usize()];
                 for task in tasks {
+                    /* Upload all the per-instance data for this task */
+                    self.reserve_and_fill_buffers(&buffer_allocator, task);
+
                     let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
                     let push_constants = vec![
                         mesh_buffer.vertices.device_addr,
@@ -223,5 +233,18 @@ impl Stage {
 
     fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
         current_frame * total_stages as u64 + self.index as u64
+    }
+
+    fn release_reserved_buffers(&mut self, mem: &DeviceAllocator) {
+        for buffer in self.reserved_buffers.clone() {
+            mem.free(buffer);
+        }
+    }
+
+    fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) {
+        for kind in self.updaters.clone() {
+            let buffer = updater::alloc_and_fill(mem, task, kind.clone());
+            self.reserved_buffers.push(buffer);
+        }
     }
 }

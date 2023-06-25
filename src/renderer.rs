@@ -154,6 +154,7 @@ impl Renderer {
     fn process_stages(&mut self, default_attachment: &Attachment) {
         let current_frame = self.get_current_frame();
         let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
+        let buffer_allocator = self.general_allocator.clone();
         let total_stages = self.pipeline.total_stages();
         let pipeline = &mut self.pipeline;
         for stage in pipeline.stages.iter_mut() {
@@ -168,6 +169,7 @@ impl Renderer {
                 &self.batches_by_task_type,
                 &self.mesh_buffers_by_id,
                 &sampler_descriptors,
+                &buffer_allocator,
                 self.draw_command_buffer,
                 default_attachment,
             );
