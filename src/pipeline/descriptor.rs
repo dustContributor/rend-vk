@@ -4,6 +4,7 @@ use bitvec::vec::BitVec;
 
 use crate::context::VulkanContext;
 
+#[derive(Clone)]
 pub struct DescriptorBuffer {
     pub name: String,
     pub device: DeviceSlice,

@@ -441,6 +441,7 @@ impl Pipeline {
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
                 input_descriptors,
+                reserved_buffers: Vec::new(),
             });
             // Increment for next stage
             stage_index += 1;

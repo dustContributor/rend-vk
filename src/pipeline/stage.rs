@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use crate::{
+    buffer::DeviceSlice,
     pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
-    render_task::{ResourceKind, TaskKind},
+    render_task::{RenderTask, ResourceKind, TaskKind},
+    renderer::MeshBuffer,
 };
 use ash::vk::{self, ShaderStageFlags};
 
@@ -18,6 +22,7 @@ pub struct Stage {
     pub index: u32,
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
+    pub reserved_buffers: Vec<DeviceSlice>,
 }
 
 #[derive(Clone)]
@@ -29,10 +34,11 @@ pub struct Rendering {
 
 impl Stage {
     pub fn render(
-        &self,
+        &mut self,
         ctx: &crate::context::VulkanContext,
-        renderer: &crate::renderer::Renderer,
-        pipeline: &super::Pipeline,
+        batches_by_task_type: &Vec<Vec<RenderTask>>,
+        mesh_buffers_by_id: &HashMap<u32, MeshBuffer>,
+        sampler_descriptors: &DescriptorBuffer,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
     ) {
@@ -76,9 +82,9 @@ impl Stage {
 
         unsafe {
             if self.inputs.len() > 0 {
-                let mut desc_buffer_info = vec![pipeline.sampler_descriptors.binding_info()];
+                let mut desc_buffer_info = vec![sampler_descriptors.binding_info()];
                 let mut desc_buffer_indices = vec![0];
-                let mut desc_buffer_offsets = vec![pipeline.sampler_descriptors.device.offset];
+                let mut desc_buffer_offsets = vec![sampler_descriptors.device.offset];
                 if let Some(desc) = &self.input_descriptors {
                     desc_buffer_info.push(desc.binding_info());
                     desc_buffer_indices.push(1);
@@ -111,12 +117,9 @@ impl Stage {
             if self.task_kind == TaskKind::Fullscreen {
                 ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0);
             } else {
-                let tasks = &renderer.batches_by_task_type[self.task_kind.to_usize()];
+                let tasks = &batches_by_task_type[self.task_kind.to_usize()];
                 for task in tasks {
-                    let mesh_buffer = renderer
-                        .mesh_buffers_by_id
-                        .get(&task.mesh_buffer_id)
-                        .unwrap();
+                    let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
                     let push_constants = vec![
                         mesh_buffer.vertices.device_addr,
                         mesh_buffer.normals.device_addr,

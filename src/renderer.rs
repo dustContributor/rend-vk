@@ -1,4 +1,10 @@
-use std::{alloc::Layout, collections::HashMap, ffi::CStr, mem::align_of};
+use std::{
+    alloc::Layout,
+    collections::HashMap,
+    ffi::CStr,
+    mem::align_of,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use ash::{
     extensions::{
@@ -8,12 +14,13 @@ use ash::{
     util::Align,
     vk, Entry,
 };
+use bitvec::vec::BitVec;
 
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
-    pipeline::{self, Pipeline},
+    pipeline::{self, attachment::Attachment, Pipeline},
     render_task::{RenderTask, TaskKind},
     swapchain,
 };
@@ -34,6 +41,7 @@ pub struct Renderer {
     pub general_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
     pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
+    mesh_buffer_ids: BitVec,
 
     present_queue: vk::Queue,
 
@@ -48,7 +56,7 @@ pub struct Renderer {
     draw_commands_reuse_fence: vk::Fence,
     setup_commands_reuse_fence: vk::Fence,
 
-    current_frame: u64,
+    current_frame: AtomicU64,
 }
 
 impl Renderer {
@@ -112,30 +120,7 @@ impl Renderer {
                 &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
                 &[self.present_complete_semaphore],
                 &[self.rendering_complete_semaphore],
-                |draw_command_buffer| {
-                    for stage in &self.pipeline.stages {
-                        stage.wait_for_previous_frame(
-                            &self.vulkan_context.device,
-                            self.current_frame,
-                            self.pipeline.total_stages(),
-                            self.pass_timeline_semaphore,
-                        );
-                        stage.render(
-                            &self.vulkan_context,
-                            &self,
-                            &self.pipeline,
-                            draw_command_buffer,
-                            &default_attachment,
-                        );
-                        stage.signal_next_frame(
-                            &self.vulkan_context.device,
-                            self.current_frame,
-                            self.pipeline.total_stages(),
-                            self.pass_timeline_semaphore,
-                            self.present_queue,
-                        );
-                    }
-                },
+                &default_attachment,
             );
             let wait_semaphores = [self.rendering_complete_semaphore];
             let swapchains = [self.swapchain_context.swapchain];
@@ -150,7 +135,7 @@ impl Renderer {
                 .queue_present(self.present_queue, &present_info)
                 .unwrap();
             // Next frame ID
-            self.current_frame += 1;
+            self.incr_current_frame();
             // Clear batch queues for next frame
             for batch in &mut self.batches_by_task_type {
                 batch.clear();
@@ -158,15 +143,53 @@ impl Renderer {
         }
     }
 
-    fn record_submit_commandbuffer<F: FnOnce(vk::CommandBuffer)>(
-        &self,
+    fn incr_current_frame(&self) -> u64 {
+        self.current_frame.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn get_current_frame(&self) -> u64 {
+        self.current_frame.load(Ordering::Relaxed)
+    }
+
+    fn process_stages(&mut self, default_attachment: &Attachment) {
+        let current_frame = self.get_current_frame();
+        let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
+        let total_stages = self.pipeline.total_stages();
+        let pipeline = &mut self.pipeline;
+        for stage in pipeline.stages.iter_mut() {
+            stage.wait_for_previous_frame(
+                &self.vulkan_context.device,
+                current_frame,
+                total_stages,
+                self.pass_timeline_semaphore,
+            );
+            stage.render(
+                &self.vulkan_context,
+                &self.batches_by_task_type,
+                &self.mesh_buffers_by_id,
+                &sampler_descriptors,
+                self.draw_command_buffer,
+                default_attachment,
+            );
+            stage.signal_next_frame(
+                &self.vulkan_context.device,
+                current_frame,
+                total_stages,
+                self.pass_timeline_semaphore,
+                self.present_queue,
+            );
+        }
+    }
+
+    fn record_submit_commandbuffer(
+        &mut self,
         command_buffer: vk::CommandBuffer,
         command_buffer_reuse_fence: vk::Fence,
         submit_queue: vk::Queue,
         wait_mask: &[vk::PipelineStageFlags],
         wait_semaphores: &[vk::Semaphore],
         signal_semaphores: &[vk::Semaphore],
-        f: F,
+        default_attachment: &Attachment,
     ) {
         unsafe {
             self.vulkan_context
@@ -194,7 +217,9 @@ impl Renderer {
                 .device
                 .begin_command_buffer(command_buffer, &command_buffer_begin_info)
                 .expect("begin commandbuffer failed!");
-            f(command_buffer);
+
+            self.process_stages(default_attachment);
+
             self.vulkan_context
                 .device
                 .end_command_buffer(command_buffer)
@@ -383,7 +408,9 @@ where
     log::trace!("creating test triangle...");
     let test_triangle = make_test_triangle(&mut general_allocator);
 
+    let mut mesh_buffer_ids = BitVec::repeat(false, 1024);
     let mut mesh_buffers_by_id = HashMap::new();
+    mesh_buffer_ids.set(Renderer::ID_TEST_TRIANGLE as usize, true);
     mesh_buffers_by_id.insert(Renderer::ID_TEST_TRIANGLE, test_triangle);
 
     log::trace!("test triangle created!");
@@ -391,6 +418,7 @@ where
     (0..TaskKind::MAX_LEN).for_each(|_| {
         batches_by_task_type.push(Vec::new());
     });
+
     log::trace!("finishing renderer...");
     let renderer = Renderer {
         pipeline: pip,
@@ -401,6 +429,7 @@ where
         general_allocator,
         descriptor_allocator,
         mesh_buffers_by_id,
+        mesh_buffer_ids,
         draw_command_buffer,
         present_queue,
         setup_command_buffer,
@@ -410,7 +439,7 @@ where
         setup_commands_reuse_fence,
         draw_commands_reuse_fence,
         pool,
-        current_frame: 0,
+        current_frame: AtomicU64::new(0),
     };
     log::trace!("renderer finished!");
     return renderer;
