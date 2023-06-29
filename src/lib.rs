@@ -13,7 +13,7 @@ pub mod render_task;
 pub mod renderer;
 pub mod shader;
 pub mod swapchain;
-// pub mod uniform;
+pub mod updater;
 pub mod window;
 
 pub const DEBUG_ENABLED: bool = true;
