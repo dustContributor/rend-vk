@@ -452,10 +452,15 @@ pub fn make_device(
     physical_device: vk::PhysicalDevice,
     queue_family_index: u32,
 ) -> ash::Device {
-    let device_extension_names_raw = [
+    let mut device_extension_names_raw = vec![
         khr::Swapchain::name().as_ptr(),
         ext::DescriptorBuffer::name().as_ptr(),
     ];
+    let non_semantic_info_name =
+        CStr::from_bytes_with_nul(b"VK_KHR_shader_non_semantic_info\0").unwrap();
+    if crate::DEBUG_ENABLED {
+        device_extension_names_raw.push(non_semantic_info_name.as_ptr());
+    }
     let features = vk::PhysicalDeviceFeatures {
         shader_clip_distance: 1,
         ..Default::default()
@@ -507,15 +512,16 @@ pub fn make_device(
 }
 
 pub fn make_instance(entry: &ash::Entry, extensions: &[*const i8]) -> ash::Instance {
-    let app_name = unsafe { CStr::from_bytes_with_nul_unchecked(b"rend-vk\0") };
-    let validation_layer_name =
-        unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_LAYER_KHRONOS_validation\0") };
+    let app_name = CStr::from_bytes_with_nul(b"rend-vk\0").unwrap();
 
-    let layers_names_raw = if crate::DEBUG_ENABLED && crate::VALIDATION_LAYER_ENABLED {
-        vec![validation_layer_name.as_ptr()]
-    } else {
-        vec![]
-    };
+    let mut layers_names_raw = vec![];
+
+    let validation_layer_name =
+        CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap();
+    if crate::DEBUG_ENABLED && crate::VALIDATION_LAYER_ENABLED {
+        layers_names_raw.push(validation_layer_name.as_ptr());
+    }
+
     let mut instance_extensions = extensions.to_vec();
     if crate::DEBUG_ENABLED {
         instance_extensions.push(DebugUtils::name().as_ptr());
@@ -528,10 +534,19 @@ pub fn make_instance(entry: &ash::Entry, extensions: &[*const i8]) -> ash::Insta
         .engine_version(0)
         .api_version(vk::make_api_version(0, 1, 3, 0));
 
-    let create_info = vk::InstanceCreateInfo::builder()
+    let mut create_info = vk::InstanceCreateInfo::builder()
         .application_info(&appinfo)
         .enabled_layer_names(&layers_names_raw)
         .enabled_extension_names(&instance_extensions);
+
+    let enabled_validation_features = [vk::ValidationFeatureEnableEXT::DEBUG_PRINTF];
+    let mut validation_features_ext = vk::ValidationFeaturesEXT::builder()
+        .enabled_validation_features(&enabled_validation_features)
+        .build();
+
+    if crate::DEBUG_ENABLED {
+        create_info = create_info.push_next(&mut validation_features_ext);
+    }
 
     log::info!("initializing Instance...");
     let instance: ash::Instance = unsafe {
