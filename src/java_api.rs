@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use ash::vk;
-use bitvec::{prelude::Msb0, view::BitView};
+use bitvec::view::BitView;
 
 use crate::{
     render_task::{
@@ -9,8 +11,30 @@ use crate::{
     renderer::{self, Renderer},
 };
 
+// Prevent calling init twice just in case
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+// Convenience definitions
+const JNI_FALSE: u8 = 0;
+const JNI_TRUE: u8 = 1;
+
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_make_1renderer(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+) -> u8 {
+    if INITIALIZED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+        log_panics::init();
+        return JNI_TRUE;
+    }
+    return JNI_FALSE;
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     window: u64,
@@ -31,10 +55,10 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
             extern "C" fn(vk::Instance, u64, u64, *mut vk::SurfaceKHR) -> vk::Result,
         >(glfw_create_window_surface as *const ())
     };
-    let instance_extensions: &[*const i8] = unsafe {
-        if instance_extensions_len == 0 {
-            &[]
-        } else {
+    let instance_extensions: &[*const i8] = if instance_extensions_len == 0 {
+        &[]
+    } else {
+        unsafe {
             std::slice::from_raw_parts(
                 instance_extensions as *const *const i8,
                 instance_extensions_len as usize,
@@ -51,13 +75,7 @@ pub extern "C" fn Java_test_Testing_make_1renderer(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_init(_unused_jnienv: usize, _unused_jclazz: usize) {
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-    log_panics::init();
-}
-
-#[no_mangle]
-pub extern "C" fn Java_test_Testing_align_1of(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_alignOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
@@ -67,7 +85,7 @@ pub extern "C" fn Java_test_Testing_align_1of(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_size_1of(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_sizeOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
@@ -77,7 +95,7 @@ pub extern "C" fn Java_test_Testing_size_1of(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_render(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     renderer: u64,
@@ -88,7 +106,7 @@ pub extern "C" fn Java_test_Testing_render(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_test_Testing_add_1task_1to_1queue(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     renderer: u64,
@@ -120,7 +138,7 @@ fn unpack_render_task_resources(
     instances: u32,
 ) -> [ResourceWrapper; 11] {
     let instances = instances as usize;
-    let resource_bits = resource_bits.view_bits::<Msb0>();
+    let resource_bits = resource_bits.view_bits::<bitvec::order::Lsb0>();
     let mut offset = 0usize;
     let mut resource_array = render_task::resource_array();
     for b in resource_bits.iter_ones() {
