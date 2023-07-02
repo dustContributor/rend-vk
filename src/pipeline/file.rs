@@ -269,7 +269,7 @@ impl Predefined<ClearDesc> for ClearDesc {
     fn yes() -> ClearDesc {
         Self {
             color: Some(0),
-            depth: Some(0.0),
+            depth: Some(1.0),
             stencil: Some(0),
         }
     }
