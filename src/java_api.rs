@@ -8,7 +8,7 @@ use crate::{
         self, DirLight, Material, ResourceKind, ResourceWrapper, TaskKind, Transform,
         TransformExtra, WrapResource,
     },
-    renderer::{self, Renderer},
+    renderer::{self, MeshBuffer, Renderer},
 };
 
 // Prevent calling init twice just in case
@@ -102,6 +102,73 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
 ) {
     let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
     renderer.render();
+    Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    vertices_size: u32,
+    normals_size: u32,
+    tex_coords_size: u32,
+    indices_size: u32,
+    count: u32,
+) -> u32 {
+    let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mesh_id = renderer.gen_mesh(
+        vertices_size,
+        normals_size,
+        tex_coords_size,
+        indices_size,
+        count,
+    );
+    Box::leak(renderer);
+    return mesh_id;
+}
+
+#[derive(Clone, Copy)]
+#[repr(C, packed(4))]
+pub struct MeshAddresses {
+    pub vertices: u64,
+    pub normals: u64,
+    pub tex_coords: u64,
+    pub indices: u64,
+    pub count: u32,
+}
+
+impl MeshBuffer {
+    pub fn to_addresses(&self) -> MeshAddresses {
+        MeshAddresses {
+            vertices: self.vertices.addr as u64,
+            normals: self.normals.addr as u64,
+            tex_coords: self.tex_coords.addr as u64,
+            indices: self.indices.addr as u64,
+            count: self.count,
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+    dest: u64,
+) {
+    let renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mesh = renderer
+        .fetch_mesh(id)
+        .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
+    let dest = unsafe {
+        std::slice::from_raw_parts_mut(
+            dest as *mut MeshAddresses,
+            std::mem::size_of::<MeshAddresses>(),
+        )
+    };
+    dest[0] = mesh.to_addresses();
     Box::leak(renderer);
 }
 

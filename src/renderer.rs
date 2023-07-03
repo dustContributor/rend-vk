@@ -25,9 +25,11 @@ use crate::{
     swapchain,
 };
 
+#[derive(Clone)]
 pub struct MeshBuffer {
     pub vertices: DeviceSlice,
     pub normals: DeviceSlice,
+    pub tex_coords: DeviceSlice,
     pub indices: DeviceSlice,
     pub count: u32,
 }
@@ -96,6 +98,56 @@ impl Renderer {
         if let Some(batch) = self.batches_by_task_type.get_mut(task.kind as usize) {
             batch.push(task)
         }
+    }
+
+    pub fn fetch_mesh(&self, id: u32) -> Option<&MeshBuffer> {
+        self.mesh_buffers_by_id.get(&id)
+    }
+
+    pub fn gen_mesh(
+        &mut self,
+        vertices_size: u32,
+        normals_size: u32,
+        tex_coords_size: u32,
+        indices_size: u32,
+        count: u32,
+    ) -> u32 {
+        let alloc_or_empty = |size: u32, purpose: &str| {
+            if size > 0 {
+                self.general_allocator
+                    .alloc(size as u64)
+                    .unwrap_or_else(|| {
+                        panic!("couldnt allocate '{}' buffer of size {}", purpose, size)
+                    })
+            } else {
+                DeviceSlice::empty()
+            }
+        };
+
+        let vertices = alloc_or_empty(vertices_size, "vertex");
+        let normals = alloc_or_empty(normals_size, "normal");
+        let tex_coords = alloc_or_empty(tex_coords_size, "tex_coord");
+        let indices = alloc_or_empty(indices_size, "index");
+        // Reserve mesh id
+        let mesh_id = self
+            .mesh_buffer_ids
+            .first_zero()
+            .expect("ran out of mesh ids!") as u32;
+
+        self.mesh_buffer_ids.set(mesh_id as usize, true);
+
+        self.mesh_buffers_by_id.insert(
+            mesh_id,
+            MeshBuffer {
+                vertices,
+                normals,
+                tex_coords,
+                indices,
+                count,
+            },
+        );
+
+        return mesh_id;
     }
 
     pub fn render(&mut self) {
@@ -646,6 +698,7 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     MeshBuffer {
         vertices: vertex_buffer,
         indices: index_buffer,
+        tex_coords: DeviceSlice::empty(),
         normals: DeviceSlice::empty(),
         count: indices.len() as u32,
     }
