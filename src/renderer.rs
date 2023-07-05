@@ -104,6 +104,28 @@ impl Renderer {
         self.mesh_buffers_by_id.get(&id)
     }
 
+    pub fn fetch_mesh_or_fail(&self, id: u32) -> &MeshBuffer {
+        self.fetch_mesh(id)
+            .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id))
+    }
+
+    pub fn free_mesh(&mut self, id: u32) {
+        let mesh = self
+            .mesh_buffers_by_id
+            .remove(&id)
+            .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
+        let free_if_not_empty = |v: &DeviceSlice| {
+            if v.size > 0 {
+                self.general_allocator.free(v.clone());
+            }
+        };
+        free_if_not_empty(&mesh.vertices);
+        free_if_not_empty(&mesh.normals);
+        free_if_not_empty(&mesh.tex_coords);
+        free_if_not_empty(&mesh.indices);
+        self.mesh_buffer_ids.set(id as usize, false);
+    }
+
     pub fn gen_mesh(
         &mut self,
         vertices_size: u32,
