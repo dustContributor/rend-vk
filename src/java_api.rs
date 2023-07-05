@@ -17,6 +17,36 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 const JNI_FALSE: u8 = 0;
 const JNI_TRUE: u8 = 1;
 
+#[derive(Clone, Copy)]
+#[repr(C, packed(4))]
+pub struct MeshAddresses {
+    pub vertices: u64,
+    pub normals: u64,
+    pub tex_coords: u64,
+    pub indices: u64,
+    pub vertices_len: u32,
+    pub normals_len: u32,
+    pub tex_coords_len: u32,
+    pub indices_len: u32,
+    pub count: u32,
+}
+
+impl MeshBuffer {
+    pub fn to_addresses(&self) -> MeshAddresses {
+        MeshAddresses {
+            vertices: self.vertices.addr as u64,
+            normals: self.normals.addr as u64,
+            tex_coords: self.tex_coords.addr as u64,
+            indices: self.indices.addr as u64,
+            count: self.count,
+            vertices_len: self.vertices.size as u32,
+            normals_len: self.normals.size as u32,
+            tex_coords_len: self.tex_coords.size as u32,
+            indices_len: self.indices.size as u32,
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
     _unused_jnienv: usize,
@@ -126,28 +156,6 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
     );
     Box::leak(renderer);
     return mesh_id;
-}
-
-#[derive(Clone, Copy)]
-#[repr(C, packed(4))]
-pub struct MeshAddresses {
-    pub vertices: u64,
-    pub normals: u64,
-    pub tex_coords: u64,
-    pub indices: u64,
-    pub count: u32,
-}
-
-impl MeshBuffer {
-    pub fn to_addresses(&self) -> MeshAddresses {
-        MeshAddresses {
-            vertices: self.vertices.addr as u64,
-            normals: self.normals.addr as u64,
-            tex_coords: self.tex_coords.addr as u64,
-            indices: self.indices.addr as u64,
-            count: self.count,
-        }
-    }
 }
 
 #[no_mangle]
