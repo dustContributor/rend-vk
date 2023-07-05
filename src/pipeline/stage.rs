@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
@@ -244,6 +244,7 @@ impl Stage {
         for buffer in self.reserved_buffers.clone() {
             mem.free(buffer);
         }
+        self.reserved_buffers.clear();
     }
 
     fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {
