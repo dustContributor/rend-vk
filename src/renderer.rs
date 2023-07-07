@@ -21,7 +21,7 @@ use crate::{
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     pipeline::{self, attachment::Attachment, Pipeline},
-    render_task::{RenderTask, TaskKind},
+    render_task::{RenderTask, TaskKind, UsedAsIndex},
     swapchain,
 };
 

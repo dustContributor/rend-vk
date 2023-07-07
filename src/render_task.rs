@@ -26,9 +26,7 @@ pub enum TaskKind {
     Fullscreen,
     Nuklear,
 }
-pub trait UsedAsIndex<const T: u8, E>
-where
-    E: UsedAsIndex<T, E>,
+pub trait UsedAsIndex<const T: u8>
 {
     const MAX_VALUE: u8 = T;
     const MAX_SIZE: usize = Self::MAX_VALUE as usize;
@@ -78,7 +76,7 @@ impl TaskKind {
 }
 
 const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
-impl UsedAsIndex<MAX_TASK_KIND, TaskKind> for TaskKind {}
+impl UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
 #[derive(Clone, Copy, strum_macros::Display)]
 #[repr(u8)]
@@ -184,7 +182,7 @@ impl IntoDeviceBuffer for Transform {
 }
 
 const MAX_RESOURCE_KIND: u8 = ResourceKind::TransformExtra.to_u8();
-impl UsedAsIndex<MAX_RESOURCE_KIND, ResourceKind> for ResourceKind {}
+impl UsedAsIndex<MAX_RESOURCE_KIND> for ResourceKind {}
 
 pub trait IntoDeviceBuffer {
     fn into_device(&self, dst: *mut std::ffi::c_void);
