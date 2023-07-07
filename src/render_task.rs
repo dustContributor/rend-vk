@@ -26,12 +26,16 @@ pub enum TaskKind {
     Fullscreen,
     Nuklear,
 }
+pub trait UsedAsIndex<const T: u8, E>
+where
+    E: UsedAsIndex<T, E>,
+{
+    const MAX_VALUE: u8 = T;
+    const MAX_SIZE: usize = Self::MAX_VALUE as usize;
+    const MAX_LEN: usize = Self::MAX_SIZE + 1;
+}
 
 impl TaskKind {
-    pub const MAX_VALUE: u8 = unsafe { std::mem::transmute(TaskKind::Nuklear) };
-    pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
-    pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
-
     const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
@@ -73,6 +77,9 @@ impl TaskKind {
     }
 }
 
+const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
+impl UsedAsIndex<MAX_TASK_KIND, TaskKind> for TaskKind {}
+
 #[derive(Clone, Copy, strum_macros::Display)]
 #[repr(u8)]
 pub enum ResourceKind {
@@ -90,10 +97,6 @@ pub enum ResourceKind {
 }
 
 impl ResourceKind {
-    pub const MAX_VALUE: u8 = unsafe { std::mem::transmute(ResourceKind::TransformExtra) };
-    pub const MAX_SIZE: usize = Self::MAX_VALUE as usize;
-    pub const MAX_LEN: usize = Self::MAX_SIZE + 1;
-
     const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
@@ -179,6 +182,9 @@ impl IntoDeviceBuffer for Transform {
         // self.mv.write_cols_to_slice(slice);
     }
 }
+
+const MAX_RESOURCE_KIND: u8 = ResourceKind::TransformExtra.to_u8();
+impl UsedAsIndex<MAX_RESOURCE_KIND, ResourceKind> for ResourceKind {}
 
 pub trait IntoDeviceBuffer {
     fn into_device(&self, dst: *mut std::ffi::c_void);
