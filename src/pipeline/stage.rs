@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
 
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
@@ -40,6 +40,7 @@ impl Stage {
         batches_by_task_type: &Vec<Vec<RenderTask>>,
         mesh_buffers_by_id: &HashMap<u32, MeshBuffer>,
         sampler_descriptors: &DescriptorBuffer,
+        image_descriptors: &DescriptorBuffer,
         buffer_allocator: &DeviceAllocator,
         command_buffer: vk::CommandBuffer,
         default_attachment: &Attachment,
@@ -88,12 +89,21 @@ impl Stage {
         self.release_reserved_buffers(&buffer_allocator);
 
         if self.inputs.len() > 0 {
-            let mut desc_buffer_info = vec![sampler_descriptors.binding_info()];
-            let mut desc_buffer_indices = vec![0];
-            let mut desc_buffer_offsets = vec![sampler_descriptors.device.offset];
+            let mut desc_buffer_info = vec![
+                sampler_descriptors.binding_info(),
+                image_descriptors.binding_info(),
+            ];
+            let mut desc_buffer_indices = vec![
+                super::DESCRIPTOR_SET_SAMPLER,
+                super::DESCRIPTOR_SET_TARGET_IMAGE,
+            ];
+            let mut desc_buffer_offsets = vec![
+                sampler_descriptors.device.offset,
+                image_descriptors.device.offset,
+            ];
             if let Some(desc) = &self.input_descriptors {
                 desc_buffer_info.push(desc.binding_info());
-                desc_buffer_indices.push(1);
+                desc_buffer_indices.push(super::DESCRIPTOR_SET_TARGET_IMAGE);
                 desc_buffer_offsets.push(0);
             }
             unsafe {

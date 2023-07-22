@@ -12,6 +12,11 @@ pub mod sampler;
 pub mod stage;
 mod state;
 
+// Fixed descriptor set indices
+pub const DESCRIPTOR_SET_SAMPLER: u32 = 0;
+pub const DESCRIPTOR_SET_TEXTURE: u32 = 1;
+pub const DESCRIPTOR_SET_TARGET_IMAGE: u32 = 2;
+
 pub struct Pipeline {
     pub stages: Vec<Stage>,
     pub attachments: Vec<Attachment>,
