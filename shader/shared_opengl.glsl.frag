@@ -1,14 +1,14 @@
 #ifndef SHARED_OPENGL_GLSL
 #define SHARED_OPENGL_GLSL
-//#pragma optionNV(strict on)
-#extension GL_ARB_shading_language_420pack : require
 
-// Add the ifdef even if this file is api specific to avoid complaints from glslang
-#ifdef IS_VULKAN
+#ifdef IS_EXTERNAL_COMPILER
 #extension GL_GOOGLE_include_directive : require 
 #else
 #extension GL_ARB_shading_language_include : require
 #endif
+
+//#pragma optionNV(strict on)
+#extension GL_ARB_shading_language_420pack : require
 
 #include "shared.glsl.frag"
 
@@ -116,17 +116,17 @@
 // divided by size of TransformExtra struct.
 #define MAX_UBO_TRANSFORM_EXTRA UBO_MAX_SIZE / UBO_TRANSFORM_EXTRA_SIZE
 
-#define READ_INST_TRANSFORM_MACRO transforms[inInstanceId]
-#define READ_INST_MATERIAL_MACRO materials[inInstanceId]
+#define READ_INST_TRANSFORM_MACRO transforms[passInstanceId]
+#define READ_INST_MATERIAL_MACRO materials[passInstanceId]
 #define READ_INST_DIRLIGHT_MACRO dirLight
 #define READ_INST_FRUSTUM_MACRO frustum
 #define READ_INST_VIEWRAY_MACRO viewRays
-#define READ_INST_POINTLIGHT_MACRO pointLights[inInstanceId]
-#define READ_INST_SPOTLIGHT_MACRO spotLights[inInstanceId]
-#define READ_INST_JOINT_MACRO joints[inInstanceId]
+#define READ_INST_POINTLIGHT_MACRO pointLights[passInstanceId]
+#define READ_INST_SPOTLIGHT_MACRO spotLights[passInstanceId]
+#define READ_INST_JOINT_MACRO joints[passInstanceId]
 #define READ_INST_SKY_MACRO sky
-#define READ_INST_STATIC_SHADOW_MACRO staticShadows[inInstanceId]
-#define READ_INST_TRANSFORM_EXTRA_MACRO transformExtras[inInstanceId]
+#define READ_INST_STATIC_SHADOW_MACRO staticShadows[passInstanceId]
+#define READ_INST_TRANSFORM_EXTRA_MACRO transformExtras[passInstanceId]
 // UBO macro expansions.
 #define USING_UBO_TRANSFORM_MACRO layout ( std140, binding = BIND_UBO_TRANSFORMS ) uniform UBO_TRANSFORMS_NAME {  Transform[MAX_UBO_TRANSFORMS] transforms; }
 #define USING_UBO_MATERIAL_MACRO layout ( std140, binding = BIND_UBO_MATERIAL ) uniform UBO_MATERIAL_NAME {  Material[MAX_UBO_MATERIALS] materials; }
@@ -154,18 +154,6 @@
 #define USING_ATTR_JOINT_WEIGHT_MACRO layout ( location = ATTRIB_LOC_JOINT_WEIGHT ) in uvec3 inJointWeight
 #define USING_ATTR_INSTANCE_ID_MACRO layout ( location = ATTRIB_LOC_INSTANCE_ID ) in int inInstanceId
 
-// Unused in OpenGL
-#define USING_PAD_0_MACRO
-#define USING_PAD_1_MACRO 
-#define USING_PAD_2_MACRO
-#define USING_PAD_3_MACRO
-#define USING_PAD_4_MACRO
-#define USING_PAD_5_MACRO
-#define USING_PAD_6_MACRO
-#define USING_PAD_7_MACRO
-
-#define USING_SMP_2D_MACRO(BINDING, NAME) layout ( binding = TEX_##BINDING ) uniform sampler2D NAME
-
 #define USING(TYPE, NAME) USING_##TYPE##_##NAME##_MACRO
 
 #define SAMPLING(NAME, SRC, TYPE, INDEX) layout ( binding = SRC##_##INDEX ) uniform sampler##TYPE NAME
@@ -174,11 +162,28 @@
 
 #define READ(TYPE,NAME) READ_##TYPE##_##NAME##_MACRO
 
+// No separate sampler-images in GL so the macro expansion is basic
+#define SAMPLER_FOR(TYPE, NAME, ID) NAME
 
-
-// These are used in vulkan but do nothing in opengl
+/* 
+* These macros are unused in the OpenGL pipeline, 
+* define them here to avoid compiler errors.
+*/
+// No push constant block required in GL
 #define INPUTS_BEGIN 
 #define INPUTS_END
+// Attribs in GL are matched by name
 #define ATTR_LOC(POS)
+// No push constant padding necesary in GL
+#define USING_PAD_0_MACRO
+#define USING_PAD_1_MACRO 
+#define USING_PAD_2_MACRO
+#define USING_PAD_3_MACRO
+#define USING_PAD_4_MACRO
+#define USING_PAD_5_MACRO
+#define USING_PAD_6_MACRO
+#define USING_PAD_7_MACRO
+// No descriptor sets in GL
+#define DESC(TYPE) 
 
 #endif // SHARED_OPENGL_GLSL
