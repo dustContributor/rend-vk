@@ -186,7 +186,7 @@ impl DeviceBuffer {
         };
 
         let memi = ctx
-            .memory_type_index_for(&mem_reqs, mem_flags)
+            .memory_type_index_for(mem_reqs.memory_type_bits, mem_flags)
             .expect("Unable to find suitable memorytype for the buffer");
         let mut mem_flags = vk::MemoryAllocateFlagsInfo {
             flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,

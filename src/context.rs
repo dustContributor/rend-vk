@@ -32,16 +32,16 @@ impl VulkanContext {
 
     pub fn memory_type_index_for(
         &self,
-        memory_req: &vk::MemoryRequirements,
-        flags: vk::MemoryPropertyFlags,
+        requirement_bits: u32,
+        property_flags: vk::MemoryPropertyFlags,
     ) -> Option<u32> {
         let count = self.memory_properties.memory_type_count;
         self.memory_properties.memory_types[..count as _]
             .iter()
             .enumerate()
             .find(|(index, memory_type)| {
-                (1 << index) & memory_req.memory_type_bits != 0
-                    && memory_type.property_flags & flags == flags
+                (1 << index) & requirement_bits != 0
+                    && memory_type.property_flags & property_flags == property_flags
             })
             .map(|(index, _memory_type)| index as _)
     }
