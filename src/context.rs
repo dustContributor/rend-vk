@@ -10,6 +10,7 @@ pub struct VulkanContext {
     pub instance: ash::Instance,
     pub device: ash::Device,
     pub physical_device: ash::vk::PhysicalDevice,
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub extension: ExtensionContext,
 }
 
@@ -27,6 +28,22 @@ impl VulkanContext {
         T: vk::Handle,
     {
         self.extension.try_set_debug_name(&self.device, name, obj)
+    }
+
+    pub fn memory_type_index_for(
+        &self,
+        memory_req: &vk::MemoryRequirements,
+        flags: vk::MemoryPropertyFlags,
+    ) -> Option<u32> {
+        let count = self.memory_properties.memory_type_count;
+        self.memory_properties.memory_types[..count as _]
+            .iter()
+            .enumerate()
+            .find(|(index, memory_type)| {
+                (1 << index) & memory_req.memory_type_bits != 0
+                    && memory_type.property_flags & flags == flags
+            })
+            .map(|(index, _memory_type)| index as _)
     }
 }
 

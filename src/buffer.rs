@@ -184,12 +184,9 @@ impl DeviceBuffer {
         } else {
             mem_reqs.alignment
         };
-        let mem_props = unsafe {
-            ctx.instance
-                .get_physical_device_memory_properties(ctx.physical_device)
-        };
 
-        let memi = Self::find_memorytype_index(&mem_reqs, &mem_props, mem_flags)
+        let memi = ctx
+            .memory_type_index_for(&mem_reqs, mem_flags)
             .expect("Unable to find suitable memorytype for the buffer");
         let mut mem_flags = vk::MemoryAllocateFlagsInfo {
             flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
@@ -250,21 +247,6 @@ impl DeviceBuffer {
     fn next_size(base: u64, mul: u64) -> u64 {
         let mask = -(mul as i64) as u64;
         (base + (mul - 1)) & mask
-    }
-
-    fn find_memorytype_index(
-        memory_req: &vk::MemoryRequirements,
-        memory_prop: &vk::PhysicalDeviceMemoryProperties,
-        flags: vk::MemoryPropertyFlags,
-    ) -> Option<u32> {
-        memory_prop.memory_types[..memory_prop.memory_type_count as _]
-            .iter()
-            .enumerate()
-            .find(|(index, memory_type)| {
-                (1 << index) & memory_req.memory_type_bits != 0
-                    && memory_type.property_flags & flags == flags
-            })
-            .map(|(index, _memory_type)| index as _)
     }
 }
 

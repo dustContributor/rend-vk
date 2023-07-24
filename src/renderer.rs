@@ -451,11 +451,14 @@ where
     };
     log::trace!("semaphores created!");
 
+    let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
     let vulkan_context = VulkanContext {
         entry,
         device,
         instance,
         physical_device,
+        memory_properties: mem_props,
         extension: ExtensionContext {
             descriptor_buffer: descriptor_buffer_ext,
             debug_utils: debug_utils_ext,
