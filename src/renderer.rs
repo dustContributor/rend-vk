@@ -23,6 +23,7 @@ use crate::{
     pipeline::{self, attachment::Attachment, Pipeline},
     render_task::{RenderTask, TaskKind, UsedAsIndex},
     swapchain,
+    texture::Texture,
 };
 
 #[derive(Clone)]
@@ -43,6 +44,7 @@ pub struct Renderer {
     pub general_allocator: DeviceAllocator,
     pub descriptor_allocator: DeviceAllocator,
     pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
+    pub textures_by_id: HashMap<u32, Texture>,
     mesh_buffer_ids: BitVec,
 
     present_queue: vk::Queue,
@@ -170,6 +172,32 @@ impl Renderer {
         );
 
         return mesh_id;
+    }
+
+    pub fn fetch_texture(&self, id: u32) -> Option<&Texture> {
+        self.textures_by_id.get(&id)
+    }
+
+    pub fn gen_texture(
+        &mut self,
+        name: String,
+        width: u32,
+        height: u32,
+        mip_levels: u32,
+        format: crate::format::Format,
+    ) -> u32 {
+        // Reserve texture id
+        let texture_id = self.pipeline.image_descriptors.next_free() as u32;
+        let texture = crate::texture::make(
+            &self.vulkan_context,
+            texture_id,
+            name,
+            vk::Extent2D { width, height },
+            mip_levels,
+            format,
+        );
+        self.textures_by_id.insert(texture_id, texture);
+        return texture_id;
     }
 
     pub fn render(&mut self) {
@@ -494,6 +522,8 @@ where
     mesh_buffer_ids.set(Renderer::ID_TEST_TRIANGLE as usize, true);
     mesh_buffers_by_id.insert(Renderer::ID_TEST_TRIANGLE, test_triangle);
 
+    let textures_by_id = HashMap::new();
+
     log::trace!("test triangle created!");
     let mut batches_by_task_type = Vec::with_capacity(TaskKind::MAX_SIZE + 1);
     (0..TaskKind::MAX_LEN).for_each(|_| {
@@ -511,6 +541,7 @@ where
         descriptor_allocator,
         mesh_buffers_by_id,
         mesh_buffer_ids,
+        textures_by_id,
         draw_command_buffer,
         present_queue,
         setup_command_buffer,

@@ -15,6 +15,7 @@ pub mod shader;
 pub mod swapchain;
 pub mod updater;
 pub mod window;
+pub mod texture;
 
 pub const DEBUG_ENABLED: bool = true;
 pub const VALIDATION_LAYER_ENABLED: bool = true;
