@@ -195,6 +195,7 @@ impl Renderer {
             vk::Extent2D { width, height },
             mip_levels,
             format,
+            false
         );
         self.textures_by_id.insert(texture_id, texture);
         return texture_id;
@@ -507,7 +508,6 @@ where
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
         &vulkan_context,
-        &mut general_allocator,
         &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
         Some("triangle_pipeline.json"),

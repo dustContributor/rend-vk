@@ -6,10 +6,10 @@ use std::{
 };
 
 use super::{descriptor::DescriptorBuffer, file::*};
-use crate::context::VulkanContext;
 use crate::pipeline::sampler;
 use crate::shader;
 use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
+use crate::{context::VulkanContext, texture};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -22,7 +22,6 @@ impl Pipeline {
 
     pub fn load(
         ctx: &VulkanContext,
-        device_mem: &mut DeviceAllocator,
         descriptor_mem: &mut DeviceAllocator,
         default_attachment: Attachment,
         name: Option<&str>,
@@ -41,7 +40,17 @@ impl Pipeline {
             .collect();
         for src_out in &shaders_by_name {
             let name = src_out.0;
-            let args = [&format!("shader/{}", name), "-V", "-o", &src_out.1];
+            // Some flags so the various macros work 
+            let args = [
+                &format!("shader/{}", name),
+                "-V",
+                "-DIS_VULKAN=1",
+                "-DIS_EXTERNAL_COMPILER=1",
+                "--glsl-version",
+                "460",
+                "-o",
+                &src_out.1,
+            ];
             log::info!("compiling shader {} with args {:?}...", name, args);
             let res = Command::new("glslangValidator")
                 .args(args)
@@ -99,80 +108,20 @@ impl Pipeline {
             .map(|f| {
                 let extent =
                     Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
-                let format = f.format.to_vk();
-                let texture_create_info = vk::ImageCreateInfo {
-                    image_type: vk::ImageType::TYPE_2D,
-                    format,
-                    extent: extent.into(),
-                    mip_levels: 1,
-                    array_layers: 1,
-                    samples: vk::SampleCountFlags::TYPE_1,
-                    tiling: vk::ImageTiling::OPTIMAL,
-                    usage: if f.format.has_depth() {
-                        vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
-                    } else {
-                        vk::ImageUsageFlags::COLOR_ATTACHMENT
-                    } | vk::ImageUsageFlags::SAMPLED,
-                    sharing_mode: vk::SharingMode::EXCLUSIVE,
-                    ..Default::default()
-                };
-                let image = unsafe { ctx.device.create_image(&texture_create_info, None) }.unwrap();
-                let texture_memory_req = unsafe { ctx.device.get_image_memory_requirements(image) };
-                let texture_allocate_info = vk::MemoryAllocateInfo {
-                    allocation_size: texture_memory_req.size,
-                    memory_type_index: device_mem.buffer.type_index,
-                    ..Default::default()
-                };
-                let memory = unsafe {
-                    ctx.device
-                        .allocate_memory(&texture_allocate_info, None)
-                        .expect("failed image memory alloc")
-                };
-                let image_view_info = vk::ImageViewCreateInfo::builder()
-                    .subresource_range(
-                        vk::ImageSubresourceRange::builder()
-                            .aspect_mask(
-                                if f.format.has_depth() {
-                                    vk::ImageAspectFlags::DEPTH
-                                } else {
-                                    vk::ImageAspectFlags::NONE
-                                } | if f.format.has_stencil() {
-                                    vk::ImageAspectFlags::STENCIL
-                                } else {
-                                    vk::ImageAspectFlags::NONE
-                                } | if f.format.has_depth() || f.format.has_stencil() {
-                                    vk::ImageAspectFlags::NONE
-                                } else {
-                                    vk::ImageAspectFlags::COLOR
-                                },
-                            )
-                            .level_count(1)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .image(image)
-                    .format(format)
-                    .view_type(vk::ImageViewType::TYPE_2D);
-                let view = unsafe {
-                    ctx.device
-                        .bind_image_memory(image, memory, 0)
-                        .expect("failed image memory bind");
-                    ctx.device
-                        .create_image_view(&image_view_info, None)
-                        .expect("failed image view")
-                };
-                ctx.try_set_debug_name(&f.name, image);
-                ctx.try_set_debug_name(&f.name, memory);
-                ctx.try_set_debug_name(&f.name, view);
+                let texture = texture::make(&ctx, 0, f.name.clone(), extent, 1, f.format, true);
+
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_image"), texture.image);
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_memory"), texture.memory);
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_view"), texture.view);
                 return (
                     &f.name,
                     Attachment {
                         name: f.name.clone(),
                         format: f.format,
-                        vk_format: format,
-                        image,
-                        memory,
-                        view,
+                        vk_format: texture.vk_format,
+                        image: texture.image,
+                        memory: texture.memory,
+                        view: texture.view,
                         extent,
                         descriptor_offset: 0,
                         descriptor_index: 0,
@@ -210,7 +159,7 @@ impl Pipeline {
                 .0,
             ..nearest_sampler
         };
-        let mut image_descriptors = Self::init_images(ctx, descriptor_mem);
+        let image_descriptors = Self::init_images(ctx, descriptor_mem);
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {
@@ -366,7 +315,10 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
-            let mut set_layouts = vec![sampler_descriptors.layout];
+            let mut set_layouts = vec![
+                sampler_descriptors.layout,
+                // image_descriptors.layout
+            ];
             if let Some(d) = &input_descriptors {
                 set_layouts.push(d.layout)
             }
@@ -415,7 +367,7 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
-            let mut ubo_descriptors = (pass.updaters.len() > 0).then(|| {
+            let ubo_descriptors = (pass.updaters.len() > 0).then(|| {
                 Box::new(Self::init_ubo_desc_buffer(
                     ctx,
                     descriptor_mem,
@@ -642,107 +594,5 @@ impl Pipeline {
             }
         }
         return barriers;
-    }
-
-    fn mask_layout_aspect_for(
-        format: crate::format::Format,
-    ) -> (vk::AccessFlags, vk::ImageLayout, vk::ImageAspectFlags) {
-        if format.has_depth() {
-            let (layout, aspect) = if format.has_stencil() {
-                (
-                    vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
-                )
-            } else {
-                (
-                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
-                    vk::ImageAspectFlags::DEPTH,
-                )
-            };
-            (
-                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                layout,
-                aspect,
-            )
-        } else {
-            (
-                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::ImageAspectFlags::COLOR,
-            )
-        }
-    }
-
-    fn default_vertex_inputs() -> Vec<(
-        vk::VertexInputBindingDescription,
-        vk::VertexInputAttributeDescription,
-    )> {
-        vec![
-            (
-                vk::VertexInputBindingDescription {
-                    stride: (std::mem::size_of::<f32>() * 3) as u32,
-                    input_rate: vk::VertexInputRate::VERTEX,
-                    binding: crate::shader::ATTRIB_LOC_POSITION,
-                },
-                vk::VertexInputAttributeDescription {
-                    location: crate::shader::ATTRIB_LOC_POSITION,
-                    binding: crate::shader::ATTRIB_LOC_POSITION,
-                    format: vk::Format::R32G32B32_SFLOAT,
-                    offset: 0,
-                },
-            ),
-            // (
-            //     vk::VertexInputBindingDescription {
-            //         stride: (std::mem::size_of::<f32>() * 3) as u32,
-            //         input_rate: vk::VertexInputRate::VERTEX,
-            //         binding: crate::shader::ATTRIB_LOC_NORMAL,
-            //     },
-            //     vk::VertexInputAttributeDescription {
-            //         location: crate::shader::ATTRIB_LOC_NORMAL,
-            //         binding: crate::shader::ATTRIB_LOC_NORMAL,
-            //         format: vk::Format::R32G32B32_SFLOAT,
-            //         offset: 0,
-            //     },
-            // ),
-            (
-                vk::VertexInputBindingDescription {
-                    stride: (std::mem::size_of::<u8>() * 4) as u32,
-                    input_rate: vk::VertexInputRate::VERTEX,
-                    binding: crate::shader::ATTRIB_LOC_COLOR,
-                },
-                vk::VertexInputAttributeDescription {
-                    location: crate::shader::ATTRIB_LOC_COLOR,
-                    binding: crate::shader::ATTRIB_LOC_COLOR,
-                    format: vk::Format::R32G32B32_SFLOAT,
-                    offset: 0,
-                },
-            ),
-            // (
-            //     vk::VertexInputBindingDescription {
-            //         stride: (std::mem::size_of::<f32>() * 2) as u32,
-            //         input_rate: vk::VertexInputRate::VERTEX,
-            //         binding: crate::shader::ATTRIB_LOC_TEXCOORD,
-            //     },
-            //     vk::VertexInputAttributeDescription {
-            //         location: crate::shader::ATTRIB_LOC_TEXCOORD,
-            //         binding: crate::shader::ATTRIB_LOC_TEXCOORD,
-            //         format: vk::Format::R32G32_SFLOAT,
-            //         offset: 0,
-            //     },
-            // ),
-            // (
-            //     vk::VertexInputBindingDescription {
-            //         stride: (std::mem::size_of::<u32>() * 1) as u32,
-            //         input_rate: vk::VertexInputRate::INSTANCE,
-            //         binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-            //     },
-            //     vk::VertexInputAttributeDescription {
-            //         location: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-            //         binding: crate::shader::ATTRIB_LOC_INSTANCE_ID,
-            //         format: vk::Format::R32_UINT,
-            //         offset: 0,
-            //     },
-            // ),
-        ]
     }
 }

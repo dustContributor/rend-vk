@@ -22,6 +22,7 @@ pub fn make(
     extent: Extent2D,
     mip_levels: u32,
     format: crate::format::Format,
+    is_attachment: bool,
 ) -> Texture {
     let vk_format = format.to_vk();
     let create_info = vk::ImageCreateInfo {
@@ -32,7 +33,15 @@ pub fn make(
         array_layers: 1,
         samples: vk::SampleCountFlags::TYPE_1,
         tiling: vk::ImageTiling::OPTIMAL,
-        usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+        usage: if is_attachment {
+            (if format.has_depth() {
+                vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+            } else {
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+            }) | vk::ImageUsageFlags::SAMPLED
+        } else {
+            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED
+        },
         sharing_mode: vk::SharingMode::EXCLUSIVE,
         ..Default::default()
     };
@@ -71,15 +80,19 @@ pub fn make(
     let memory = unsafe {
         ctx.device
             .allocate_memory(&memory_allocate_info, None)
-            .unwrap()
+            .expect("failed image memory alloc")
     };
 
-    unsafe { ctx.device.bind_image_memory(image, memory, 0).unwrap() };
+    unsafe {
+        ctx.device
+            .bind_image_memory(image, memory, 0)
+            .expect("failed image memory bind")
+    };
 
     let image_view_info = vk::ImageViewCreateInfo::builder()
         .subresource_range(
             vk::ImageSubresourceRange::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .aspect_mask(format.aspect())
                 .level_count(mip_levels)
                 .layer_count(1)
                 .build(),
@@ -93,7 +106,7 @@ pub fn make(
     let view = unsafe {
         ctx.device
             .create_image_view(&image_view_info, None)
-            .unwrap()
+            .expect("failed image view")
     };
 
     Texture {

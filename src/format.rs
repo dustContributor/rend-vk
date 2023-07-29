@@ -23,6 +23,22 @@ impl Format {
             _ => false,
         }
     }
+
+    pub fn aspect(self) -> vk::ImageAspectFlags {
+        (if self.has_depth() {
+            vk::ImageAspectFlags::DEPTH
+        } else {
+            vk::ImageAspectFlags::NONE
+        }) | (if self.has_stencil() {
+            vk::ImageAspectFlags::STENCIL
+        } else {
+            vk::ImageAspectFlags::NONE
+        }) | (if self.has_depth() || self.has_stencil() {
+            vk::ImageAspectFlags::NONE
+        } else {
+            vk::ImageAspectFlags::COLOR
+        })
+    }
 }
 #[derive(Deserialize, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
 /* Preserve these as-is since the serde screaming case renaming wouldn't work */
