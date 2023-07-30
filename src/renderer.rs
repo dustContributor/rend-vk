@@ -195,7 +195,18 @@ impl Renderer {
             vk::Extent2D { width, height },
             mip_levels,
             format,
-            false
+            false,
+        );
+        // Generate descriptor and place it in the image descriptor array buffer
+        self.pipeline.image_descriptors.place_image_at(
+            texture_id,
+            0,
+            vk::DescriptorImageInfo {
+                image_view: texture.view,
+                image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
+                ..Default::default()
+            },
+            &self.vulkan_context.extension.descriptor_buffer,
         );
         self.textures_by_id.insert(texture_id, texture);
         return texture_id;
