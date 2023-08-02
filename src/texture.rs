@@ -1,18 +1,17 @@
 use ash::vk::{self, Extent2D};
 
-use crate::context::VulkanContext;
+use crate::{buffer::DeviceSlice, context::VulkanContext};
 
 #[derive(Clone)]
 pub struct Texture {
-    pub name: String,
     pub id: u32,
-    pub memory: vk::DeviceMemory,
     pub format: crate::format::Format,
-    // Keep the equivalent vulkan value for convenience.
-    pub vk_format: vk::Format,
+    pub name: String,
+    pub memory: vk::DeviceMemory,
     pub image: vk::Image,
     pub view: vk::ImageView,
     pub extent: vk::Extent2D,
+    pub staging: Option<Box<DeviceSlice>>,
 }
 
 pub fn make(
@@ -23,6 +22,7 @@ pub fn make(
     mip_levels: u32,
     format: crate::format::Format,
     is_attachment: bool,
+    staging: Option<Box<DeviceSlice>>,
 ) -> Texture {
     let vk_format = format.to_vk();
     let create_info = vk::ImageCreateInfo {
@@ -114,9 +114,9 @@ pub fn make(
         id,
         memory,
         format,
-        vk_format,
         image,
         view,
         extent,
+        staging,
     }
 }

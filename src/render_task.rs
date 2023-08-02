@@ -2,6 +2,8 @@ use std::mem::{align_of, size_of};
 
 use glam::{Mat4, Vec3};
 
+use crate::UsedAsIndex;
+
 #[derive(Copy, Clone, Eq, PartialEq, Hash, serde::Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
@@ -25,12 +27,6 @@ pub enum TaskKind {
     Sky,
     Fullscreen,
     Nuklear,
-}
-pub trait UsedAsIndex<const T: u8>
-{
-    const MAX_VALUE: u8 = T;
-    const MAX_SIZE: usize = Self::MAX_VALUE as usize;
-    const MAX_LEN: usize = Self::MAX_SIZE + 1;
 }
 
 impl TaskKind {
@@ -76,7 +72,7 @@ impl TaskKind {
 }
 
 const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
-impl UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
+impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
 #[derive(Clone, Copy, strum_macros::Display)]
 #[repr(u8)]

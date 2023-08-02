@@ -1,6 +1,8 @@
 use ash::vk;
 use serde::Deserialize;
 
+use crate::UsedAsIndex;
+
 impl Format {
     pub fn is_compressed(self) -> bool {
         (self >= Self::BC1_RGBA_SRGB_BLOCK && self <= Self::BC7_UNORM_BLOCK ) ||
@@ -39,8 +41,64 @@ impl Format {
             vk::ImageAspectFlags::COLOR
         })
     }
+
+    pub fn size_for(self, width: u32, height: u32) -> u32 {
+        match self {
+            // size is defined per 4x4 block for BC formats
+            Self::BC1_RGBA_SRGB_BLOCK
+            | Self::BC1_RGBA_UNORM_BLOCK
+            | Self::BC1_RGB_SRGB_BLOCK
+            | Self::BC1_RGB_UNORM_BLOCK => width * height / 4 * 8,
+            Self::BC2_SRGB_BLOCK
+            | Self::BC2_UNORM_BLOCK
+            | Self::BC3_SRGB_BLOCK
+            | Self::BC3_UNORM_BLOCK => width * height / 4 * 16,
+            _ => panic!("unrecognized format {}", self),
+        }
+    }
+
+    pub fn size_for_extent(self, extent: vk::Extent2D) -> u32 {
+        self.size_for(extent.width, extent.height)
+    }
+
+    pub const fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v) }
+        }
+    }
+
+    pub const fn of_u32(v: u32) -> Self {
+        if v > (Self::MAX_VALUE as u32) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub const fn of_usize(v: usize) -> Self {
+        if v > (Self::MAX_VALUE as usize) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub const fn to_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn to_u32(self) -> u32 {
+        self as u32
+    }
+
+    pub const fn to_usize(self) -> usize {
+        self as usize
+    }
 }
-#[derive(Deserialize, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+
+#[derive(Deserialize, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, strum_macros::Display)]
 /* Preserve these as-is since the serde screaming case renaming wouldn't work */
 #[allow(non_camel_case_types)]
 pub enum Format {
@@ -230,6 +288,10 @@ pub enum Format {
     S8_UINT,
     X8_D24_UNORM_PACK32,
 }
+
+const MAX_FORMAT: u8 = Format::X8_D24_UNORM_PACK32.to_u8();
+impl UsedAsIndex<MAX_FORMAT> for Format {}
+
 impl Format {
     pub fn to_vk(self) -> vk::Format {
         match self {

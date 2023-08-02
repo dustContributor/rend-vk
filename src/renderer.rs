@@ -21,9 +21,10 @@ use crate::{
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     pipeline::{self, attachment::Attachment, Pipeline},
-    render_task::{RenderTask, TaskKind, UsedAsIndex},
+    render_task::{RenderTask, TaskKind},
     swapchain,
     texture::Texture,
+    UsedAsIndex,
 };
 
 #[derive(Clone)]
@@ -181,13 +182,28 @@ impl Renderer {
     pub fn gen_texture(
         &mut self,
         name: String,
+        format: crate::format::Format,
         width: u32,
         height: u32,
         mip_levels: u32,
-        format: crate::format::Format,
+        staging_size: u32,
     ) -> u32 {
         // Reserve texture id
         let texture_id = self.pipeline.image_descriptors.next_free() as u32;
+        let staging = if staging_size > 0 {
+            Some(Box::new(
+                self.general_allocator
+                    .alloc(staging_size as u64)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "can't allocate staging buffer of size {} for {}",
+                            name, staging_size
+                        )
+                    }),
+            ))
+        } else {
+            None
+        };
         let texture = crate::texture::make(
             &self.vulkan_context,
             texture_id,
@@ -196,6 +212,7 @@ impl Renderer {
             mip_levels,
             format,
             false,
+            staging,
         );
         // Generate descriptor and place it in the image descriptor array buffer
         self.pipeline.image_descriptors.place_image_at(

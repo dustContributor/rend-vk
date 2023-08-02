@@ -40,7 +40,7 @@ impl Pipeline {
             .collect();
         for src_out in &shaders_by_name {
             let name = src_out.0;
-            // Some flags so the various macros work 
+            // Some flags so the various macros work
             let args = [
                 &format!("shader/{}", name),
                 "-V",
@@ -108,7 +108,8 @@ impl Pipeline {
             .map(|f| {
                 let extent =
                     Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
-                let texture = texture::make(&ctx, 0, f.name.clone(), extent, 1, f.format, true);
+                let texture =
+                    texture::make(&ctx, 0, f.name.clone(), extent, 1, f.format, true, None);
 
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "_image"), texture.image);
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "_memory"), texture.memory);
@@ -118,7 +119,7 @@ impl Pipeline {
                     Attachment {
                         name: f.name.clone(),
                         format: f.format,
-                        vk_format: texture.vk_format,
+                        vk_format: f.format.to_vk(),
                         image: texture.image,
                         memory: texture.memory,
                         view: texture.view,

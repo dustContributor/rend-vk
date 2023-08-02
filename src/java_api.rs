@@ -4,11 +4,13 @@ use ash::vk;
 use bitvec::view::BitView;
 
 use crate::{
+    format::Format,
     render_task::{
         self, DirLight, Material, ResourceKind, ResourceWrapper, TaskKind, Transform,
         TransformExtra, WrapResource,
     },
     renderer::{self, MeshBuffer, Renderer},
+    texture::Texture,
 };
 
 // Prevent calling init twice just in case
@@ -19,7 +21,7 @@ const JNI_TRUE: u8 = 1;
 
 #[derive(Clone, Copy)]
 #[repr(C, packed(4))]
-pub struct MeshAddresses {
+pub struct JavaMesh {
     pub vertices: u64,
     pub normals: u64,
     pub tex_coords: u64,
@@ -32,8 +34,8 @@ pub struct MeshAddresses {
 }
 
 impl MeshBuffer {
-    pub fn to_addresses(&self) -> MeshAddresses {
-        MeshAddresses {
+    pub fn to_java(&self) -> JavaMesh {
+        JavaMesh {
             vertices: self.vertices.addr as u64,
             normals: self.normals.addr as u64,
             tex_coords: self.tex_coords.addr as u64,
@@ -45,6 +47,35 @@ impl MeshBuffer {
             indices_len: self.indices.size as u32,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C, packed(4))]
+pub struct JavaTexture {
+    pub width: u32,
+    pub height: u32,
+    pub staging: u64,
+    pub staging_len: u32,
+}
+
+impl Texture {
+    pub fn to_java(&self) -> JavaTexture {
+        let staging_buffer = if let Some(buff) = &self.staging {
+            (buff.addr as u64, buff.size as u32)
+        } else {
+            (0, 0)
+        };
+        JavaTexture {
+            width: self.extent.width,
+            height: self.extent.height,
+            staging: staging_buffer.0,
+            staging_len: staging_buffer.1,
+        }
+    }
+}
+
+fn to_renderer(addr: u64) -> Box<Renderer> {
+    unsafe { Box::from_raw(addr as *mut Renderer) }
 }
 
 #[no_mangle]
@@ -130,7 +161,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     _unused_jclazz: usize,
     renderer: u64,
 ) {
-    let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mut renderer = to_renderer(renderer);
     renderer.render();
     Box::leak(renderer);
 }
@@ -146,7 +177,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
     indices_size: u32,
     count: u32,
 ) -> u32 {
-    let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mut renderer = to_renderer(renderer);
     let mesh_id = renderer.gen_mesh(
         vertices_size,
         normals_size,
@@ -166,17 +197,57 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     id: u32,
     dest: u64,
 ) {
-    let renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let renderer = to_renderer(renderer);
     let mesh = renderer
         .fetch_mesh(id)
         .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
     let dest = unsafe {
-        std::slice::from_raw_parts_mut(
-            dest as *mut MeshAddresses,
-            std::mem::size_of::<MeshAddresses>(),
-        )
+        std::slice::from_raw_parts_mut(dest as *mut JavaMesh, std::mem::size_of::<JavaMesh>())
     };
-    dest[0] = mesh.to_addresses();
+    dest[0] = mesh.to_java();
+    Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    format: u8,
+    width: u32,
+    height: u32,
+    mip_levels: u32,
+    staging_size: u32,
+) -> u32 {
+    let mut renderer = to_renderer(renderer);
+    let texture_id = renderer.gen_texture(
+        "java_texture".to_string(),
+        Format::of_u8(format),
+        width,
+        height,
+        mip_levels,
+        staging_size,
+    );
+    Box::leak(renderer);
+    return texture_id;
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+    dest: u64,
+) {
+    let renderer = to_renderer(renderer);
+    let texture = renderer
+        .fetch_texture(id)
+        .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
+    let dest = unsafe {
+        std::slice::from_raw_parts_mut(dest as *mut JavaTexture, std::mem::size_of::<JavaTexture>())
+    };
+    dest[0] = texture.to_java();
     Box::leak(renderer);
 }
 
