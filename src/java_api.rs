@@ -213,7 +213,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     renderer: u64,
-    format: u8,
+    format: u32,
     width: u32,
     height: u32,
     mip_levels: u32,
@@ -222,7 +222,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     let mut renderer = to_renderer(renderer);
     let texture_id = renderer.gen_texture(
         "java_texture".to_string(),
-        Format::of_u8(format),
+        Format::of_u32(format),
         width,
         height,
         mip_levels,
@@ -249,6 +249,31 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
     };
     dest[0] = texture.to_java();
     Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_queueTextureForUploading(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+) {
+    let mut renderer = to_renderer(renderer);
+    renderer.queue_texture_for_uploading(id);
+    Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+) -> u8 {
+    let renderer = to_renderer(renderer);
+    let is_uploaded = renderer.is_texture_uploaded(id);
+    Box::leak(renderer);
+    return if is_uploaded { JNI_TRUE } else { JNI_FALSE };
 }
 
 #[no_mangle]

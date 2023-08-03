@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     alloc::Layout,
     collections::HashMap,
@@ -46,6 +47,10 @@ pub struct Renderer {
     pub descriptor_allocator: DeviceAllocator,
     pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
     pub textures_by_id: HashMap<u32, Texture>,
+
+    optimal_transition_queue: Vec<Texture>,
+    ongoing_optimal_transitions: Vec<(u32, u64)>,
+
     mesh_buffer_ids: BitVec,
 
     present_queue: vk::Queue,
@@ -229,6 +234,22 @@ impl Renderer {
         return texture_id;
     }
 
+    pub fn queue_texture_for_uploading(&mut self, id: u32) {
+        let texture = self
+            .textures_by_id
+            .get(&id)
+            .unwrap_or_else(|| panic!("missing texture with id {}", id));
+        self.optimal_transition_queue.push(texture.clone());
+    }
+
+    pub fn is_texture_uploaded(&self, id: u32) -> bool {
+        let texture = self
+            .textures_by_id
+            .get(&id)
+            .unwrap_or_else(|| panic!("missing texture with id {}", id));
+        return texture.staging.is_none();
+    }
+
     pub fn render(&mut self) {
         unsafe {
             let (present_index, _) = self
@@ -289,13 +310,22 @@ impl Renderer {
         let buffer_allocator = self.general_allocator.clone();
         let total_stages = self.pipeline.total_stages();
         let pipeline = &mut self.pipeline;
+
         for stage in pipeline.stages.iter_mut() {
+            for texture in self.optimal_transition_queue.drain(..) {
+                // TODO: Issue transitions and register them as ongoing
+                // self.ongoing_optimal_transitions.push((
+                //     texture.id,
+                //     stage.signal_value_for(current_frame, total_stages),
+                // ))
+            }
             stage.wait_for_previous_frame(
                 &self.vulkan_context.device,
                 current_frame,
                 total_stages,
                 self.pass_timeline_semaphore,
             );
+            // TODO: Release staging buffers for finished transitions
             stage.render(
                 &self.vulkan_context,
                 &self.batches_by_task_type,
@@ -579,6 +609,8 @@ where
         setup_commands_reuse_fence,
         draw_commands_reuse_fence,
         pool,
+        optimal_transition_queue: Vec::new(),
+        ongoing_optimal_transitions: Vec::new(),
         current_frame: AtomicU64::new(0),
     };
     log::trace!("renderer finished!");

@@ -91,19 +91,20 @@ impl Stage {
         if self.inputs.len() > 0 {
             let mut desc_buffer_info = vec![
                 sampler_descriptors.binding_info(),
-                image_descriptors.binding_info(),
+                // image_descriptors.binding_info(),
             ];
             let mut desc_buffer_indices = vec![
                 super::DESCRIPTOR_SET_SAMPLER,
-                super::DESCRIPTOR_SET_TARGET_IMAGE,
+                // super::DESCRIPTOR_SET_TARGET_IMAGE,
             ];
             let mut desc_buffer_offsets = vec![
                 sampler_descriptors.device.offset,
-                image_descriptors.device.offset,
+                // image_descriptors.device.offset,
             ];
             if let Some(desc) = &self.input_descriptors {
                 desc_buffer_info.push(desc.binding_info());
-                desc_buffer_indices.push(super::DESCRIPTOR_SET_TARGET_IMAGE);
+                // desc_buffer_indices.push(super::DESCRIPTOR_SET_TARGET_IMAGE);
+                desc_buffer_indices.push(1);
                 desc_buffer_offsets.push(0);
             }
             unsafe {
@@ -143,6 +144,7 @@ impl Stage {
                 let mut push_constants = vec![
                     mesh_buffer.vertices.device_addr,
                     mesh_buffer.normals.device_addr,
+                    mesh_buffer.tex_coords.device_addr,
                 ];
                 // Append resource buffer addresses in the order they appear
                 push_constants.append(&mut self.reserve_and_fill_buffers(&buffer_allocator, task));
@@ -246,15 +248,14 @@ impl Stage {
         };
     }
 
-    fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
+    pub fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
         current_frame * total_stages as u64 + self.index as u64
     }
 
     fn release_reserved_buffers(&mut self, mem: &DeviceAllocator) {
-        for buffer in self.reserved_buffers.clone() {
+        for buffer in self.reserved_buffers.drain(..) {
             mem.free(buffer);
         }
-        self.reserved_buffers.clear();
     }
 
     fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {

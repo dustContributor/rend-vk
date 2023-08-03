@@ -6,12 +6,85 @@ use crate::{buffer::DeviceSlice, context::VulkanContext};
 pub struct Texture {
     pub id: u32,
     pub format: crate::format::Format,
+    pub mip_levels: u32,
     pub name: String,
     pub memory: vk::DeviceMemory,
     pub image: vk::Image,
     pub view: vk::ImageView,
     pub extent: vk::Extent2D,
     pub staging: Option<Box<DeviceSlice>>,
+}
+
+impl Texture {
+    fn subresource_range(&self) -> vk::ImageSubresourceRange {
+        vk::ImageSubresourceRange {
+            aspect_mask: self.format.aspect(),
+            level_count: self.mip_levels,
+            layer_count: 1,
+            ..Default::default()
+        }
+    }
+
+    pub fn transition_to_optimal(&self, ctx: &VulkanContext, cmd_buffer: vk::CommandBuffer) {
+        let barrier_initial = vk::ImageMemoryBarrier {
+            image: self.image,
+            dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            subresource_range: self.subresource_range(),
+            ..Default::default()
+        };
+        unsafe {
+            ctx.device.cmd_pipeline_barrier(
+                cmd_buffer,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_initial],
+            )
+        };
+        // TODO: Research how to copy mipmaps. One by one? All in one go?
+        let buffer_copy_regions = vk::BufferImageCopy::builder()
+            .image_subresource(
+                vk::ImageSubresourceLayers::builder()
+                    .aspect_mask(self.format.aspect())
+                    .layer_count(1)
+                    .build(),
+            )
+            .image_extent(self.extent.into())
+            .build();
+        let image_buffer = self.staging.as_ref().unwrap().buffer;
+        unsafe {
+            ctx.device.cmd_copy_buffer_to_image(
+                cmd_buffer,
+                image_buffer,
+                self.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[buffer_copy_regions],
+            )
+        };
+        let barrier_end = vk::ImageMemoryBarrier {
+            src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+            dst_access_mask: vk::AccessFlags::SHADER_READ,
+            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image: self.image,
+            subresource_range: self.subresource_range(),
+            ..Default::default()
+        };
+        unsafe {
+            ctx.device.cmd_pipeline_barrier(
+                cmd_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_end],
+            )
+        };
+    }
 }
 
 pub fn make(
@@ -108,10 +181,10 @@ pub fn make(
             .create_image_view(&image_view_info, None)
             .expect("failed image view")
     };
-
     Texture {
         name,
         id,
+        mip_levels,
         memory,
         format,
         image,
