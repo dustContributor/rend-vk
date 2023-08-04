@@ -6,20 +6,59 @@ use crate::{buffer::DeviceSlice, context::VulkanContext};
 pub struct Texture {
     pub id: u32,
     pub format: crate::format::Format,
-    pub mip_levels: u32,
+    pub mip_maps: Vec<MipMap>,
     pub name: String,
     pub memory: vk::DeviceMemory,
     pub image: vk::Image,
     pub view: vk::ImageView,
-    pub extent: vk::Extent2D,
     pub staging: Option<Box<DeviceSlice>>,
 }
 
+#[derive(Clone)]
+pub struct MipMap {
+    pub index: u32,
+    pub width: u32,
+    pub height: u32,
+    pub size: u32,
+    pub offset: u32,
+}
+
+impl Default for MipMap {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            width: 0,
+            height: 0,
+            size: 0,
+            offset: 0,
+        }
+    }
+}
+
 impl Texture {
+    pub fn mip_map_count(&self) -> u32 {
+        self.mip_maps.len() as u32
+    }
+
+    pub fn width(&self) -> u32 {
+        self.mip_maps[0].width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.mip_maps[0].height
+    }
+
+    pub fn extent(&self) -> vk::Extent2D {
+        vk::Extent2D {
+            width: self.width(),
+            height: self.height(),
+        }
+    }
+
     fn subresource_range(&self) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {
             aspect_mask: self.format.aspect(),
-            level_count: self.mip_levels,
+            level_count: self.mip_map_count(),
             layer_count: 1,
             ..Default::default()
         }
@@ -52,7 +91,7 @@ impl Texture {
                     .layer_count(1)
                     .build(),
             )
-            .image_extent(self.extent.into())
+            .image_extent(self.extent().into())
             .build();
         let image_buffer = self.staging.as_ref().unwrap().buffer;
         unsafe {
@@ -91,18 +130,22 @@ pub fn make(
     ctx: &VulkanContext,
     id: u32,
     name: String,
-    extent: Extent2D,
-    mip_levels: u32,
+    mip_maps: &[MipMap],
     format: crate::format::Format,
     is_attachment: bool,
     staging: Option<Box<DeviceSlice>>,
 ) -> Texture {
+    assert!(!mip_maps.is_empty(), "mip_maps can't be empty!");
     let vk_format = format.to_vk();
     let create_info = vk::ImageCreateInfo {
         image_type: vk::ImageType::TYPE_2D,
         format: vk_format,
-        extent: extent.into(),
-        mip_levels,
+        extent: vk::Extent2D {
+            width: mip_maps[0].width,
+            height: mip_maps[0].height,
+        }
+        .into(),
+        mip_levels: mip_maps.len() as u32,
         array_layers: 1,
         samples: vk::SampleCountFlags::TYPE_1,
         tiling: vk::ImageTiling::OPTIMAL,
@@ -166,7 +209,7 @@ pub fn make(
         .subresource_range(
             vk::ImageSubresourceRange::builder()
                 .aspect_mask(format.aspect())
-                .level_count(mip_levels)
+                .level_count(mip_maps.len() as u32)
                 .layer_count(1)
                 .build(),
         )
@@ -184,12 +227,11 @@ pub fn make(
     Texture {
         name,
         id,
-        mip_levels,
+        mip_maps: mip_maps.to_vec(),
         memory,
         format,
         image,
         view,
-        extent,
         staging,
     }
 }

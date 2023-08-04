@@ -24,7 +24,7 @@ use crate::{
     pipeline::{self, attachment::Attachment, Pipeline},
     render_task::{RenderTask, TaskKind},
     swapchain,
-    texture::Texture,
+    texture::{MipMap, Texture},
     UsedAsIndex,
 };
 
@@ -188,9 +188,7 @@ impl Renderer {
         &mut self,
         name: String,
         format: crate::format::Format,
-        width: u32,
-        height: u32,
-        mip_levels: u32,
+        mip_maps: &[MipMap],
         staging_size: u32,
     ) -> u32 {
         // Reserve texture id
@@ -213,8 +211,7 @@ impl Renderer {
             &self.vulkan_context,
             texture_id,
             name,
-            vk::Extent2D { width, height },
-            mip_levels,
+            mip_maps,
             format,
             false,
             staging,

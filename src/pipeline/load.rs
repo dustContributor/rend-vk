@@ -6,10 +6,10 @@ use std::{
 };
 
 use super::{descriptor::DescriptorBuffer, file::*};
-use crate::pipeline::sampler;
 use crate::shader;
 use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
 use crate::{context::VulkanContext, texture};
+use crate::{pipeline::sampler, texture::MipMap};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -108,8 +108,19 @@ impl Pipeline {
             .map(|f| {
                 let extent =
                     Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
-                let texture =
-                    texture::make(&ctx, 0, f.name.clone(), extent, 1, f.format, true, None);
+                let texture = texture::make(
+                    &ctx,
+                    0,
+                    f.name.clone(),
+                    &[MipMap {
+                        width: extent.width,
+                        height: extent.height,
+                        ..Default::default()
+                    }],
+                    f.format,
+                    true,
+                    None,
+                );
 
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "_image"), texture.image);
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "_memory"), texture.memory);

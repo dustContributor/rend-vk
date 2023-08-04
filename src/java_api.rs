@@ -1,4 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    mem::size_of,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use ash::vk;
 use bitvec::view::BitView;
@@ -10,7 +13,7 @@ use crate::{
         TransformExtra, WrapResource,
     },
     renderer::{self, MeshBuffer, Renderer},
-    texture::Texture,
+    texture::{MipMap, Texture},
 };
 
 // Prevent calling init twice just in case
@@ -18,6 +21,10 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 // Convenience definitions
 const JNI_FALSE: u8 = 0;
 const JNI_TRUE: u8 = 1;
+
+trait ToJava<T> {
+    fn to_java(&self) -> T;
+}
 
 #[derive(Clone, Copy)]
 #[repr(C, packed(4))]
@@ -33,8 +40,8 @@ pub struct JavaMesh {
     pub count: u32,
 }
 
-impl MeshBuffer {
-    pub fn to_java(&self) -> JavaMesh {
+impl ToJava<JavaMesh> for MeshBuffer {
+    fn to_java(&self) -> JavaMesh {
         JavaMesh {
             vertices: self.vertices.addr as u64,
             normals: self.normals.addr as u64,
@@ -51,23 +58,47 @@ impl MeshBuffer {
 
 #[derive(Clone, Copy)]
 #[repr(C, packed(4))]
+pub struct JavaMipMap {
+    pub index: u32,
+    pub width: u32,
+    pub height: u32,
+    pub size: u32,
+    pub offset: u32,
+}
+
+impl ToJava<JavaMipMap> for MipMap {
+    fn to_java(&self) -> JavaMipMap {
+        JavaMipMap {
+            index: self.index,
+            width: self.width,
+            height: self.height,
+            size: self.size,
+            offset: self.offset,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C, packed(4))]
 pub struct JavaTexture {
     pub width: u32,
     pub height: u32,
+    pub mip_map_count: u32,
     pub staging: u64,
     pub staging_len: u32,
 }
 
-impl Texture {
-    pub fn to_java(&self) -> JavaTexture {
+impl ToJava<JavaTexture> for Texture {
+    fn to_java(&self) -> JavaTexture {
         let staging_buffer = if let Some(buff) = &self.staging {
             (buff.addr as u64, buff.size as u32)
         } else {
             (0, 0)
         };
         JavaTexture {
-            width: self.extent.width,
-            height: self.extent.height,
+            width: self.extent().width,
+            height: self.extent().height,
+            mip_map_count: self.mip_map_count(),
             staging: staging_buffer.0,
             staging_len: staging_buffer.1,
         }
@@ -201,9 +232,8 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     let mesh = renderer
         .fetch_mesh(id)
         .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
-    let dest = unsafe {
-        std::slice::from_raw_parts_mut(dest as *mut JavaMesh, std::mem::size_of::<JavaMesh>())
-    };
+    let dest =
+        unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaMesh, size_of::<JavaMesh>()) };
     dest[0] = mesh.to_java();
     Box::leak(renderer);
 }
@@ -214,18 +244,32 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     _unused_jclazz: usize,
     renderer: u64,
     format: u32,
-    width: u32,
-    height: u32,
-    mip_levels: u32,
+    mip_maps: u64,
+    mip_maps_len: u32,
     staging_size: u32,
 ) -> u32 {
     let mut renderer = to_renderer(renderer);
+    let mip_map_count = mip_maps_len / size_of::<JavaMipMap>() as u32;
+    let expected_mip_map_size = size_of::<JavaMipMap>() as u32 * mip_map_count;
+    assert!(
+        expected_mip_map_size == mip_maps_len,
+        "mip_maps_len can't hold an exact count of mip maps!"
+    );
+    let mip_maps: Vec<_> =
+        unsafe { std::slice::from_raw_parts(mip_maps as *mut JavaMipMap, mip_maps_len as usize) }
+            .iter()
+            .map(|e| MipMap {
+                width: e.width,
+                height: e.height,
+                index: e.index,
+                offset: e.offset,
+                size: e.size,
+            })
+            .collect();
     let texture_id = renderer.gen_texture(
         "java_texture".to_string(),
         Format::of_u32(format),
-        width,
-        height,
-        mip_levels,
+        &mip_maps,
         staging_size,
     );
     Box::leak(renderer);
@@ -245,9 +289,33 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
         .fetch_texture(id)
         .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
     let dest = unsafe {
-        std::slice::from_raw_parts_mut(dest as *mut JavaTexture, std::mem::size_of::<JavaTexture>())
+        std::slice::from_raw_parts_mut(dest as *mut JavaTexture, size_of::<JavaTexture>())
     };
     dest[0] = texture.to_java();
+    Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTextureMipMaps(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+    dest: u64,
+) {
+    let renderer = to_renderer(renderer);
+    let texture = renderer
+        .fetch_texture(id)
+        .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
+    let dest = unsafe {
+        std::slice::from_raw_parts_mut(
+            dest as *mut JavaMipMap,
+            size_of::<JavaMipMap>() * texture.mip_map_count() as usize,
+        )
+    };
+    for (i, item) in texture.mip_maps.iter().enumerate() {
+        dest[i] = item.to_java();
+    }
     Box::leak(renderer);
 }
 
