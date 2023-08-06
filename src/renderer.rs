@@ -21,7 +21,7 @@ use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
-    pipeline::{self, attachment::Attachment, Pipeline},
+    pipeline::{self, attachment::Attachment, stage::Stage, Pipeline},
     render_task::{RenderTask, TaskKind},
     swapchain,
     texture::{MipMap, Texture},
@@ -310,11 +310,11 @@ impl Renderer {
 
         for stage in pipeline.stages.iter_mut() {
             for texture in self.optimal_transition_queue.drain(..) {
-                // TODO: Issue transitions and register them as ongoing
-                // self.ongoing_optimal_transitions.push((
-                //     texture.id,
-                //     stage.signal_value_for(current_frame, total_stages),
-                // ))
+                texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
+                self.ongoing_optimal_transitions.push((
+                    texture.id,
+                    stage.signal_value_for(current_frame, total_stages),
+                ))
             }
             stage.wait_for_previous_frame(
                 &self.vulkan_context.device,
@@ -322,6 +322,34 @@ impl Renderer {
                 total_stages,
                 self.pass_timeline_semaphore,
             );
+            if !self.ongoing_optimal_transitions.is_empty() {
+                let current_timeline_counter = unsafe {
+                    self.vulkan_context
+                        .device
+                        .get_semaphore_counter_value(self.pass_timeline_semaphore)
+                        .unwrap()
+                };
+                self.ongoing_optimal_transitions.retain(|e| {
+                    if e.1 > current_timeline_counter {
+                        return true;
+                    }
+                    let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
+                    // Free the staging buffer after it has been used
+                    match &texture.staging {
+                        Some(staging) => {
+                            let device = staging.as_ref().clone();
+                            self.general_allocator.free(device);
+                        }
+                        _ => panic!(
+                            "staging buffer for texture {} {} is missing!",
+                            texture.id, texture.name
+                        ),
+                    }
+                    // Set staging to None to mark the texture as "uploaded"
+                    texture.staging = None;
+                    return false;
+                });
+            }
             // TODO: Release staging buffers for finished transitions
             stage.render(
                 &self.vulkan_context,

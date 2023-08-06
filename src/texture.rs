@@ -22,6 +22,14 @@ pub struct MipMap {
     pub size: u32,
     pub offset: u32,
 }
+impl MipMap {
+    pub fn extent(&self) -> vk::Extent2D {
+        vk::Extent2D {
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
 
 impl Default for MipMap {
     fn default() -> Self {
@@ -36,6 +44,10 @@ impl Default for MipMap {
 }
 
 impl Texture {
+    pub fn is_uploaded(&self) -> bool {
+        self.staging.is_none()
+    }
+
     pub fn mip_map_count(&self) -> u32 {
         self.mip_maps.len() as u32
     }
@@ -83,16 +95,23 @@ impl Texture {
                 &[barrier_initial],
             )
         };
-        // TODO: Research how to copy mipmaps. One by one? All in one go?
-        let buffer_copy_regions = vk::BufferImageCopy::builder()
-            .image_subresource(
-                vk::ImageSubresourceLayers::builder()
-                    .aspect_mask(self.format.aspect())
-                    .layer_count(1)
-                    .build(),
-            )
-            .image_extent(self.extent().into())
-            .build();
+        let buffer_copy_regions: Vec<_> = self
+            .mip_maps
+            .iter()
+            .map(|mm| {
+                vk::BufferImageCopy::builder()
+                    .image_subresource(
+                        vk::ImageSubresourceLayers::builder()
+                            .aspect_mask(self.format.aspect())
+                            .layer_count(1)
+                            .mip_level(mm.index)
+                            .build(),
+                    )
+                    .image_extent(mm.extent().into())
+                    .buffer_offset(mm.offset as u64)
+                    .build()
+            })
+            .collect();
         let image_buffer = self.staging.as_ref().unwrap().buffer;
         unsafe {
             ctx.device.cmd_copy_buffer_to_image(
@@ -100,7 +119,7 @@ impl Texture {
                 image_buffer,
                 self.image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[buffer_copy_regions],
+                &buffer_copy_regions,
             )
         };
         let barrier_end = vk::ImageMemoryBarrier {
