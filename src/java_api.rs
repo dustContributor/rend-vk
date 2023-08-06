@@ -26,7 +26,7 @@ trait ToJava<T> {
     fn to_java(&self) -> T;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed(4))]
 pub struct JavaMesh {
     pub vertices: u64,
@@ -56,7 +56,7 @@ impl ToJava<JavaMesh> for MeshBuffer {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed(4))]
 pub struct JavaMipMap {
     pub index: u32,
@@ -78,7 +78,7 @@ impl ToJava<JavaMipMap> for MipMap {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed(4))]
 pub struct JavaTexture {
     pub width: u32,
@@ -232,8 +232,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     let mesh = renderer
         .fetch_mesh(id)
         .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
-    let dest =
-        unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaMesh, size_of::<JavaMesh>()) };
+    let dest = unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaMesh, 1) };
     dest[0] = mesh.to_java();
     Box::leak(renderer);
 }
@@ -256,7 +255,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
         "mip_maps_len can't hold an exact count of mip maps!"
     );
     let mip_maps: Vec<_> =
-        unsafe { std::slice::from_raw_parts(mip_maps as *mut JavaMipMap, mip_maps_len as usize) }
+        unsafe { std::slice::from_raw_parts(mip_maps as *mut JavaMipMap, mip_map_count as usize) }
             .iter()
             .map(|e| MipMap {
                 width: e.width,
@@ -288,9 +287,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
     let texture = renderer
         .fetch_texture(id)
         .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
-    let dest = unsafe {
-        std::slice::from_raw_parts_mut(dest as *mut JavaTexture, size_of::<JavaTexture>())
-    };
+    let dest = unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaTexture, 1) };
     dest[0] = texture.to_java();
     Box::leak(renderer);
 }
