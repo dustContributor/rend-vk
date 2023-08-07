@@ -327,10 +327,7 @@ impl Pipeline {
             };
             let image_barriers =
                 Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
-            let mut set_layouts = vec![
-                sampler_descriptors.layout,
-                // image_descriptors.layout
-            ];
+            let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &input_descriptors {
                 set_layouts.push(d.layout)
             }
@@ -462,7 +459,6 @@ impl Pipeline {
             1,
             true,
         );
-        // missing ID/handle generator per image
         desc_buffer
     }
 

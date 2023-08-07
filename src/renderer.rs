@@ -21,6 +21,7 @@ use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
+    format::Format,
     pipeline::{self, attachment::Attachment, stage::Stage, Pipeline},
     render_task::{RenderTask, TaskKind},
     swapchain,
@@ -70,7 +71,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub const ID_TEST_TRIANGLE: u32 = 1;
+    pub const ID_TEST_TRIANGLE: u32 = 0;
 
     pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");
@@ -614,7 +615,7 @@ where
     });
 
     log::trace!("finishing renderer...");
-    let renderer = Renderer {
+    let mut renderer = Renderer {
         pipeline: pip,
         batches_by_task_type,
         debug_context,
@@ -638,6 +639,19 @@ where
         ongoing_optimal_transitions: Vec::new(),
         current_frame: AtomicU64::new(0),
     };
+    // Reserve the texture ID 0 with an empty texture
+    renderer.gen_texture(
+        "default_texture".to_string(),
+        Format::R8G8B8A8_UNORM,
+        &[MipMap {
+            index: 0,
+            size: 4,
+            offset: 0,
+            width: 1,
+            height: 1,
+        }],
+        0,
+    );
     log::trace!("renderer finished!");
     return renderer;
 }
@@ -665,6 +679,8 @@ pub fn make_device(
         timeline_semaphore: 1,
         buffer_device_address: 1,
         scalar_block_layout: 1,
+        runtime_descriptor_array: 1,
+        shader_sampled_image_array_non_uniform_indexing: 1,
         ..Default::default()
     };
     let mut features13 = vk::PhysicalDeviceVulkan13Features {

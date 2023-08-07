@@ -95,6 +95,7 @@ impl Texture {
                 &[barrier_initial],
             )
         };
+        let image_slice = self.staging.as_ref().unwrap();
         let buffer_copy_regions: Vec<_> = self
             .mip_maps
             .iter()
@@ -108,15 +109,14 @@ impl Texture {
                             .build(),
                     )
                     .image_extent(mm.extent().into())
-                    .buffer_offset(mm.offset as u64)
+                    .buffer_offset(image_slice.offset + mm.offset as u64)
                     .build()
             })
             .collect();
-        let image_buffer = self.staging.as_ref().unwrap().buffer;
         unsafe {
             ctx.device.cmd_copy_buffer_to_image(
                 cmd_buffer,
-                image_buffer,
+                image_slice.buffer,
                 self.image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &buffer_copy_regions,

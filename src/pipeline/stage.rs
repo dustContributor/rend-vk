@@ -87,41 +87,37 @@ impl Stage {
          *  we can free the buffers used back then.
          */
         self.release_reserved_buffers(&buffer_allocator);
-
-        if self.inputs.len() > 0 {
-            let mut desc_buffer_info = vec![
-                sampler_descriptors.binding_info(),
-                // image_descriptors.binding_info(),
-            ];
-            let mut desc_buffer_indices = vec![
-                super::DESCRIPTOR_SET_SAMPLER,
-                // super::DESCRIPTOR_SET_TARGET_IMAGE,
-            ];
-            let mut desc_buffer_offsets = vec![
-                sampler_descriptors.device.offset,
-                // image_descriptors.device.offset,
-            ];
-            if let Some(desc) = &self.input_descriptors {
-                desc_buffer_info.push(desc.binding_info());
-                // desc_buffer_indices.push(super::DESCRIPTOR_SET_TARGET_IMAGE);
-                desc_buffer_indices.push(1);
-                desc_buffer_offsets.push(0);
-            }
-            unsafe {
-                ctx.extension
-                    .descriptor_buffer
-                    .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
-                ctx.extension
-                    .descriptor_buffer
-                    .cmd_set_descriptor_buffer_offsets(
-                        command_buffer,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.layout,
-                        0,
-                        &desc_buffer_indices,
-                        &desc_buffer_offsets,
-                    );
-            }
+        let mut desc_buffer_info = vec![
+            sampler_descriptors.binding_info(),
+            image_descriptors.binding_info(),
+        ];
+        let mut desc_buffer_indices = vec![
+            0,
+            1,
+        ];
+        let mut desc_buffer_offsets = vec![
+            sampler_descriptors.device.offset,
+            image_descriptors.device.offset,
+        ];
+        if let Some(desc) = &self.input_descriptors {
+            desc_buffer_info.push(desc.binding_info());
+            desc_buffer_indices.push(2);
+            desc_buffer_offsets.push(0);
+        }
+        unsafe {
+            ctx.extension
+                .descriptor_buffer
+                .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
+            ctx.extension
+                .descriptor_buffer
+                .cmd_set_descriptor_buffer_offsets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.layout,
+                    0,
+                    &desc_buffer_indices,
+                    &desc_buffer_offsets,
+                );
         }
         unsafe {
             ctx.device
