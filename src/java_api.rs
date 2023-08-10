@@ -245,6 +245,8 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     format: u32,
     mip_maps: u64,
     mip_maps_len: u32,
+    name: u64,
+    name_len: u32,
     staging_size: u32,
 ) -> u32 {
     let mut renderer = to_renderer(renderer);
@@ -254,6 +256,12 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
         expected_mip_map_size == mip_maps_len,
         "mip_maps_len can't hold an exact count of mip maps!"
     );
+    let name = if name_len > 0 {
+        let name_chars = unsafe { std::slice::from_raw_parts(name as *mut u8, name_len as usize) };
+        std::str::from_utf8(name_chars).expect("invalid name utf8 string!")
+    } else {
+        "java_texture"
+    };
     let mip_maps: Vec<_> =
         unsafe { std::slice::from_raw_parts(mip_maps as *mut JavaMipMap, mip_map_count as usize) }
             .iter()
@@ -266,7 +274,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
             })
             .collect();
     let texture_id = renderer.gen_texture(
-        "java_texture".to_string(),
+        name.to_string(),
         Format::of_u32(format),
         &mip_maps,
         staging_size,
