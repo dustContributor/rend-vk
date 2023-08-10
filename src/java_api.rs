@@ -144,7 +144,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     let glfw_create_window_surface = unsafe {
         std::mem::transmute::<
             _,
-            extern "C" fn(vk::Instance, u64, u64, *mut vk::SurfaceKHR) -> vk::Result,
+            extern "C" fn(vk::Instance, u64, u64, *const vk::SurfaceKHR) -> vk::Result,
         >(glfw_create_window_surface as *const ())
     };
     let instance_extensions: &[*const i8] = if instance_extensions_len == 0 {
@@ -257,22 +257,24 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
         "mip_maps_len can't hold an exact count of mip maps!"
     );
     let name = if name_len > 0 {
-        let name_chars = unsafe { std::slice::from_raw_parts(name as *mut u8, name_len as usize) };
+        let name_chars =
+            unsafe { std::slice::from_raw_parts(name as *const u8, name_len as usize) };
         std::str::from_utf8(name_chars).expect("invalid name utf8 string!")
     } else {
         "java_texture"
     };
-    let mip_maps: Vec<_> =
-        unsafe { std::slice::from_raw_parts(mip_maps as *mut JavaMipMap, mip_map_count as usize) }
-            .iter()
-            .map(|e| MipMap {
-                width: e.width,
-                height: e.height,
-                index: e.index,
-                offset: e.offset,
-                size: e.size,
-            })
-            .collect();
+    let mip_maps: Vec<_> = unsafe {
+        std::slice::from_raw_parts(mip_maps as *const JavaMipMap, mip_map_count as usize)
+    }
+    .iter()
+    .map(|e| MipMap {
+        width: e.width,
+        height: e.height,
+        index: e.index,
+        offset: e.offset,
+        size: e.size,
+    })
+    .collect();
     let texture_id = renderer.gen_texture(
         name.to_string(),
         Format::of_u32(format),
@@ -361,7 +363,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     resources: u64,
     resources_len: u64,
 ) {
-    let mut renderer = unsafe { Box::from_raw(renderer as *mut Renderer) };
+    let mut renderer = to_renderer(renderer);
     let kind = TaskKind::of_u32(kind);
     let data =
         unsafe { std::slice::from_raw_parts(resources as *const u8, resources_len as usize) };
