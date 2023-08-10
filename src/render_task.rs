@@ -185,21 +185,26 @@ pub trait IntoDeviceBuffer {
 }
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct Transform {
     pub mvp: Mat4,
     pub mv: Mat4,
 }
 #[derive(Clone)]
+#[repr(C)]
 pub struct TransformExtra {
     pub prev_mvp: Mat4,
 }
 #[derive(Clone)]
+#[repr(C)]
 pub struct Material {
+    pub shininess: f32,
     pub diffuse_handle: u32,
     pub normal_handle: u32,
     pub glow_handle: u32,
 }
 #[derive(Clone)]
+#[repr(C)]
 pub struct DirLight {
     pub view_dir: Vec3,
     pub intensity: f32,
@@ -210,12 +215,14 @@ pub struct DirLight {
     pub inv_view_shadow_proj: Mat4,
 }
 #[derive(Clone)]
+#[repr(C)]
 pub struct PointLight {
     pub radius: f32,
     pub intensity: f32,
     pub color: Vec3,
 }
 #[derive(Clone)]
+#[repr(C)]
 pub struct SpotLight {
     pub cos_cutoff_rad: f32,
     pub sin_cutoff_rad: f32,

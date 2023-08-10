@@ -84,16 +84,14 @@ impl Texture {
             subresource_range: self.subresource_range(),
             ..Default::default()
         };
-        unsafe {
-            ctx.device.cmd_pipeline_barrier(
-                cmd_buffer,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier_initial],
-            )
+        let barrier_end = vk::ImageMemoryBarrier {
+            src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+            dst_access_mask: vk::AccessFlags::SHADER_READ,
+            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image: self.image,
+            subresource_range: self.subresource_range(),
+            ..Default::default()
         };
         let image_slice = self.staging.as_ref().unwrap();
         let buffer_copy_regions: Vec<_> = self
@@ -114,6 +112,17 @@ impl Texture {
             })
             .collect();
         unsafe {
+            ctx.device.cmd_pipeline_barrier(
+                cmd_buffer,
+                vk::PipelineStageFlags::HOST,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_initial],
+            )
+        };
+        unsafe {
             ctx.device.cmd_copy_buffer_to_image(
                 cmd_buffer,
                 image_slice.buffer,
@@ -121,15 +130,6 @@ impl Texture {
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &buffer_copy_regions,
             )
-        };
-        let barrier_end = vk::ImageMemoryBarrier {
-            src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-            dst_access_mask: vk::AccessFlags::SHADER_READ,
-            old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image: self.image,
-            subresource_range: self.subresource_range(),
-            ..Default::default()
         };
         unsafe {
             ctx.device.cmd_pipeline_barrier(
