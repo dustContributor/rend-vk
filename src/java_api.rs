@@ -415,13 +415,15 @@ fn unpack_resources<T>(start: usize, count: usize, data: &[u8]) -> (ResourceWrap
 where
     ResourceWrapper: WrapResource<T>,
 {
-    let (prefix, total, _) = unsafe { data[start..].align_to::<T>() };
+    let end = start + size_of::<T>() * count;
+    let (prefix, total, _) = unsafe { data[start..end].align_to::<T>() };
     if prefix.len() > 0 {
         panic!("misaligned struct array!");
     }
     if total.len() != count {
         panic!(
-            "unexpected resource count! expected {}, got {}",
+            "unexpected resource {} count! expected {}, got {}",
+            std::any::type_name::<T>(),
             count,
             total.len()
         );
