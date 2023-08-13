@@ -93,8 +93,8 @@ impl Stage {
         ];
         let mut desc_buffer_indices = vec![0, 1];
         let mut desc_buffer_offsets = vec![
-            sampler_descriptors.device.offset,
-            image_descriptors.device.offset,
+            0,
+            0,
         ];
         if let Some(desc) = &self.input_descriptors {
             desc_buffer_info.push(desc.binding_info());
@@ -138,7 +138,7 @@ impl Stage {
                     mesh_buffer.vertices.device_addr,
                     mesh_buffer.normals.device_addr,
                     mesh_buffer.tex_coords.device_addr,
-                ];
+                ]; 
                 // Append resource buffer addresses in the order they appear
                 push_constants.append(&mut self.reserve_and_fill_buffers(&buffer_allocator, task));
                 unsafe {

@@ -36,6 +36,12 @@ impl DeviceSlice {
             kind: BufferKind::Undefined,
         }
     }
+
+    pub fn read(&self) -> Vec<u8> {
+        let slice =
+            unsafe { std::slice::from_raw_parts(self.addr as *const u8, self.size as usize) };
+        slice.to_vec()
+    }
 }
 
 impl DeviceAllocator {

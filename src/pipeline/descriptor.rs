@@ -87,6 +87,9 @@ impl DescriptorBuffer {
                 mem.available()
             )
         };
+        // Clear descriptor memory initially *just in case*. Should be a pretty small write.
+        unsafe { std::ptr::write_bytes(device.addr as *mut u8, 0, device.size as usize) };
+        // Every descriptor is initially unoccupied
         let occupancy = BitVec::repeat(false, count as usize);
         ctx.try_set_debug_name(&name, layout);
         Self {

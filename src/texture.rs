@@ -14,7 +14,7 @@ pub struct Texture {
     pub staging: Option<Box<DeviceSlice>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MipMap {
     pub index: u32,
     pub width: u32,
@@ -67,6 +67,10 @@ impl Texture {
         }
     }
 
+    pub fn size(&self) -> u32 {
+        self.mip_maps.iter().map(|e| e.size).sum()
+    }
+
     fn subresource_range(&self) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {
             base_mip_level: 0,
@@ -75,6 +79,43 @@ impl Texture {
             layer_count: 1,
             ..Default::default()
         }
+    }
+
+    pub fn buffer_copy_regions(&self, offset: u64) -> Vec<vk::BufferImageCopy> {
+        self.mip_maps
+            .iter()
+            .map(|mm| {
+                vk::BufferImageCopy::builder()
+                    .image_subresource(
+                        vk::ImageSubresourceLayers::builder()
+                            .aspect_mask(self.format.aspect())
+                            .layer_count(1)
+                            .mip_level(mm.index)
+                            .build(),
+                    )
+                    .image_extent(mm.extent().into())
+                    .buffer_offset(offset + mm.offset as u64)
+                    .build()
+            })
+            .collect()
+    }
+
+    pub fn copy_into(
+        &self,
+        ctx: &VulkanContext,
+        cmd_buffer: vk::CommandBuffer,
+        buffer: DeviceSlice,
+    ) {
+        let regions = self.buffer_copy_regions(buffer.offset);
+        unsafe {
+            ctx.device.cmd_copy_image_to_buffer(
+                cmd_buffer,
+                self.image,
+                vk::ImageLayout::READ_ONLY_OPTIMAL,
+                buffer.buffer,
+                &regions,
+            )
+        };
     }
 
     pub fn transition_to_optimal(&self, ctx: &VulkanContext, cmd_buffer: vk::CommandBuffer) {
@@ -97,23 +138,7 @@ impl Texture {
             ..Default::default()
         };
         let image_slice = self.staging.as_ref().unwrap();
-        let buffer_copy_regions: Vec<_> = self
-            .mip_maps
-            .iter()
-            .map(|mm| {
-                vk::BufferImageCopy::builder()
-                    .image_subresource(
-                        vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(self.format.aspect())
-                            .layer_count(1)
-                            .mip_level(mm.index)
-                            .build(),
-                    )
-                    .image_extent(mm.extent().into())
-                    .buffer_offset(image_slice.offset + mm.offset as u64)
-                    .build()
-            })
-            .collect();
+        let buffer_copy_regions = self.buffer_copy_regions(image_slice.offset);
         unsafe {
             ctx.device.cmd_pipeline_barrier(
                 cmd_buffer,

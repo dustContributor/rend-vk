@@ -27,19 +27,22 @@ impl Format {
     }
 
     pub fn aspect(self) -> vk::ImageAspectFlags {
-        (if self.has_depth() {
+        let depth = if self.has_depth() {
             vk::ImageAspectFlags::DEPTH
         } else {
             vk::ImageAspectFlags::NONE
-        }) | (if self.has_stencil() {
+        };
+        let stencil = if self.has_stencil() {
             vk::ImageAspectFlags::STENCIL
         } else {
             vk::ImageAspectFlags::NONE
-        }) | (if self.has_depth() || self.has_stencil() {
-            vk::ImageAspectFlags::NONE
-        } else {
+        };
+        let aspect = depth | stencil;
+        return if aspect == vk::ImageAspectFlags::NONE {
             vk::ImageAspectFlags::COLOR
-        })
+        } else {
+            aspect
+        };
     }
 
     pub fn size_for(self, width: u32, height: u32) -> u32 {

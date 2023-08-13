@@ -149,6 +149,7 @@ impl Pipeline {
         let linear_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Linear);
         let nearest_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Nearest);
         let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
+        let image_descriptors = Self::init_images(ctx, descriptor_mem);
         let linear_sampler = sampler::Sampler {
             descriptor_offset: sampler_descriptors
                 .place_sampler_at(
@@ -171,7 +172,6 @@ impl Pipeline {
                 .0,
             ..nearest_sampler
         };
-        let image_descriptors = Self::init_images(ctx, descriptor_mem);
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {

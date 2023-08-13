@@ -22,7 +22,7 @@ use crate::{
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     format::Format,
-    pipeline::{self, attachment::Attachment, stage::Stage, Pipeline},
+    pipeline::{self, attachment::Attachment, Pipeline},
     render_task::{RenderTask, TaskKind},
     swapchain,
     texture::{MipMap, Texture},
@@ -49,7 +49,7 @@ pub struct Renderer {
     pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
     pub textures_by_id: HashMap<u32, Texture>,
 
-    optimal_transition_queue: Vec<Texture>,
+    optimal_transition_queue: Vec<u32>,
     ongoing_optimal_transitions: Vec<(u32, u64)>,
 
     mesh_buffer_ids: BitVec,
@@ -233,11 +233,10 @@ impl Renderer {
     }
 
     pub fn queue_texture_for_uploading(&mut self, id: u32) {
-        let texture = self
-            .textures_by_id
-            .get(&id)
-            .unwrap_or_else(|| panic!("missing texture with id {}", id));
-        self.optimal_transition_queue.push(texture.clone());
+        if !self.textures_by_id.contains_key(&id) {
+            panic!("missing texture with id {}", id);
+        }
+        self.optimal_transition_queue.push(id);
     }
 
     pub fn is_texture_uploaded(&self, id: u32) -> bool {
@@ -343,10 +342,11 @@ impl Renderer {
             }
         }
 
-        for texture in self.optimal_transition_queue.drain(..) {
+        for texture_id in self.optimal_transition_queue.drain(..) {
+            let texture = &self.textures_by_id[&texture_id];
             texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
             self.ongoing_optimal_transitions
-                .push((texture.id, pipeline.signal_value_for(current_frame + 1, 0)))
+                .push((texture_id, pipeline.signal_value_for(current_frame + 1, 0)))
         }
 
         for stage in pipeline.stages.iter_mut() {
@@ -356,7 +356,6 @@ impl Renderer {
                 total_stages,
                 self.pass_timeline_semaphore,
             );
-            // TODO: Release staging buffers for finished transitions
             stage.render(
                 &self.vulkan_context,
                 &self.batches_by_task_type,
