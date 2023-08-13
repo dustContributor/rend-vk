@@ -91,10 +91,7 @@ impl Stage {
             sampler_descriptors.binding_info(),
             image_descriptors.binding_info(),
         ];
-        let mut desc_buffer_indices = vec![
-            0,
-            1,
-        ];
+        let mut desc_buffer_indices = vec![0, 1];
         let mut desc_buffer_offsets = vec![
             sampler_descriptors.device.offset,
             image_descriptors.device.offset,
@@ -244,8 +241,8 @@ impl Stage {
         };
     }
 
-    pub fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
-        current_frame * total_stages as u64 + self.index as u64
+    fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
+        crate::pipeline::signal_value_for(current_frame, total_stages, self.index)
     }
 
     fn release_reserved_buffers(&mut self, mem: &DeviceAllocator) {

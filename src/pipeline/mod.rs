@@ -26,9 +26,17 @@ pub struct Pipeline {
     pub sampler_descriptors: DescriptorBuffer,
 }
 
+pub fn signal_value_for(current_frame: u64, total_stages: u32, stage_index: u32) -> u64 {
+    current_frame * total_stages as u64 + stage_index as u64
+}
+
 impl Pipeline {
     pub fn total_stages(&self) -> u32 {
         self.stages.len() as u32
+    }
+
+    pub fn signal_value_for(&self, current_frame: u64, stage_index: u32) -> u64 {
+        signal_value_for(current_frame, self.total_stages(), stage_index)
     }
 
     pub fn destroy(&self, device: &ash::Device) {

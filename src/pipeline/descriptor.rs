@@ -282,6 +282,17 @@ impl DescriptorBuffer {
         self.into_device_at(0)
     }
 
+    pub fn read_host(&self) -> Vec<u8> {
+        self.host.to_vec()
+    }
+
+    pub fn read_device(&self) -> Vec<u8> {
+        let slice = unsafe {
+            std::slice::from_raw_parts(self.device.addr as *const u8, self.device.size as usize)
+        };
+        slice.to_vec()
+    }
+
     pub fn into_device_at(&mut self, subset: u32) {
         assert!(
             subset < self.subsets,

@@ -1,4 +1,4 @@
-use ash::vk::{self, Extent2D};
+use ash::vk;
 
 use crate::{buffer::DeviceSlice, context::VulkanContext};
 
@@ -69,6 +69,7 @@ impl Texture {
 
     fn subresource_range(&self) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {
+            base_mip_level: 0,
             aspect_mask: self.format.aspect(),
             level_count: self.mip_map_count(),
             layer_count: 1,
@@ -79,18 +80,20 @@ impl Texture {
     pub fn transition_to_optimal(&self, ctx: &VulkanContext, cmd_buffer: vk::CommandBuffer) {
         let barrier_initial = vk::ImageMemoryBarrier {
             image: self.image,
-            dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             subresource_range: self.subresource_range(),
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+            old_layout: vk::ImageLayout::UNDEFINED,
+            new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             ..Default::default()
         };
         let barrier_end = vk::ImageMemoryBarrier {
+            image: self.image,
+            subresource_range: self.subresource_range(),
             src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
             dst_access_mask: vk::AccessFlags::SHADER_READ,
             old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image: self.image,
-            subresource_range: self.subresource_range(),
             ..Default::default()
         };
         let image_slice = self.staging.as_ref().unwrap();
@@ -114,7 +117,7 @@ impl Texture {
         unsafe {
             ctx.device.cmd_pipeline_barrier(
                 cmd_buffer,
-                vk::PipelineStageFlags::HOST,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::DependencyFlags::empty(),
                 &[],
@@ -142,6 +145,17 @@ impl Texture {
                 &[barrier_end],
             )
         };
+    }
+
+    pub fn read_staging(&self) -> Vec<u8> {
+        if let Some(device) = &self.staging {
+            let slice = unsafe {
+                std::slice::from_raw_parts(device.addr as *const u8, device.size as usize)
+            };
+            slice.to_vec()
+        } else {
+            Vec::new()
+        }
     }
 }
 

@@ -309,48 +309,53 @@ impl Renderer {
         let total_stages = self.pipeline.total_stages();
         let pipeline = &mut self.pipeline;
 
-        for stage in pipeline.stages.iter_mut() {
-            for texture in self.optimal_transition_queue.drain(..) {
-                texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
-                self.ongoing_optimal_transitions.push((
-                    texture.id,
-                    stage.signal_value_for(current_frame, total_stages),
-                ))
+        if !self.ongoing_optimal_transitions.is_empty() {
+            let current_timeline_counter = unsafe {
+                self.vulkan_context
+                    .device
+                    .get_semaphore_counter_value(self.pass_timeline_semaphore)
+                    .unwrap()
+            };
+            let prev_len = self.ongoing_optimal_transitions.len();
+            self.ongoing_optimal_transitions.retain(|e| {
+                if e.1 > current_timeline_counter {
+                    return true;
+                }
+                let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
+                // Free the staging buffer after it has been used
+                match &texture.staging {
+                    Some(staging) => {
+                        let device = staging.as_ref().clone();
+                        self.general_allocator.free(device);
+                    }
+                    _ => panic!(
+                        "staging buffer for texture {} {} is missing!",
+                        texture.id, texture.name
+                    ),
+                }
+                // Set staging to None to mark the texture as "uploaded"
+                texture.staging = None;
+                return false;
+            });
+            if prev_len != self.ongoing_optimal_transitions.len() {
+                // Update the descriptors on the device
+                pipeline.image_descriptors.into_device();
             }
+        }
+
+        for texture in self.optimal_transition_queue.drain(..) {
+            texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
+            self.ongoing_optimal_transitions
+                .push((texture.id, pipeline.signal_value_for(current_frame + 1, 0)))
+        }
+
+        for stage in pipeline.stages.iter_mut() {
             stage.wait_for_previous_frame(
                 &self.vulkan_context.device,
                 current_frame,
                 total_stages,
                 self.pass_timeline_semaphore,
             );
-            if !self.ongoing_optimal_transitions.is_empty() {
-                let current_timeline_counter = unsafe {
-                    self.vulkan_context
-                        .device
-                        .get_semaphore_counter_value(self.pass_timeline_semaphore)
-                        .unwrap()
-                };
-                self.ongoing_optimal_transitions.retain(|e| {
-                    if e.1 > current_timeline_counter {
-                        return true;
-                    }
-                    let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
-                    // Free the staging buffer after it has been used
-                    match &texture.staging {
-                        Some(staging) => {
-                            let device = staging.as_ref().clone();
-                            self.general_allocator.free(device);
-                        }
-                        _ => panic!(
-                            "staging buffer for texture {} {} is missing!",
-                            texture.id, texture.name
-                        ),
-                    }
-                    // Set staging to None to mark the texture as "uploaded"
-                    texture.staging = None;
-                    return false;
-                });
-            }
             // TODO: Release staging buffers for finished transitions
             stage.render(
                 &self.vulkan_context,
@@ -582,7 +587,7 @@ where
 
     log::trace!("creating allocators...");
     let mut general_allocator = DeviceAllocator::new_general(&vulkan_context, 64 * 1024 * 1024);
-    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 128 * 1024);
+    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 1024 * 1024);
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
