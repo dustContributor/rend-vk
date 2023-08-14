@@ -9,12 +9,14 @@ fn copy_into<T>(
     count: u32,
     kind: ResourceKind,
 ) -> DeviceSlice {
-    assert!(
-        count as usize == src.len(),
-        "Expected {} resources, found {}",
-        count,
-        src.len()
-    );
+    if count as usize != src.len() {
+        panic!(
+            "expected {} resources of type {}, found {}",
+            count,
+            std::any::type_name::<T>(),
+            src.len()
+        );
+    }
     let len = kind.resource_size() as u64 * count as u64;
     let device = mem.alloc(len).unwrap();
     let src = src.as_ptr() as *const u8;

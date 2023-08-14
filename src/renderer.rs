@@ -440,25 +440,6 @@ impl Renderer {
     }
 }
 
-// #[no_mangle]
-// pub extern "C" fn add_to_queue(
-//     owner: u64,
-//     kind: u32,
-//     mesh_id: u32,
-//     instance_count: u32,
-//     vertex_count: u32,
-//     base_vertex: u32,
-//     indices_offset: u32,
-//     primitive: u32,
-//     resource_bits: u32,
-//     resources: u64,
-//     resources_len: u32
-// ) {
-//     let owner = owner as *const Renderer;
-//     let resources = resources as *const u8;
-//     let slice = unsafe { std::slice::from_raw_parts(resources, resources_len as usize) };
-// }
-
 pub fn make_renderer<F>(instance_extensions: &[*const i8], create_surface: F) -> Renderer
 where
     F: FnOnce(&ash::Entry, &ash::Instance, *mut vk::SurfaceKHR) -> vk::Result,
@@ -819,50 +800,70 @@ pub fn select_physical_device(
 
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     #[derive(Clone, Debug, Copy)]
-    struct Attrib {
+    struct Attrib3f {
         pub values: [f32; 3],
     }
+    #[derive(Clone, Debug, Copy)]
+    struct Attrib2f {
+        pub values: [f32; 2],
+    }
     let vertices = [
-        Attrib {
+        Attrib3f {
             values: [-1.0, 1.0, 0.0],
         },
-        Attrib {
+        Attrib3f {
             values: [1.0, 1.0, 0.0],
         },
-        Attrib {
+        Attrib3f {
             values: [0.0, -1.0, 0.0],
         },
     ];
+    let tex_coords = [
+        Attrib2f { values: [0.0, 0.0] },
+        Attrib2f { values: [1.0, 0.0] },
+        Attrib2f { values: [1.0, 1.0] },
+    ];
+    let normals = [
+        Attrib3f {
+            values: [0.0, 1.0, 0.0],
+        },
+        Attrib3f {
+            values: [1.0, 1.0, 0.0],
+        },
+        Attrib3f {
+            values: [1.0, 0.0, 0.0],
+        },
+    ];
     let indices = [0u32, 1, 2];
-    let index_buffer = buffer_allocator
-        .alloc(std::mem::size_of_val(&indices) as u64)
-        .expect("couldn't allocate index buffer");
-    let mut index_slice = unsafe {
-        Align::new(
-            index_buffer.addr,
-            align_of::<u32>() as u64,
-            buffer_allocator.buffer.alignment,
-        )
-    };
-    index_slice.copy_from_slice(&indices);
 
-    let vertex_buffer = buffer_allocator
-        .alloc((vertices.len() * std::mem::size_of::<Attrib>()) as u64)
-        .expect("couldn't allocate vertex buffer");
-    let mut vertex_slice = unsafe {
-        Align::new(
-            vertex_buffer.addr,
-            align_of::<f32>() as u64,
-            buffer_allocator.buffer.alignment,
-        )
-    };
-    vertex_slice.copy_from_slice(&vertices);
+    fn alloc_and_copy<T: std::marker::Copy>(
+        elements: &[T],
+        buffer_allocator: &mut DeviceAllocator,
+    ) -> DeviceSlice {
+        let buffer = buffer_allocator
+            .alloc(std::mem::size_of_val(&elements) as u64)
+            .expect("couldn't allocate index buffer");
+        let mut slice = unsafe {
+            Align::new(
+                buffer.addr,
+                align_of::<u32>() as u64,
+                buffer_allocator.buffer.alignment,
+            )
+        };
+        slice.copy_from_slice(elements);
+        buffer
+    }
+
+    let index_buffer = alloc_and_copy(&indices, buffer_allocator);
+    let vertex_buffer = alloc_and_copy(&vertices, buffer_allocator);
+    let normal_buffer = alloc_and_copy(&normals, buffer_allocator);
+    let tex_coord_buffer = alloc_and_copy(&tex_coords, buffer_allocator);
 
     MeshBuffer {
         vertices: vertex_buffer,
         indices: index_buffer,
-        tex_coords: DeviceSlice::empty(),
-        normals: DeviceSlice::empty(),
+        tex_coords: tex_coord_buffer,
+        normals: normal_buffer,
         count: indices.len() as u32,
     }
 }

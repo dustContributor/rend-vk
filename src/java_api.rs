@@ -416,19 +416,22 @@ where
     ResourceWrapper: WrapResource<T>,
 {
     let end = start + size_of::<T>() * count;
-    let (prefix, total, _) = unsafe { data[start..end].align_to::<T>() };
-    if prefix.len() > 0 {
-        panic!("misaligned struct array!");
+    let (prefix, items, sufix) = unsafe { data[start..end].align_to::<T>() };
+    if sufix.len() > 0 || prefix.len() > 0 {
+        panic!(
+            "misaligned struct array! sufix length: {}, prefix length: {}",
+            sufix.len(),
+            prefix.len()
+        );
     }
-    if total.len() != count {
+    if items.len() != count {
         panic!(
             "unexpected resource {} count! expected {}, got {}",
             std::any::type_name::<T>(),
             count,
-            total.len()
+            items.len()
         );
     }
-    let items = &total[..count];
     let next_end = items.as_ptr_range().end as usize - data.as_ptr() as usize;
     let wrapper = ResourceWrapper::wrapper_for(items);
     return (wrapper, next_end);
