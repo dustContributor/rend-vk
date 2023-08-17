@@ -30,7 +30,7 @@ pub enum TaskKind {
 }
 
 impl TaskKind {
-    const fn mask(self) -> u32 {
+    pub const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
 
@@ -74,7 +74,7 @@ impl TaskKind {
 const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
 impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
-#[derive(Clone, Copy, strum_macros::Display)]
+#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display)]
 #[repr(u8)]
 pub enum ResourceKind {
     Transform = 0,
@@ -91,7 +91,7 @@ pub enum ResourceKind {
 }
 
 impl ResourceKind {
-    const fn mask(self) -> u32 {
+    pub const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
     }
 
@@ -164,25 +164,8 @@ impl ResourceKind {
     }
 }
 
-impl IntoDeviceBuffer for Transform {
-    fn into_device(&self, dst: *mut std::ffi::c_void) {
-        let slice = unsafe {
-            std::slice::from_raw_parts_mut(
-                dst as *mut f32,
-                size_of::<Transform>() / size_of::<f32>(),
-            )
-        };
-        self.mvp.write_cols_to_slice(slice);
-        // self.mv.write_cols_to_slice(slice);
-    }
-}
-
 const MAX_RESOURCE_KIND: u8 = ResourceKind::TransformExtra.to_u8();
 impl UsedAsIndex<MAX_RESOURCE_KIND> for ResourceKind {}
-
-pub trait IntoDeviceBuffer {
-    fn into_device(&self, dst: *mut std::ffi::c_void);
-}
 
 #[derive(Clone)]
 #[repr(C)]
@@ -258,7 +241,7 @@ pub enum ResourceWrapper {
 }
 
 pub trait WrapResource<T> {
-    fn wrapper_for(res: &[T]) -> ResourceWrapper {
+    fn wrapper_for(_: &[T]) -> ResourceWrapper {
         panic!("{}::def::invalid", std::any::type_name::<T>())
     }
 }
