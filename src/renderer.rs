@@ -24,6 +24,7 @@ use crate::{
     format::Format,
     pipeline::{self, attachment::Attachment, Pipeline},
     render_task::{RenderTask, TaskKind},
+    shader_resource::{ResourceKind, SingleResource},
     swapchain,
     texture::{MipMap, Texture},
     UsedAsIndex,
@@ -39,26 +40,26 @@ pub struct MeshBuffer {
 }
 
 pub struct Renderer {
-    pub pipeline: Pipeline,
-    pub batches_by_task_type: Vec<Vec<RenderTask>>,
-    pub swapchain_context: swapchain::SwapchainContext,
-    pub vulkan_context: context::VulkanContext,
-    pub debug_context: Option<Box<debug::DebugContext>>,
-    pub general_allocator: DeviceAllocator,
-    pub descriptor_allocator: DeviceAllocator,
-    pub mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
-    pub textures_by_id: HashMap<u32, Texture>,
+    pub vulkan_context: Box<context::VulkanContext>,
+    swapchain_context: Box<swapchain::SwapchainContext>,
+    debug_context: Option<Box<debug::DebugContext>>,
+    pipeline: Box<Pipeline>,
+    general_allocator: Box<DeviceAllocator>,
+    descriptor_allocator: Box<DeviceAllocator>,
+    mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
+    textures_by_id: HashMap<u32, Texture>,
+    shader_resources_by_kind: HashMap<ResourceKind, SingleResource>,
+    batches_by_task_type: Vec<Vec<RenderTask>>,
+    mesh_buffer_ids: BitVec,
 
     optimal_transition_queue: Vec<u32>,
     ongoing_optimal_transitions: Vec<(u32, u64)>,
-
-    mesh_buffer_ids: BitVec,
 
     present_queue: vk::Queue,
 
     pool: vk::CommandPool,
     draw_command_buffer: vk::CommandBuffer,
-    setup_command_buffer: vk::CommandBuffer,
+    _setup_command_buffer: vk::CommandBuffer,
 
     present_complete_semaphore: vk::Semaphore,
     rendering_complete_semaphore: vk::Semaphore,
@@ -245,6 +246,10 @@ impl Renderer {
             .get(&id)
             .unwrap_or_else(|| panic!("missing texture with id {}", id));
         return texture.staging.is_none();
+    }
+
+    pub fn place_shader_resource(&mut self, kind: ResourceKind, item: SingleResource) {
+        self.shader_resources_by_kind.insert(kind, item);
     }
 
     pub fn render(&mut self) {
@@ -601,19 +606,19 @@ where
 
     log::trace!("finishing renderer...");
     let mut renderer = Renderer {
-        pipeline: pip,
+        pipeline: Box::new(pip),
         batches_by_task_type,
         debug_context,
-        swapchain_context,
-        vulkan_context,
-        general_allocator,
-        descriptor_allocator,
+        swapchain_context: Box::new(swapchain_context),
+        vulkan_context: Box::new(vulkan_context),
+        general_allocator: Box::new(general_allocator),
+        descriptor_allocator: Box::new(descriptor_allocator),
         mesh_buffers_by_id,
         mesh_buffer_ids,
         textures_by_id,
         draw_command_buffer,
         present_queue,
-        setup_command_buffer,
+        _setup_command_buffer: setup_command_buffer,
         rendering_complete_semaphore,
         pass_timeline_semaphore,
         present_complete_semaphore,
@@ -622,6 +627,7 @@ where
         pool,
         optimal_transition_queue: Vec::new(),
         ongoing_optimal_transitions: Vec::new(),
+        shader_resources_by_kind: HashMap::new(),
         current_frame: AtomicU64::new(0),
     };
     // Reserve the texture ID 0 with an empty texture

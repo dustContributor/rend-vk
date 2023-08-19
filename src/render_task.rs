@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::Hash};
 
-use crate::shader_resource::{ResourceKind, ResourceWrapper};
+use crate::shader_resource::{ResourceKind, MultiResource};
 use crate::UsedAsIndex;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, serde::Deserialize)]
@@ -77,5 +77,5 @@ pub struct RenderTask {
     pub kind: TaskKind,
     pub mesh_buffer_id: u32,
     pub instance_count: u32,
-    pub resources: HashMap<ResourceKind, ResourceWrapper>,
+    pub resources: HashMap<ResourceKind, MultiResource>,
 }

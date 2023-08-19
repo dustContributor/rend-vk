@@ -11,9 +11,7 @@ use crate::{
     format::Format,
     render_task::{self, TaskKind},
     renderer::{self, MeshBuffer, Renderer},
-    shader_resource::{
-        DirLight, Material, ResourceKind, ResourceWrapper, Transform, TransformExtra, WrapResource,
-    },
+    shader_resource::*,
     texture::{MipMap, Texture},
 };
 
@@ -353,6 +351,35 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
 }
 
 #[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_placeShaderResource(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    kind: u32,
+    resource: u64,
+    resource_len: u64,
+) {
+    let mut renderer = to_renderer(renderer);
+    let kind = ResourceKind::of_u32(kind);
+    let data = unsafe { std::slice::from_raw_parts(resource as *const u8, resource_len as usize) };
+    let (resource, _) = match kind {
+        ResourceKind::Transform => unpack_single_resource::<Transform>(data),
+        ResourceKind::Material => unpack_single_resource::<Material>(data),
+        ResourceKind::DirLight => unpack_single_resource::<DirLight>(data),
+        ResourceKind::Frustum => unpack_single_resource::<Frustum>(data),
+        ResourceKind::ViewRay => unpack_single_resource::<ViewRay>(data),
+        ResourceKind::PointLight => unpack_single_resource::<PointLight>(data),
+        ResourceKind::SpotLight => unpack_single_resource::<SpotLight>(data),
+        ResourceKind::Joint => unpack_single_resource::<Joint>(data),
+        ResourceKind::Sky => unpack_single_resource::<Sky>(data),
+        ResourceKind::StaticShadow => unpack_single_resource::<StaticShadow>(data),
+        ResourceKind::TransformExtra => unpack_single_resource::<TransformExtra>(data),
+    };
+    renderer.place_shader_resource(kind, resource);
+    Box::leak(renderer);
+}
+
+#[no_mangle]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -383,7 +410,7 @@ fn unpack_render_task_resources(
     data: &[u8],
     resource_bits: u32,
     instances: u32,
-) -> HashMap<ResourceKind, ResourceWrapper> {
+) -> HashMap<ResourceKind, MultiResource> {
     let instances = instances as usize;
     let resource_bits = resource_bits.view_bits::<bitvec::order::Lsb0>();
     let mut offset = 0usize;
@@ -391,18 +418,18 @@ fn unpack_render_task_resources(
     for b in resource_bits.iter_ones() {
         let kind = ResourceKind::of_usize(b);
         let (wrapper, next_end) = match kind {
-            ResourceKind::Transform => unpack_resources::<Transform>(offset, instances, data),
-            ResourceKind::Material => unpack_resources::<Material>(offset, instances, data),
-            ResourceKind::DirLight => unpack_resources::<DirLight>(offset, instances, data),
-            // ResourceKind::Frustum => unpack_resources::<Frustum>(start, end, data),
-            // ResourceKind::ViewRay => unpack_resources::<ViewRay>(start, end, data),
-            // ResourceKind::PointLight => unpack_resources::<PointLight>(start, end, data),
-            // ResourceKind::SpotLight => unpack_resources::<SpotLight>(start, end, data),
-            // ResourceKind::Joint => unpack_resources::<Joint>(start, end, data),
-            // ResourceKind::Sky => unpack_resources::<Sky>(start, end, data),
-            // ResourceKind::StaticShadow => unpack_resources::<StaticShadow>(start, end, data),
+            ResourceKind::Transform => unpack_multi_resource::<Transform>(offset, instances, data),
+            ResourceKind::Material => unpack_multi_resource::<Material>(offset, instances, data),
+            ResourceKind::DirLight => unpack_multi_resource::<DirLight>(offset, instances, data),
+            // ResourceKind::Frustum => unpack_multi_resources::<Frustum>(start, end, data),
+            // ResourceKind::ViewRay => unpack_multi_resources::<ViewRay>(start, end, data),
+            // ResourceKind::PointLight => unpack_multi_resources::<PointLight>(start, end, data),
+            // ResourceKind::SpotLight => unpack_multi_resources::<SpotLight>(start, end, data),
+            // ResourceKind::Joint => unpack_multi_resources::<Joint>(start, end, data),
+            // ResourceKind::Sky => unpack_multi_resources::<Sky>(start, end, data),
+            // ResourceKind::StaticShadow => unpack_multi_resources::<StaticShadow>(start, end, data),
             ResourceKind::TransformExtra => {
-                unpack_resources::<TransformExtra>(offset, instances, data)
+                unpack_multi_resource::<TransformExtra>(offset, instances, data)
             }
             _ => panic!("unrecognized resource kind {}", kind),
         };
@@ -412,9 +439,23 @@ fn unpack_render_task_resources(
     return resources_by_kind;
 }
 
-fn unpack_resources<T>(start: usize, count: usize, data: &[u8]) -> (ResourceWrapper, usize)
+fn unpack_single_resource<T>(data: &[u8]) -> (SingleResource, usize)
 where
-    ResourceWrapper: WrapResource<T>,
+    SingleResource: WrapResource<T, SingleResource>,
+{
+    unpack_resource::<T, SingleResource>(0, 1, data)
+}
+
+fn unpack_multi_resource<T>(start: usize, count: usize, data: &[u8]) -> (MultiResource, usize)
+where
+    MultiResource: WrapResource<T, MultiResource>,
+{
+    unpack_resource::<T, MultiResource>(start, count, data)
+}
+
+fn unpack_resource<T, R>(start: usize, count: usize, data: &[u8]) -> (R, usize)
+where
+    R: WrapResource<T, R>,
 {
     let end = start + size_of::<T>() * count;
     let (prefix, items, sufix) = unsafe { data[start..end].align_to::<T>() };
@@ -434,6 +475,6 @@ where
         );
     }
     let next_end = items.as_ptr_range().end as usize - data.as_ptr() as usize;
-    let wrapper = ResourceWrapper::wrapper_for(items);
+    let wrapper = R::wrapper_for(items);
     return (wrapper, next_end);
 }

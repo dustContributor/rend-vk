@@ -1,7 +1,7 @@
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     render_task::RenderTask,
-    shader_resource::{ResourceKind, ResourceWrapper},
+    shader_resource::{ResourceKind, MultiResource},
 };
 
 fn copy_into<T>(
@@ -31,17 +31,17 @@ fn copy_into<T>(
 pub fn alloc_and_fill(mem: &DeviceAllocator, task: &RenderTask, kind: ResourceKind) -> DeviceSlice {
     match &task.resources.get(&kind) {
         Some(resource) => match resource {
-            ResourceWrapper::Transform(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::Material(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::DirLight(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::Frustum(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::ViewRay(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::PointLight(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::SpotLight(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::Joint(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::Sky(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::StaticShadow(e) => copy_into(mem, e, task.instance_count, kind),
-            ResourceWrapper::TransformExtra(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::Transform(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::Material(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::DirLight(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::Frustum(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::ViewRay(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::PointLight(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::SpotLight(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::Joint(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::Sky(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::StaticShadow(e) => copy_into(mem, e, task.instance_count, kind),
+            MultiResource::TransformExtra(e) => copy_into(mem, e, task.instance_count, kind),
         },
         _ => panic!("unknown resource kind {}", kind),
     }
