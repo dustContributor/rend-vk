@@ -9,11 +9,11 @@ use bitvec::view::BitView;
 
 use crate::{
     format::Format,
-    render_task::{
-        self, DirLight, Material, ResourceKind, ResourceWrapper, TaskKind, Transform,
-        TransformExtra, WrapResource,
-    },
+    render_task::{self, TaskKind},
     renderer::{self, MeshBuffer, Renderer},
+    shader_resource::{
+        DirLight, Material, ResourceKind, ResourceWrapper, Transform, TransformExtra, WrapResource,
+    },
     texture::{MipMap, Texture},
 };
 

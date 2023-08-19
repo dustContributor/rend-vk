@@ -1,6 +1,7 @@
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
-    render_task::{RenderTask, ResourceKind, ResourceWrapper},
+    render_task::RenderTask,
+    shader_resource::{ResourceKind, ResourceWrapper},
 };
 
 fn copy_into<T>(

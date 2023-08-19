@@ -2,7 +2,7 @@ use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::{format, render_task::ResourceKind};
+use crate::{format, shader_resource::ResourceKind};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
