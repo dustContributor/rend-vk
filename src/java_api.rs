@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     mem::size_of,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -382,11 +383,11 @@ fn unpack_render_task_resources(
     data: &[u8],
     resource_bits: u32,
     instances: u32,
-) -> [ResourceWrapper; 11] {
+) -> HashMap<ResourceKind, ResourceWrapper> {
     let instances = instances as usize;
     let resource_bits = resource_bits.view_bits::<bitvec::order::Lsb0>();
     let mut offset = 0usize;
-    let mut resource_array = render_task::resource_array();
+    let mut resources_by_kind = HashMap::with_capacity(resource_bits.count_ones());
     for b in resource_bits.iter_ones() {
         let kind = ResourceKind::of_usize(b);
         let (wrapper, next_end) = match kind {
@@ -406,9 +407,9 @@ fn unpack_render_task_resources(
             _ => panic!("unrecognized resource kind {}", kind),
         };
         offset = next_end;
-        resource_array[b] = wrapper;
+        resources_by_kind.insert(kind, wrapper);
     }
-    return resource_array;
+    return resources_by_kind;
 }
 
 fn unpack_resources<T>(start: usize, count: usize, data: &[u8]) -> (ResourceWrapper, usize)

@@ -1,4 +1,8 @@
-use std::mem::{align_of, size_of};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    mem::{align_of, size_of},
+};
 
 use glam::{Mat4, Vec3};
 
@@ -74,7 +78,7 @@ impl TaskKind {
 const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
 impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
-#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display)]
+#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display, Hash)]
 #[repr(u8)]
 pub enum ResourceKind {
     Transform = 0,
@@ -284,21 +288,9 @@ pub struct RenderTask {
     pub kind: TaskKind,
     pub mesh_buffer_id: u32,
     pub instance_count: u32,
-    pub resources: [ResourceWrapper; ResourceKind::MAX_LEN],
+    pub resources: HashMap<ResourceKind, ResourceWrapper>,
 }
 
-pub fn resource_array() -> [ResourceWrapper; ResourceKind::MAX_LEN] {
-    return [
-        ResourceWrapper::Transform(Vec::new()),
-        ResourceWrapper::Material(Vec::new()),
-        ResourceWrapper::DirLight(Vec::new()),
-        ResourceWrapper::Frustum(Vec::new()),
-        ResourceWrapper::ViewRay(Vec::new()),
-        ResourceWrapper::PointLight(Vec::new()),
-        ResourceWrapper::SpotLight(Vec::new()),
-        ResourceWrapper::Joint(Vec::new()),
-        ResourceWrapper::Sky(Vec::new()),
-        ResourceWrapper::StaticShadow(Vec::new()),
-        ResourceWrapper::TransformExtra(Vec::new()),
-    ];
+pub fn resources_by_kind_map() -> HashMap<ResourceKind, ResourceWrapper> {
+    HashMap::new()
 }

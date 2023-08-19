@@ -28,17 +28,20 @@ fn copy_into<T>(
 }
 
 pub fn alloc_and_fill(mem: &DeviceAllocator, task: &RenderTask, kind: ResourceKind) -> DeviceSlice {
-    match &task.resources[kind.to_usize()] {
-        ResourceWrapper::Transform(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::Material(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::DirLight(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::Frustum(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::ViewRay(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::PointLight(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::SpotLight(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::Joint(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::Sky(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::StaticShadow(e) => copy_into(mem, e, task.instance_count, kind),
-        ResourceWrapper::TransformExtra(e) => copy_into(mem, e, task.instance_count, kind),
+    match &task.resources.get(&kind) {
+        Some(resource) => match resource {
+            ResourceWrapper::Transform(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::Material(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::DirLight(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::Frustum(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::ViewRay(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::PointLight(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::SpotLight(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::Joint(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::Sky(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::StaticShadow(e) => copy_into(mem, e, task.instance_count, kind),
+            ResourceWrapper::TransformExtra(e) => copy_into(mem, e, task.instance_count, kind),
+        },
+        _ => panic!("unknown resource kind {}", kind),
     }
 }
