@@ -376,14 +376,6 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
-            let ubo_descriptors = (pass.updaters.len() > 0).then(|| {
-                Box::new(Self::init_ubo_desc_buffer(
-                    ctx,
-                    descriptor_mem,
-                    &pass.name,
-                    pass.updaters.len() as u32,
-                ))
-            });
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
                 rendering: super::stage::Rendering {
@@ -394,8 +386,16 @@ impl Pipeline {
                 task_kind: pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
-                updaters: pass.updaters.iter().map(|e| e.to_resource_kind()).collect(),
-                ubo_descriptors,
+                per_instance_updaters: pass
+                    .per_instance_updaters
+                    .iter()
+                    .map(|e| e.to_resource_kind())
+                    .collect(),
+                per_pass_updaters: pass
+                    .per_pass_updaters
+                    .iter()
+                    .map(|e| e.to_resource_kind())
+                    .collect(),
                 inputs,
                 outputs,
                 index: stage_index,

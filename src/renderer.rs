@@ -365,6 +365,7 @@ impl Renderer {
                 &self.vulkan_context,
                 &self.batches_by_task_type,
                 &self.mesh_buffers_by_id,
+                &self.shader_resources_by_kind,
                 &sampler_descriptors,
                 &image_descriptors,
                 &buffer_allocator,

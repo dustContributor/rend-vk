@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
-    render_task::{RenderTask, ResourceKind, TaskKind},
+    render_task::{RenderTask, TaskKind},
     renderer::MeshBuffer,
+    shader_resource::{ResourceKind, SingleResource},
     updater,
 };
 use ash::vk::{self, ShaderStageFlags};
@@ -16,9 +17,9 @@ pub struct Stage {
     pub layout: vk::PipelineLayout,
     pub outputs: Vec<Attachment>,
     pub inputs: Vec<Attachment>,
-    pub updaters: Vec<ResourceKind>,
+    pub per_instance_updaters: Vec<ResourceKind>,
+    pub per_pass_updaters: Vec<ResourceKind>,
     pub input_descriptors: Option<Box<DescriptorBuffer>>,
-    pub ubo_descriptors: Option<Box<DescriptorBuffer>>,
     pub task_kind: TaskKind,
     pub index: u32,
     pub is_final: bool,
@@ -39,6 +40,7 @@ impl Stage {
         ctx: &crate::context::VulkanContext,
         batches_by_task_type: &Vec<Vec<RenderTask>>,
         mesh_buffers_by_id: &HashMap<u32, MeshBuffer>,
+        shader_resources_by_kind: &HashMap<ResourceKind, SingleResource>,
         sampler_descriptors: &DescriptorBuffer,
         image_descriptors: &DescriptorBuffer,
         buffer_allocator: &DeviceAllocator,
@@ -92,10 +94,7 @@ impl Stage {
             image_descriptors.binding_info(),
         ];
         let mut desc_buffer_indices = vec![0, 1];
-        let mut desc_buffer_offsets = vec![
-            0,
-            0,
-        ];
+        let mut desc_buffer_offsets = vec![0, 0];
         if let Some(desc) = &self.input_descriptors {
             desc_buffer_info.push(desc.binding_info());
             desc_buffer_indices.push(2);
@@ -127,22 +126,28 @@ impl Stage {
                 self.pipeline,
             );
         }
+        let per_pass_buffers =
+            self.reserve_pass_buffers(&buffer_allocator, shader_resources_by_kind);
         if self.task_kind == TaskKind::Fullscreen {
             unsafe { ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0) }
         } else {
             let tasks = &batches_by_task_type[self.task_kind.to_usize()];
             for task in tasks {
-                /* Upload all the per-instance data for this task */
                 let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
-                let mut push_constants = vec![
+                // Most of the time it's nowehere near going to be close to 32 addresses
+                let mut push_constants: Vec<u64> = Vec::with_capacity(32);
+                // First appearing, the per-pass data, uploaded once and repeated for all tasks
+                push_constants.extend(&per_pass_buffers);
+                // Second, the addresses pointing to the already uploaded vertex data
+                push_constants.extend(&[
                     mesh_buffer.vertices.device_addr,
                     mesh_buffer.normals.device_addr,
                     mesh_buffer.tex_coords.device_addr,
-                ]; 
-                // Append resource buffer addresses in the order they appear
-                push_constants.append(&mut self.reserve_and_fill_buffers(&buffer_allocator, task));
+                ]);
+                // Third, the per-instance date for the task, uploaded per task
+                push_constants.extend(&self.reserve_instance_buffers(&buffer_allocator, task));
+                // Now we push the data into the command stream and issue the draws
                 unsafe {
-                    // Upload push constants
                     let push_constants = push_constants.align_to::<u8>().1;
                     ctx.device.cmd_push_constants(
                         command_buffer,
@@ -251,17 +256,42 @@ impl Stage {
         }
     }
 
-    fn reserve_and_fill_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {
+    fn reserve_instance_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {
         // We'll need the addresses to pass them to the shaders later
         let mut device_addrs = Vec::new();
-        device_addrs.reserve_exact(self.updaters.len());
+        device_addrs.reserve_exact(self.per_instance_updaters.len());
 
-        for kind in self.updaters.clone() {
-            let buffer = updater::alloc_and_fill(mem, task, kind.clone());
-            device_addrs.push(buffer.device_addr);
-            self.reserved_buffers.push(buffer);
+        for kind in self.per_instance_updaters.clone() {
+            if let Some(res) = task.resources.get(&kind) {
+                let buffer = updater::alloc_and_fill_multi(mem, res, task.instance_count);
+                device_addrs.push(buffer.device_addr);
+                self.reserved_buffers.push(buffer);
+            } else {
+                panic!("unavailable resource kind {}", kind)
+            }
         }
 
+        device_addrs
+    }
+
+    fn reserve_pass_buffers(
+        &mut self,
+        mem: &DeviceAllocator,
+        shader_resources_by_kind: &HashMap<ResourceKind, SingleResource>,
+    ) -> Vec<u64> {
+        // We'll need the addresses to pass them to the shaders later
+        let mut device_addrs = Vec::new();
+        device_addrs.reserve_exact(self.per_pass_updaters.len());
+
+        for kind in self.per_pass_updaters.clone() {
+            if let Some(res) = shader_resources_by_kind.get(&kind) {
+                let buffer = updater::alloc_and_fill_single(mem, res);
+                device_addrs.push(buffer.device_addr);
+                self.reserved_buffers.push(buffer);
+            } else {
+                panic!("unavailable resource kind {}", kind)
+            }
+        }
         device_addrs
     }
 }

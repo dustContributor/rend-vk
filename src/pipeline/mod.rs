@@ -53,9 +53,6 @@ impl Pipeline {
                 if let Some(desc) = &stage.input_descriptors {
                     desc.destroy(device)
                 }
-                if let Some(desc) = &stage.ubo_descriptors {
-                    desc.destroy(device)
-                }
             }
             for attachment in &self.attachments {
                 if attachment.is_default() {

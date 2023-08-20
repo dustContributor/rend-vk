@@ -34,7 +34,8 @@ pub struct Pass {
     pub batch: crate::render_task::TaskKind,
     pub outputs: Vec<String>,
     pub inputs: Vec<AttachmentInput>,
-    pub updaters: Vec<UpdaterKind>,
+    pub per_pass_updaters: Vec<UpdaterKind>,
+    pub per_instance_updaters: Vec<UpdaterKind>,
     pub state: State,
     #[serde(default)]
     pub is_disabled: bool,
