@@ -192,120 +192,100 @@ pub fn resources_by_kind_map() -> HashMap<ResourceKind, MultiResource> {
     HashMap::new()
 }
 
-pub trait WrapResource<T, R> {
-    fn wrapper_for(_: &[T]) -> R {
+pub trait WrapResource<T> {
+    fn single_wrapper_for(_: &[T]) -> SingleResource {
+        panic!("{}::def::invalid", std::any::type_name::<T>())
+    }
+    fn multi_wrapper_for(_: &[T]) -> MultiResource {
         panic!("{}::def::invalid", std::any::type_name::<T>())
     }
 }
 // TODO: Better way to do this?
-impl WrapResource<Transform, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[Transform]) -> MultiResource {
+impl WrapResource<Transform> for Transform {
+    fn multi_wrapper_for(res: &[Transform]) -> MultiResource {
         MultiResource::Transform(res.to_vec())
     }
-}
-impl WrapResource<Material, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[Material]) -> MultiResource {
-        MultiResource::Material(res.to_vec())
-    }
-}
-impl WrapResource<DirLight, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[DirLight]) -> MultiResource {
-        MultiResource::DirLight(res.to_vec())
-    }
-}
-impl WrapResource<Frustum, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[Frustum]) -> MultiResource {
-        MultiResource::Frustum(res.to_vec())
-    }
-}
-impl WrapResource<ViewRay, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[ViewRay]) -> MultiResource {
-        MultiResource::ViewRay(res.to_vec())
-    }
-}
-impl WrapResource<PointLight, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[PointLight]) -> MultiResource {
-        MultiResource::PointLight(res.to_vec())
-    }
-}
-impl WrapResource<SpotLight, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[SpotLight]) -> MultiResource {
-        MultiResource::SpotLight(res.to_vec())
-    }
-}
-impl WrapResource<Joint, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[Joint]) -> MultiResource {
-        MultiResource::Joint(res.to_vec())
-    }
-}
-impl WrapResource<Sky, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[Sky]) -> MultiResource {
-        MultiResource::Sky(res.to_vec())
-    }
-}
-impl WrapResource<StaticShadow, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[StaticShadow]) -> MultiResource {
-        MultiResource::StaticShadow(res.to_vec())
-    }
-}
-impl WrapResource<TransformExtra, MultiResource> for MultiResource {
-    fn wrapper_for(res: &[TransformExtra]) -> MultiResource {
-        MultiResource::TransformExtra(res.to_vec())
-    }
-}
-// TODO: Better way to do this?
-impl WrapResource<Transform, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[Transform]) -> SingleResource {
+    fn single_wrapper_for(res: &[Transform]) -> SingleResource {
         SingleResource::Transform(res[0].clone())
     }
 }
-impl WrapResource<Material, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[Material]) -> SingleResource {
+impl WrapResource<Material> for Material {
+    fn multi_wrapper_for(res: &[Material]) -> MultiResource {
+        MultiResource::Material(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[Material]) -> SingleResource {
         SingleResource::Material(res[0].clone())
     }
 }
-impl WrapResource<DirLight, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[DirLight]) -> SingleResource {
+impl WrapResource<DirLight> for DirLight {
+    fn multi_wrapper_for(res: &[DirLight]) -> MultiResource {
+        MultiResource::DirLight(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[DirLight]) -> SingleResource {
         SingleResource::DirLight(res[0].clone())
     }
 }
-impl WrapResource<Frustum, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[Frustum]) -> SingleResource {
+impl WrapResource<Frustum> for Frustum {
+    fn multi_wrapper_for(res: &[Frustum]) -> MultiResource {
+        MultiResource::Frustum(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[Frustum]) -> SingleResource {
         SingleResource::Frustum(res[0].clone())
     }
 }
-impl WrapResource<ViewRay, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[ViewRay]) -> SingleResource {
+impl WrapResource<ViewRay> for ViewRay {
+    fn multi_wrapper_for(res: &[ViewRay]) -> MultiResource {
+        MultiResource::ViewRay(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[ViewRay]) -> SingleResource {
         SingleResource::ViewRay(res[0].clone())
     }
 }
-impl WrapResource<PointLight, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[PointLight]) -> SingleResource {
+impl WrapResource<PointLight> for PointLight {
+    fn multi_wrapper_for(res: &[PointLight]) -> MultiResource {
+        MultiResource::PointLight(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[PointLight]) -> SingleResource {
         SingleResource::PointLight(res[0].clone())
     }
 }
-impl WrapResource<SpotLight, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[SpotLight]) -> SingleResource {
+impl WrapResource<SpotLight> for SpotLight {
+    fn multi_wrapper_for(res: &[SpotLight]) -> MultiResource {
+        MultiResource::SpotLight(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[SpotLight]) -> SingleResource {
         SingleResource::SpotLight(res[0].clone())
     }
 }
-impl WrapResource<Joint, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[Joint]) -> SingleResource {
+impl WrapResource<Joint> for Joint {
+    fn multi_wrapper_for(res: &[Joint]) -> MultiResource {
+        MultiResource::Joint(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[Joint]) -> SingleResource {
         SingleResource::Joint(res[0].clone())
     }
 }
-impl WrapResource<Sky, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[Sky]) -> SingleResource {
+impl WrapResource<Sky> for Sky {
+    fn multi_wrapper_for(res: &[Sky]) -> MultiResource {
+        MultiResource::Sky(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[Sky]) -> SingleResource {
         SingleResource::Sky(res[0].clone())
     }
 }
-impl WrapResource<StaticShadow, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[StaticShadow]) -> SingleResource {
+impl WrapResource<StaticShadow> for StaticShadow {
+    fn multi_wrapper_for(res: &[StaticShadow]) -> MultiResource {
+        MultiResource::StaticShadow(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[StaticShadow]) -> SingleResource {
         SingleResource::StaticShadow(res[0].clone())
     }
 }
-impl WrapResource<TransformExtra, SingleResource> for SingleResource {
-    fn wrapper_for(res: &[TransformExtra]) -> SingleResource {
+impl WrapResource<TransformExtra> for TransformExtra {
+    fn multi_wrapper_for(res: &[TransformExtra]) -> MultiResource {
+        MultiResource::TransformExtra(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[TransformExtra]) -> SingleResource {
         SingleResource::TransformExtra(res[0].clone())
     }
 }

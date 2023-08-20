@@ -441,21 +441,23 @@ fn unpack_render_task_resources(
 
 fn unpack_single_resource<T>(data: &[u8]) -> (SingleResource, usize)
 where
-    SingleResource: WrapResource<T, SingleResource>,
+    T: WrapResource<T>,
 {
-    unpack_resource::<T, SingleResource>(0, 1, data)
+    let (res, next_end) = unpack_resource::<T>(0, 1, data);
+    (T::single_wrapper_for(res), next_end)
 }
 
 fn unpack_multi_resource<T>(start: usize, count: usize, data: &[u8]) -> (MultiResource, usize)
 where
-    MultiResource: WrapResource<T, MultiResource>,
+    T: WrapResource<T>,
 {
-    unpack_resource::<T, MultiResource>(start, count, data)
+    let (res, next_end) = unpack_resource::<T>(start, count, data);
+    (T::multi_wrapper_for(res), next_end)
 }
 
-fn unpack_resource<T, R>(start: usize, count: usize, data: &[u8]) -> (R, usize)
+fn unpack_resource<T>(start: usize, count: usize, data: &[u8]) -> (&[T], usize)
 where
-    R: WrapResource<T, R>,
+    T: WrapResource<T>,
 {
     let end = start + size_of::<T>() * count;
     let (prefix, items, sufix) = unsafe { data[start..end].align_to::<T>() };
@@ -475,6 +477,5 @@ where
         );
     }
     let next_end = items.as_ptr_range().end as usize - data.as_ptr() as usize;
-    let wrapper = R::wrapper_for(items);
-    return (wrapper, next_end);
+    return (items, next_end);
 }
