@@ -148,14 +148,16 @@ impl Stage {
             push_constants.extend(&self.reserve_instance_buffers(&buffer_allocator, task));
             // Now we push the data into the command stream and issue the draws
             unsafe {
-                let push_constants = push_constants.align_to::<u8>().1;
-                ctx.device.cmd_push_constants(
-                    command_buffer,
-                    self.layout,
-                    ShaderStageFlags::ALL_GRAPHICS,
-                    0u32,
-                    &push_constants,
-                );
+                if !push_constants.is_empty() {
+                    let push_constants = push_constants.align_to::<u8>().1;
+                    ctx.device.cmd_push_constants(
+                        command_buffer,
+                        self.layout,
+                        ShaderStageFlags::ALL_GRAPHICS,
+                        0u32,
+                        &push_constants,
+                    );
+                }
                 if is_indexed {
                     ctx.device.cmd_bind_index_buffer(
                         command_buffer,
