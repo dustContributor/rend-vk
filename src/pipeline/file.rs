@@ -177,7 +177,7 @@ impl UpdaterKind {
 impl Predefined<TriangleDesc> for TriangleDesc {
     fn def() -> TriangleDesc {
         Self {
-            front_face: WindingOrder::Ccw,
+            front_face: WindingOrder::Cw,
             cull_face: PolygonFace::Back,
             polygon_mode: PolygonMode::Fill,
         }
@@ -263,7 +263,7 @@ impl Predefined<ClearDesc> for ClearDesc {
     fn def() -> ClearDesc {
         Self {
             color: Some(0),
-            depth: Some(0.0),
+            depth: Some(1.0),
             stencil: None,
         }
     }

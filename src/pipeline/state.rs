@@ -6,7 +6,7 @@ use serde::Deserialize;
 #[derive(Copy, Clone)]
 pub enum PolygonFace {
     None,
-    Font,
+    Front,
     Back,
     FrontAndBack,
 }
@@ -149,7 +149,7 @@ impl PolygonFace {
     pub fn to_vk(self) -> vk::CullModeFlags {
         match self {
             PolygonFace::None => vk::CullModeFlags::NONE,
-            PolygonFace::Font => vk::CullModeFlags::FRONT,
+            PolygonFace::Front => vk::CullModeFlags::FRONT,
             PolygonFace::Back => vk::CullModeFlags::BACK,
             PolygonFace::FrontAndBack => vk::CullModeFlags::FRONT_AND_BACK,
         }

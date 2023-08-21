@@ -87,8 +87,12 @@ impl Attachment {
     }
 
     pub fn color_subresource_range() -> vk::ImageSubresourceRange {
+        Self::default_subresource_range(vk::ImageAspectFlags::COLOR)
+    }
+
+    pub fn default_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .aspect_mask(aspect)
             .base_mip_level(0)
             .level_count(1)
             .base_array_layer(0)

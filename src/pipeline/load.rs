@@ -557,7 +557,7 @@ impl Pipeline {
                     .new_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
                     .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
-                    .subresource_range(Attachment::color_subresource_range())
+                    .subresource_range(Attachment::default_subresource_range(input.format.aspect()))
                     .build();
                 barriers.push(barrier);
                 break;
@@ -595,7 +595,9 @@ impl Pipeline {
                     .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
                     .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-                    .subresource_range(Attachment::color_subresource_range())
+                    .subresource_range(Attachment::default_subresource_range(
+                        output.format.aspect(),
+                    ))
                     .build();
                 barriers.push(barrier);
                 break;
