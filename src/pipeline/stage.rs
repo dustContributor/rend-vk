@@ -128,34 +128,35 @@ impl Stage {
         }
         let per_pass_buffers =
             self.reserve_pass_buffers(&buffer_allocator, shader_resources_by_kind);
-        if self.task_kind == TaskKind::Fullscreen {
-            unsafe { ctx.device.cmd_draw(command_buffer, 3, 1, 0, 0) }
-        } else {
-            let tasks = &batches_by_task_type[self.task_kind.to_usize()];
-            for task in tasks {
-                let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
-                // Most of the time it's nowehere near going to be close to 32 addresses
-                let mut push_constants: Vec<u64> = Vec::with_capacity(32);
-                // First appearing, the per-pass data, uploaded once and repeated for all tasks
-                push_constants.extend(&per_pass_buffers);
-                // Second, the addresses pointing to the already uploaded vertex data
+        let tasks = &batches_by_task_type[self.task_kind.to_usize()];
+        for task in tasks {
+            let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
+            let is_indexed = !mesh_buffer.indices.is_empty();
+            // Most of the time it's nowehere near going to be close to 32 addresses
+            let mut push_constants: Vec<u64> = Vec::with_capacity(32);
+            // First appearing, the per-pass data, uploaded once and repeated for all tasks
+            push_constants.extend(&per_pass_buffers);
+            // Second, the addresses pointing to the already uploaded vertex data
+            if self.task_kind != TaskKind::Fullscreen {
                 push_constants.extend(&[
                     mesh_buffer.vertices.device_addr,
                     mesh_buffer.normals.device_addr,
                     mesh_buffer.tex_coords.device_addr,
                 ]);
-                // Third, the per-instance date for the task, uploaded per task
-                push_constants.extend(&self.reserve_instance_buffers(&buffer_allocator, task));
-                // Now we push the data into the command stream and issue the draws
-                unsafe {
-                    let push_constants = push_constants.align_to::<u8>().1;
-                    ctx.device.cmd_push_constants(
-                        command_buffer,
-                        self.layout,
-                        ShaderStageFlags::ALL_GRAPHICS,
-                        0u32,
-                        &push_constants,
-                    );
+            }
+            // Third, the per-instance date for the task, uploaded per task
+            push_constants.extend(&self.reserve_instance_buffers(&buffer_allocator, task));
+            // Now we push the data into the command stream and issue the draws
+            unsafe {
+                let push_constants = push_constants.align_to::<u8>().1;
+                ctx.device.cmd_push_constants(
+                    command_buffer,
+                    self.layout,
+                    ShaderStageFlags::ALL_GRAPHICS,
+                    0u32,
+                    &push_constants,
+                );
+                if is_indexed {
                     ctx.device.cmd_bind_index_buffer(
                         command_buffer,
                         mesh_buffer.indices.buffer,
@@ -170,6 +171,14 @@ impl Stage {
                         0,
                         0,
                     );
+                } else {
+                    ctx.device.cmd_draw(
+                        command_buffer,
+                        mesh_buffer.count,
+                        task.instance_count,
+                        0,
+                        0,
+                    )
                 }
             }
         }

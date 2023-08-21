@@ -841,7 +841,6 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
             values: [1.0, 0.0, 0.0],
         },
     ];
-    let indices = [0u32, 1, 2];
 
     fn alloc_and_copy<T: std::marker::Copy>(
         elements: &[T],
@@ -861,16 +860,15 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
         buffer
     }
 
-    let index_buffer = alloc_and_copy(&indices, buffer_allocator);
     let vertex_buffer = alloc_and_copy(&vertices, buffer_allocator);
     let normal_buffer = alloc_and_copy(&normals, buffer_allocator);
     let tex_coord_buffer = alloc_and_copy(&tex_coords, buffer_allocator);
 
     MeshBuffer {
         vertices: vertex_buffer,
-        indices: index_buffer,
+        indices: DeviceSlice::empty(),
         tex_coords: tex_coord_buffer,
         normals: normal_buffer,
-        count: indices.len() as u32,
+        count: vertices.len() as u32,
     }
 }

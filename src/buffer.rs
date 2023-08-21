@@ -37,6 +37,10 @@ impl DeviceSlice {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+
     pub fn read(&self) -> Vec<u8> {
         let slice =
             unsafe { std::slice::from_raw_parts(self.addr as *const u8, self.size as usize) };

@@ -150,14 +150,35 @@ pub struct SpotLight {
 }
 
 #[derive(Clone)]
-pub struct Frustum {}
+#[repr(C)]
+pub struct Frustum {
+    pub width: f32,
+    pub height: f32,
+    pub inv_width: f32,
+    pub inv_height: f32,
+    pub near_plane: f32,
+    pub far_plane: f32,
+}
 #[derive(Clone)]
-pub struct ViewRay {}
+#[repr(C)]
+pub struct ViewRay {
+    pub bleft: Vec3,
+    pub m22: f32,
+    pub bright: Vec3,
+    pub m23: f32,
+    pub tright: Vec3,
+    pub m32: f32,
+    pub tleft: Vec3,
+    pub m33: f32,
+}
 #[derive(Clone)]
+#[repr(C)]
 pub struct Joint {}
 #[derive(Clone)]
+#[repr(C)]
 pub struct StaticShadow {}
 #[derive(Clone)]
+#[repr(C)]
 pub struct Sky {}
 
 pub enum MultiResource {
