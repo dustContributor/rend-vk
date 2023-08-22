@@ -11,6 +11,10 @@ impl Format {
         (self >= Self::ETC2_R8G8B8A1_SRGB_BLOCK && self <= Self::ETC2_R8G8B8_UNORM_BLOCK )
     }
 
+    pub fn has_color(self) -> bool {
+        !self.has_depth() && !self.has_stencil()
+    }
+
     pub fn has_depth(self) -> bool {
         (self >= Self::D16_UNORM && self <= Self::D32_SFLOAT_S8_UINT)
             || self == Self::X8_D24_UNORM_PACK32

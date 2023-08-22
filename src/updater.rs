@@ -12,12 +12,17 @@ fn copy_into<T>(mem: &DeviceAllocator, src: &[T], count: u32) -> DeviceSlice {
             src.len()
         );
     }
-    let len = std::mem::size_of::<T>() as u64 * count as u64;
-    let device = mem.alloc(len).unwrap();
-    let src = src.as_ptr() as *const u8;
+    copy_ptr_into(mem, src.as_ptr(), count)
+}
+
+fn copy_ptr_into<T>(mem: &DeviceAllocator, src: *const T, count: u32) -> DeviceSlice {
+    let per_item_size = std::mem::size_of::<T>() as u64;
+    let total_size = per_item_size * count as u64;
+    let device = mem.alloc(total_size).unwrap();
+    let src = src as *const u8;
     let dst = device.addr as *mut u8;
     unsafe {
-        std::ptr::copy_nonoverlapping(src, dst, len as usize);
+        std::ptr::copy_nonoverlapping(src, dst, total_size as usize);
     }
     device
 }
@@ -44,16 +49,16 @@ pub fn alloc_and_fill_multi(
 
 pub fn alloc_and_fill_single(mem: &DeviceAllocator, resource: &SingleResource) -> DeviceSlice {
     match resource {
-        SingleResource::Transform(e) => copy_into(mem, &[e], 1),
-        SingleResource::Material(e) => copy_into(mem, &[e], 1),
-        SingleResource::DirLight(e) => copy_into(mem, &[e], 1),
-        SingleResource::Frustum(e) => copy_into(mem, &[e], 1),
-        SingleResource::ViewRay(e) => copy_into(mem, &[e], 1),
-        SingleResource::PointLight(e) => copy_into(mem, &[e], 1),
-        SingleResource::SpotLight(e) => copy_into(mem, &[e], 1),
-        SingleResource::Joint(e) => copy_into(mem, &[e], 1),
-        SingleResource::Sky(e) => copy_into(mem, &[e], 1),
-        SingleResource::StaticShadow(e) => copy_into(mem, &[e], 1),
-        SingleResource::TransformExtra(e) => copy_into(mem, &[e], 1),
+        SingleResource::Transform(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::Material(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::DirLight(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::Frustum(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::ViewRay(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::PointLight(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::SpotLight(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::Joint(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::Sky(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::StaticShadow(e) => copy_ptr_into(mem, e, 1),
+        SingleResource::TransformExtra(e) => copy_ptr_into(mem, e, 1),
     }
 }

@@ -122,9 +122,9 @@ impl Pipeline {
                     None,
                 );
 
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_image"), texture.image);
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_memory"), texture.memory);
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "_view"), texture.view);
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "image"), texture.image);
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "memory"), texture.memory);
+                ctx.try_set_debug_name(&format!("{}_{}", f.name, "view"), texture.view);
                 return (
                     &f.name,
                     Attachment {
@@ -183,7 +183,6 @@ impl Pipeline {
             let scissor = Self::handle_option(pass.state.scissor.clone());
             let triangle = Self::handle_option(pass.state.triangle.clone());
             let clearing = Self::handle_option(pass.state.clearing.clone());
-            let (_attachments, blend_state) = blending.to_vk(pass.outputs.len() as u32);
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
             let viewports = [viewport.to_vk(window_width as f32, window_height as f32)];
@@ -205,27 +204,68 @@ impl Pipeline {
 
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
-
-            let color_attachment_formats: Vec<_> = pass
+            // TODO: Check why if depth output isn't placed last, VVL errors get reported
+            let attachment_outputs: Vec<_> = pass
                 .outputs
                 .iter()
                 .map(|e| {
                     attachments_by_name
                         .get(e)
-                        .expect(&format!("color attachment missing: {e}"))
-                        .vk_format
+                        .expect(&format!("output attachment {e} missing!"))
+                        .clone()
                 })
-                .collect::<Vec<vk::Format>>();
+                .collect();
+            let attachment_inputs: Vec<_> = pass
+                .inputs
+                .iter()
+                .map(|e| {
+                    attachments_by_name
+                        .get(&e.name)
+                        .expect(&format!("input attachment {} missing!", e.name))
+                        .clone()
+                })
+                .collect();
+            let color_attachment_formats: Vec<_> = attachment_outputs
+                .iter()
+                .filter_map(|e| {
+                    if e.format.has_color() {
+                        Some(e.vk_format)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            // We only need blend state for color attachments, ignoring depth/stencil
+            let (_attachments, blend_state) = blending.to_vk(color_attachment_formats.len() as u32);
 
             let mut rendering_pipeline_info = {
                 let mut b = vk::PipelineRenderingCreateInfo::builder()
                     .color_attachment_formats(&color_attachment_formats);
+                if writing.stencil {
+                    let tmp = attachment_outputs
+                        .iter()
+                        .find_map(|e| {
+                            if e.format.has_stencil() {
+                                Some(e.vk_format)
+                            } else {
+                                None
+                            }
+                        })
+                        .expect(&format!("stencil attachment output missing!"));
+                    b = b.stencil_attachment_format(tmp);
+                }
                 if writing.depth {
-                    let depth_name = Attachment::DEPTH_NAME.to_string();
-                    // Depth is special cased.
-                    b = b.depth_attachment_format(
-                        attachments_by_name.get(&depth_name).unwrap().vk_format,
-                    );
+                    let tmp = attachment_outputs
+                        .iter()
+                        .find_map(|e| {
+                            if e.format.has_depth() {
+                                Some(e.vk_format)
+                            } else {
+                                None
+                            }
+                        })
+                        .expect(&format!("depth attachment output missing!"));
+                    b = b.depth_attachment_format(tmp);
                 }
                 b.build()
             };
@@ -236,7 +276,7 @@ impl Pipeline {
             };
             let shader_stages = shader_programs_by_name
                 .get(&pass.program)
-                .expect(format!("Missing program: {}", pass.program).as_str())
+                .expect(&format!("program {} missing!", pass.program))
                 .shaders
                 .iter()
                 .map(|e| e.info)
@@ -252,14 +292,10 @@ impl Pipeline {
 
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
-            let make_attachment_descriptor = |(_, e)| -> Attachment {
-                let tmp = attachments_by_name
-                    .get(&e)
-                    .expect(&format!("Missing input attachment: {e}!"))
-                    .clone();
+            let make_attachment_descriptor = |e: &Attachment| -> Attachment {
                 let desc = vk::DescriptorImageInfo::builder()
                     .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
-                    .image_view(tmp.view)
+                    .image_view(e.view)
                     .build();
                 let (descriptor_offset, descriptor_index) = input_descriptors
                     .as_mut()
@@ -268,7 +304,7 @@ impl Pipeline {
                 Attachment {
                     descriptor_offset,
                     descriptor_index,
-                    ..tmp
+                    ..e.clone()
                 }
             };
             // Final passes have special rendering attachment info hanlding on render.
@@ -276,57 +312,46 @@ impl Pipeline {
                 .outputs
                 .iter()
                 .position(|e| Attachment::DEFAULT_NAME == e);
-            let inputs: Vec<_> = pass
-                .inputs
+            // Generate attachment structs with the proper descriptor index/offset
+            let inputs: Vec<_> = attachment_inputs
                 .iter()
-                .map(|e| &e.name)
-                .enumerate()
                 .map(make_attachment_descriptor)
                 .collect();
-            let outputs: Vec<_> = pass
-                .outputs
+            let attachment_rendering: Vec<_> = attachment_outputs
                 .iter()
-                .map(|e| -> Attachment {
-                    attachments_by_name
-                        .get(&e)
-                        .expect(&format!("Missing output attachment: {e}!"))
-                        .clone()
+                .map(|e| {
+                    let is_depth_stencil = e.format.has_depth() || e.format.has_stencil();
+                    let info = vk::RenderingAttachmentInfo {
+                        image_view: e.view,
+                        image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
+                        load_op: if is_depth_stencil {
+                            clear_depth_stencil_value
+                                .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
+                        } else {
+                            clear_color_value
+                                .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
+                        },
+                        clear_value: if is_depth_stencil {
+                            clear_depth_stencil_value.unwrap_or_default()
+                        } else {
+                            clear_color_value.unwrap_or_default()
+                        },
+                        store_op: vk::AttachmentStoreOp::STORE,
+                        ..Default::default()
+                    };
+                    (is_depth_stencil, info)
                 })
                 .collect();
-            let rendering_attachments: Vec<_> = outputs
+            let depth_stencil_rendering =
+                attachment_rendering
+                    .iter()
+                    .find_map(|e| if e.0 { Some(e.1) } else { None });
+            let attachment_rendering = attachment_rendering
                 .iter()
-                .map(|e| vk::RenderingAttachmentInfo {
-                    image_view: e.view,
-                    image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
-                    load_op: clear_color_value
-                        .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR),
-                    store_op: vk::AttachmentStoreOp::STORE,
-                    clear_value: clear_color_value.unwrap_or_default(),
-                    ..Default::default()
-                })
+                .filter_map(|e| if e.0 { None } else { Some(e.1) })
                 .collect();
-            let depth_stencil_rendering = if writing.depth || writing.stencil {
-                // Only support depth only, or depth+stencil. No stencil only.
-                let depth_name = Attachment::DEPTH_NAME.to_string();
-                let depth = attachments_by_name
-                    .get(&depth_name)
-                    .expect("Missing depth attachment!");
-                let depth_info = vk::RenderingAttachmentInfo {
-                    image_view: depth.view,
-                    image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
-                    load_op: clear_depth_stencil_value
-                        .map_or(vk::AttachmentLoadOp::DONT_CARE, |_| {
-                            vk::AttachmentLoadOp::CLEAR
-                        }),
-                    clear_value: clear_depth_stencil_value.unwrap_or_default(),
-                    ..Default::default()
-                };
-                Some(depth_info)
-            } else {
-                None
-            };
             let image_barriers =
-                Self::gen_image_barriers_for(passi, &inputs, &outputs, &enabled_passes);
+                Self::gen_image_barriers_for(passi, &inputs, &attachment_outputs, &enabled_passes);
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &input_descriptors {
                 set_layouts.push(d.layout)
@@ -379,7 +404,7 @@ impl Pipeline {
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
                 rendering: super::stage::Rendering {
-                    attachments: rendering_attachments,
+                    attachments: attachment_rendering,
                     depth_stencil: depth_stencil_rendering,
                     default_attachment_index,
                 },
@@ -397,7 +422,7 @@ impl Pipeline {
                     .map(|e| e.to_resource_kind())
                     .collect(),
                 inputs,
-                outputs,
+                outputs: attachment_outputs,
                 index: stage_index,
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
@@ -415,7 +440,6 @@ impl Pipeline {
             unsafe { ctx.device.destroy_shader_module(shader.info.module, None) };
         }
 
-        // ubo_descriptors.into_device();
         sampler_descriptors.into_device();
         // image_descriptors.into_device();
 
@@ -427,26 +451,6 @@ impl Pipeline {
             image_descriptors,
             sampler_descriptors,
         };
-    }
-
-    pub fn init_ubo_desc_buffer(
-        ctx: &VulkanContext,
-        mem: &mut DeviceAllocator,
-        stage_name: &str,
-        bindings: u32,
-    ) -> DescriptorBuffer {
-        const MAX_SUBSETS: u32 = 64;
-        let name = format!("{stage_name}_ubos").to_string();
-        let desc_buffer = DescriptorBuffer::of(
-            ctx,
-            mem,
-            name,
-            DescriptorType::UNIFORM_BUFFER,
-            bindings,
-            MAX_SUBSETS,
-            false,
-        );
-        desc_buffer
     }
 
     pub fn init_images(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
