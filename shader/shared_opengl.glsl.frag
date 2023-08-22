@@ -175,15 +175,8 @@
 // Attribs in GL are matched by name
 #define ATTR_LOC(POS)
 // No push constant padding necesary in GL
-#define USING_PAD_0_MACRO
-#define USING_PAD_1_MACRO 
-#define USING_PAD_2_MACRO
-#define USING_PAD_3_MACRO
-#define USING_PAD_4_MACRO
-#define USING_PAD_5_MACRO
-#define USING_PAD_6_MACRO
-#define USING_PAD_7_MACRO
+#define UNUSED_INPUT(IDX)
 // No descriptor sets in GL
-#define DESC(TYPE) 
+#define DESCRIPTOR(TYPE, NAME, BIND)
 
 #endif // SHARED_OPENGL_GLSL
