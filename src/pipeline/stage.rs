@@ -268,10 +268,12 @@ impl Stage {
     }
 
     fn reserve_instance_buffers(&mut self, mem: &DeviceAllocator, task: &RenderTask) -> Vec<u64> {
+        if self.per_instance_updaters.is_empty() {
+            // Nothing to upload
+            return Vec::new();
+        }
         // We'll need the addresses to pass them to the shaders later
-        let mut device_addrs = Vec::new();
-        device_addrs.reserve_exact(self.per_instance_updaters.len());
-
+        let mut device_addrs = Vec::with_capacity(self.per_instance_updaters.len());
         for kind in self.per_instance_updaters.clone() {
             if let Some(res) = task.resources.get(&kind) {
                 let buffer = updater::alloc_and_fill_multi(mem, res, task.instance_count);
@@ -281,7 +283,6 @@ impl Stage {
                 panic!("unavailable resource kind {}", kind)
             }
         }
-
         device_addrs
     }
 
@@ -290,19 +291,27 @@ impl Stage {
         mem: &DeviceAllocator,
         shader_resources_by_kind: &HashMap<ResourceKind, SingleResource>,
     ) -> Vec<u64> {
-        // We'll need the addresses to pass them to the shaders later
-        let mut device_addrs = Vec::new();
-        device_addrs.reserve_exact(self.per_pass_updaters.len());
-
+        if self.per_pass_updaters.is_empty() {
+            // Nothing to upload
+            return Vec::new();
+        }
+        let total_size: usize = self
+            .per_pass_updaters
+            .iter()
+            .map(|e| e.resource_size())
+            .sum();
+        let dst = mem.alloc(total_size as u64).unwrap();
+        let mut offset = 0u64;
         for kind in self.per_pass_updaters.clone() {
             if let Some(res) = shader_resources_by_kind.get(&kind) {
-                let buffer = updater::alloc_and_fill_single(mem, res);
-                device_addrs.push(buffer.device_addr);
-                self.reserved_buffers.push(buffer);
+                offset = updater::fill_single(res, &dst, offset);
             } else {
                 panic!("unavailable resource kind {}", kind)
             }
         }
-        device_addrs
+        // Will be freed later
+        self.reserved_buffers.push(dst);
+        // We'll need 1 address since all the data goes into the same buffer
+        vec![dst.device_addr]
     }
 }

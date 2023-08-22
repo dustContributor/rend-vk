@@ -4,7 +4,7 @@ use std::{
     mem::{align_of, size_of},
 };
 
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 
 use crate::UsedAsIndex;
 
@@ -123,12 +123,10 @@ pub struct Material {
 #[derive(Clone)]
 #[repr(C)]
 pub struct DirLight {
-    pub view_dir: Vec3,
-    pub intensity: f32,
-    pub ambient_intensity: f32,
-    pub sky_color: Vec3,
-    pub ground_color: Vec3,
-    pub color: Vec3,
+    pub view_dir: Vec4,
+    pub color: Vec4,
+    pub sky_color: Vec4,
+    pub ground_color: Vec4,
     pub inv_view_shadow_proj: Mat4,
 }
 #[derive(Clone)]
