@@ -26,8 +26,8 @@ fn alloc_and_copy_into<T>(mem: &DeviceAllocator, src: &[T], count: u32) -> Devic
 fn copy_into<T>(src: *const T, dst: &DeviceSlice, offset: u64) -> u64 {
     let per_item_size = std::mem::size_of::<T>();
     let src = src as *const u8;
-    let dst = dst.addr as *mut u8;
     unsafe {
+        let dst = (dst.addr as *mut u8).add(offset as usize);
         std::ptr::copy_nonoverlapping(src, dst, per_item_size);
     }
     offset + per_item_size as u64
