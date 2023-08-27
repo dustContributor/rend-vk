@@ -168,6 +168,10 @@ pub enum U32OrF32 {
     F32(f32),
 }
 
+const DEFAULT_DEPTH_CLEAR_VALUE: f32 = 1.0;
+const DEFAULT_STENCIL_CLEAR_VALUE: u32 = 0;
+const DEFAULT_COLOR_CLEAR_VALUE: u32 = 0;
+
 impl UpdaterKind {
     pub fn to_resource_kind(self) -> ResourceKind {
         ResourceKind::of_u32(self as u32)
@@ -177,7 +181,7 @@ impl UpdaterKind {
 impl Predefined<TriangleDesc> for TriangleDesc {
     fn def() -> TriangleDesc {
         Self {
-            front_face: WindingOrder::Cw,
+            front_face: WindingOrder::Ccw,
             cull_face: PolygonFace::Back,
             polygon_mode: PolygonMode::Fill,
         }
@@ -262,16 +266,16 @@ impl Predefined<BlendDesc> for BlendDesc {
 impl Predefined<ClearDesc> for ClearDesc {
     fn def() -> ClearDesc {
         Self {
-            color: Some(0),
-            depth: Some(1.0),
+            color: Some(DEFAULT_COLOR_CLEAR_VALUE),
+            depth: Some(DEFAULT_DEPTH_CLEAR_VALUE),
             stencil: None,
         }
     }
     fn yes() -> ClearDesc {
         Self {
-            color: Some(0),
-            depth: Some(1.0),
-            stencil: Some(0),
+            color: Some(DEFAULT_COLOR_CLEAR_VALUE),
+            depth: Some(DEFAULT_DEPTH_CLEAR_VALUE),
+            stencil: Some(DEFAULT_STENCIL_CLEAR_VALUE),
         }
     }
     fn no() -> ClearDesc {
@@ -409,7 +413,26 @@ impl DescHandler<ViewportDesc> for Pipeline {
 }
 
 impl DescHandler<ClearDesc> for Pipeline {
-    // Empty.
+    fn handle_specific(desc: &String) -> ClearDesc {
+        match desc.as_str() {
+            "COLOR" => ClearDesc {
+                color: Some(DEFAULT_COLOR_CLEAR_VALUE),
+                depth: None,
+                stencil: None,
+            },
+            "DEPTH" => ClearDesc {
+                color: None,
+                depth: Some(DEFAULT_DEPTH_CLEAR_VALUE),
+                stencil: None,
+            },
+            "STENCIL" => ClearDesc {
+                color: None,
+                depth: None,
+                stencil: Some(DEFAULT_STENCIL_CLEAR_VALUE),
+            },
+            _ => panic!("invalid {desc}"),
+        }
+    }
 }
 
 impl BlendDesc {

@@ -138,9 +138,10 @@ impl StencilFunc {
 
 impl WindingOrder {
     pub fn to_vk(self) -> vk::FrontFace {
+        // TODO: Check why do I have to do this winding order reversing vs GL
         match self {
-            WindingOrder::Cw => vk::FrontFace::CLOCKWISE,
-            WindingOrder::Ccw => vk::FrontFace::COUNTER_CLOCKWISE,
+            WindingOrder::Cw => vk::FrontFace::COUNTER_CLOCKWISE,
+            WindingOrder::Ccw => vk::FrontFace::CLOCKWISE,
         }
     }
 }
