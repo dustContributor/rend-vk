@@ -12,7 +12,15 @@ impl Format {
     }
 
     pub fn has_color(self) -> bool {
-        !self.has_depth() && !self.has_stencil()
+        !self.has_depth_or_stencil()
+    }
+
+    pub fn has_depth_and_stencil(self) -> bool {
+        self.has_depth() && self.has_stencil()
+    }
+
+    pub fn has_depth_or_stencil(self) -> bool {
+        self.has_depth() || self.has_stencil()
     }
 
     pub fn has_depth(self) -> bool {
