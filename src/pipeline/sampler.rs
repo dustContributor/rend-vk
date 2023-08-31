@@ -1,4 +1,4 @@
-use ash::vk;
+use ash::vk::{self, SamplerMipmapMode};
 
 use crate::context::VulkanContext;
 
@@ -44,6 +44,11 @@ impl Sampler {
             .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
             .anisotropy_enable(false)
             .compare_enable(false)
+            .mipmap_mode(if is_linear {
+                SamplerMipmapMode::LINEAR
+            } else {
+                SamplerMipmapMode::NEAREST
+            })
             .min_filter(filter)
             .mag_filter(filter)
             .max_lod(vk::LOD_CLAMP_NONE)
