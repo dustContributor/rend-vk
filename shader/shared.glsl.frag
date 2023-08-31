@@ -19,7 +19,7 @@ struct Frustum
   float farPlane;
 };
 
-struct ViewRays
+struct ViewRay
 {
   vec3 bleft;
   float m22;
@@ -48,6 +48,7 @@ struct Material
 #ifdef IS_VULKAN
   int diffuseId;
   int normalMapId;
+  int glowMapId;
 #endif
 };
 
@@ -61,9 +62,9 @@ struct DirLight
   vec4 groundColor;
   // For shadows.
   mat4 invViewShadowProj;
-  float cameraHeight;
-  float innerRadius;
-  float outerRadius;
+  // float cameraHeight;
+  // float innerRadius;
+  // float outerRadius;
 };
 
 struct StaticShadow
@@ -251,6 +252,16 @@ vec2 encodeNormal ( vec3 normal )
 vec2 flipTexCoord ( vec2 texCoord )
 {
   return vec2(texCoord.x, 1.0 - texCoord.y);
+} 
+
+// On Vulkan it flips the Y axis, on OpenGL it returns as-is
+vec2 apiTexCoord ( vec2 texCoord )
+{
+#ifdef IS_VULKAN
+  return vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+  return texCoord;
+#endif
 }
 
 /* Misc. */
@@ -292,7 +303,7 @@ vec2 texCoordFromVID ( int vertexId )
   return vec2(float((vertexId << 1) & 2), float(vertexId & 2));
 }
 
-vec3 blerpViewRay ( ViewRays viewRays, vec2 texCoord )
+vec3 blerpViewRay ( ViewRay viewRays, vec2 texCoord )
 {
   return blerp(viewRays.bleft, viewRays.bright,
     viewRays.tleft, viewRays.tright,
@@ -307,7 +318,7 @@ vec3 computeViewPos ( Frustum frustum, vec3 viewRay, float depth )
   return viewRay * viewDepth;
 }
 
-vec3 computeViewPos ( Frustum frustum, ViewRays viewRays, vec2 texCoord, float depth )
+vec3 computeViewPos ( Frustum frustum, ViewRay viewRays, vec2 texCoord, float depth )
 {
   // Compute view space position and return it.
   return computeViewPos(frustum, blerpViewRay(viewRays, texCoord), depth);
@@ -400,39 +411,37 @@ uvec4 unpackByte1x4 ( uint v )
 * shaders, regardless of the functions being actually used or not. So can't append
 * these functions to any other kind of shader.
 */
-#ifdef FRAGMENT_SHADER
+#if IS_FRAGMENT_SHADER
+mat3 cotangentFrame ( vec3 normal, vec3 viewPos, vec2 texCoord )
+{
+  // Get edge vectors of the pixel triangle
+  vec3 dp1 = vec3(dFdx(viewPos));
+  vec3 dp2 = vec3(dFdy(viewPos));
+  vec2 duv1 = vec2(dFdx(texCoord));
+  vec2 duv2 = vec2(dFdy(texCoord));
 
-  mat3 cotangentFrame ( vec3 normal, vec3 viewPos, vec2 texCoord )
-  {
-    // Get edge vectors of the pixel triangle
-    vec3 dp1 = vec3(dFdx(viewPos));
-    vec3 dp2 = vec3(dFdy(viewPos));
-    vec2 duv1 = vec2(dFdx(texCoord));
-    vec2 duv2 = vec2(dFdy(texCoord));
+  // Solve the linear system
+  vec3 dp2perp = cross(dp2, normal);
+  vec3 dp1perp = cross(normal, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
 
-    // Solve the linear system
-    vec3 dp2perp = cross(dp2, normal);
-    vec3 dp1perp = cross(normal, dp1);
-    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
-    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  // Construct a scale-invariant frame
+  float invmax = inversesqrt(max(dot(T,T),dot(B,B)));
+  return mat3( T * invmax, B * invmax, normal );
+}
 
-    // Construct a scale-invariant frame
-    float invmax = inversesqrt(max(dot(T,T),dot(B,B)));
-    return mat3( T * invmax, B * invmax, normal );
-  }
-
-  // vNormal -> view space vertex normal.
-  // txNormal -> normal map texel.
-  // viewPos -> view space vertex.
-  vec3 perturbNormal ( vec3 vNormal, vec3 txNormal, vec3 viewPos, vec2 texCoord )
-  {
-    // Sign expansion, more precise than (normal * 2) - 1.
-    txNormal = txNormal * (255.0/127.0) - 128.0/127.0;
-    mat3 tbn = cotangentFrame(vNormal, viewPos, texCoord);
-    return normalize(tbn * txNormal);
-  }
-
-#endif /* FRAGMENT_SHADER define. */
+// vNormal -> view space vertex normal.
+// txNormal -> normal map texel.
+// viewPos -> view space vertex.
+vec3 perturbNormal ( vec3 vNormal, vec3 txNormal, vec3 viewPos, vec2 texCoord )
+{
+  // Sign expansion, more precise than (normal * 2) - 1.
+  txNormal = txNormal * (255.0/127.0) - 128.0/127.0;
+  mat3 tbn = cotangentFrame(vNormal, viewPos, texCoord);
+  return normalize(tbn * txNormal);
+}
+#endif /* IS_FRAGMENT_SHADER */
 
 /* Post process */
 
