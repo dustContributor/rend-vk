@@ -585,7 +585,7 @@ where
         &vulkan_context,
         &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
-        Some("triangle_pipeline.json"),
+        Some("pipeline.json"),
     );
     log::trace!("pipeline created!");
 
