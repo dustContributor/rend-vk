@@ -31,6 +31,7 @@ pub struct AttachmentInput {
 pub struct Pass {
     pub name: String,
     pub program: String,
+    pub depth_stencil: Option<String>,
     pub batch: crate::render_task::TaskKind,
     pub outputs: Vec<String>,
     pub inputs: Vec<AttachmentInput>,
@@ -109,7 +110,7 @@ pub struct ViewportDesc {
     pub y: U32OrF32,
     pub width: U32OrF32,
     pub height: U32OrF32,
-}
+} 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
@@ -120,6 +121,7 @@ pub struct DepthDesc {
     pub testing: bool,
     pub clamping: bool,
 }
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
@@ -490,15 +492,13 @@ impl DepthDesc {
             depth_compare_op: self.func.to_vk(),
             front: stencil,
             back: stencil,
-            max_depth_bounds: self.range_end,
-            min_depth_bounds: self.range_start,
             ..Default::default()
         }
     }
 }
 
 impl ViewportDesc {
-    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::Viewport {
+    pub fn to_vk(&self, depth: &DepthDesc, window_width: f32, window_height: f32) -> vk::Viewport {
         vk::Viewport {
             x: match self.x {
                 U32OrF32::U32(v) => v as f32,
@@ -516,8 +516,9 @@ impl ViewportDesc {
                 U32OrF32::U32(v) => v as f32,
                 U32OrF32::F32(v) => window_height * v,
             },
-            min_depth: 0.0,
-            max_depth: 1.0,
+            min_depth: depth.range_start,
+            max_depth: depth.range_end,
+            ..Default::default()
         }
     }
 }
@@ -536,6 +537,7 @@ impl ScissorDesc {
                 },
             },
             extent: Pipeline::extent_of(self.width, self.height, window_width, window_height),
+            ..Default::default()
         }
     }
 }

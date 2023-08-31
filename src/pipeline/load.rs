@@ -185,13 +185,19 @@ impl Pipeline {
             let clearing = Self::handle_option(pass.state.clearing.clone());
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
-            let viewports = [viewport.to_vk(window_width as f32, window_height as f32)];
+            let viewports = [viewport.to_vk(&depth, window_width as f32, window_height as f32)];
             let scissors = [scissor.to_vk(window_width as f32, window_height as f32)];
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
                 .scissors(&scissors)
                 .viewports(&viewports);
             let rasterization_state = triangle.to_vk();
-
+            let depth_stencil_attachment = match &pass.depth_stencil {
+                Some(name) => Some(attachments_by_name.get(&name.to_string()).expect(&format!(
+                    "depth stencil attachment {} missing for pass {}!",
+                    name, pass.name
+                ))),
+                _ => None,
+            };
             let binding_descs = [];
             let attrib_descs = [];
             let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
@@ -225,47 +231,28 @@ impl Pipeline {
                         .clone()
                 })
                 .collect();
-            let color_attachment_formats: Vec<_> = attachment_outputs
-                .iter()
-                .filter_map(|e| {
-                    if e.format.has_color() {
-                        Some(e.vk_format)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let attachment_output_formats: Vec<_> =
+                attachment_outputs.iter().map(|e| e.vk_format).collect();
             // We only need blend state for color attachments, ignoring depth/stencil
-            let (_attachments, blend_state) = blending.to_vk(color_attachment_formats.len() as u32);
+            let (_attachments, blend_state) =
+                blending.to_vk(attachment_output_formats.len() as u32);
 
             let mut rendering_pipeline_info = {
                 let mut b = vk::PipelineRenderingCreateInfo::builder()
-                    .color_attachment_formats(&color_attachment_formats);
-                if writing.stencil {
-                    let tmp = attachment_outputs
-                        .iter()
-                        .find_map(|e| {
-                            if e.format.has_stencil() {
-                                Some(e.vk_format)
-                            } else {
-                                None
-                            }
-                        })
-                        .expect(&format!("stencil attachment output missing!"));
-                    b = b.stencil_attachment_format(tmp);
+                    .color_attachment_formats(&attachment_output_formats);
+                if writing.stencil || !stencil.disabled {
+                    let att = depth_stencil_attachment.expect(&format!(
+                        "stencil attachment for writing/testing not set for pass {}!",
+                        pass.name
+                    ));
+                    b = b.stencil_attachment_format(att.vk_format);
                 }
-                if writing.depth {
-                    let tmp = attachment_outputs
-                        .iter()
-                        .find_map(|e| {
-                            if e.format.has_depth() {
-                                Some(e.vk_format)
-                            } else {
-                                None
-                            }
-                        })
-                        .expect(&format!("depth attachment output missing!"));
-                    b = b.depth_attachment_format(tmp);
+                if writing.depth || depth.testing {
+                    let att = depth_stencil_attachment.expect(&format!(
+                        "depth attachment for writing/testing not set for pass {}!",
+                        pass.name
+                    ));
+                    b = b.depth_attachment_format(att.vk_format);
                 }
                 b.build()
             };
@@ -317,41 +304,49 @@ impl Pipeline {
                 .iter()
                 .map(make_attachment_descriptor)
                 .collect();
+
+            let make_rendering_attachment_info = |e: &Attachment| vk::RenderingAttachmentInfo {
+                image_view: e.view,
+                image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
+                load_op: if e.format.has_depth_or_stencil() {
+                    clear_depth_stencil_value
+                        .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
+                } else {
+                    clear_color_value
+                        .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
+                },
+                clear_value: if e.format.has_depth_or_stencil() {
+                    clear_depth_stencil_value.unwrap_or_default()
+                } else {
+                    clear_color_value.unwrap_or_default()
+                },
+                store_op: vk::AttachmentStoreOp::STORE,
+                ..Default::default()
+            };
+
             let attachment_rendering: Vec<_> = attachment_outputs
                 .iter()
-                .map(|e| {
-                    let is_depth_stencil = e.format.has_depth() || e.format.has_stencil();
-                    let info = vk::RenderingAttachmentInfo {
-                        image_view: e.view,
-                        image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
-                        load_op: if is_depth_stencil {
-                            clear_depth_stencil_value
-                                .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
-                        } else {
-                            clear_color_value
-                                .map_or(vk::AttachmentLoadOp::LOAD, |_| vk::AttachmentLoadOp::CLEAR)
-                        },
-                        clear_value: if is_depth_stencil {
-                            clear_depth_stencil_value.unwrap_or_default()
-                        } else {
-                            clear_color_value.unwrap_or_default()
-                        },
-                        store_op: vk::AttachmentStoreOp::STORE,
-                        ..Default::default()
-                    };
-                    (is_depth_stencil, info)
-                })
+                .map(make_rendering_attachment_info)
                 .collect();
-            let depth_stencil_rendering =
-                attachment_rendering
-                    .iter()
-                    .find_map(|e| if e.0 { Some(e.1) } else { None });
-            let attachment_rendering = attachment_rendering
-                .iter()
-                .filter_map(|e| if e.0 { None } else { Some(e.1) })
-                .collect();
-            let image_barriers =
-                Self::gen_image_barriers_for(passi, &inputs, &attachment_outputs, &enabled_passes);
+            let depth_stencil_rendering = match depth_stencil_attachment {
+                Some(att) => Some(make_rendering_attachment_info(att)),
+                None => None,
+            };
+            /*
+             * Add the depth-stencil attachment to the output list if present,
+             * this way proper barriers for writing/testing will be generated if
+             * the attachment is read from in a previous pass as an input.
+             */
+            let mut outputs_for_barriers = attachment_outputs.clone();
+            if let Some(att) = depth_stencil_attachment {
+                outputs_for_barriers.push(att.clone())
+            };
+            let image_barriers = Self::gen_image_barriers_for(
+                passi,
+                &inputs,
+                &outputs_for_barriers,
+                &enabled_passes,
+            );
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &input_descriptors {
                 set_layouts.push(d.layout)
@@ -598,7 +593,11 @@ impl Pipeline {
                     .old_layout(vk::ImageLayout::UNDEFINED)
                     .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
-                    .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+                    .dst_stage_mask(if output.format.has_depth_or_stencil() {
+                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                    } else {
+                        vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
+                    })
                     .subresource_range(Attachment::default_subresource_range(
                         output.format.aspect(),
                     ))
