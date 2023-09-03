@@ -133,7 +133,7 @@ impl BufferKind {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Range {
     start: u64,
     end: u64,
@@ -286,11 +286,13 @@ impl InnerDeviceAllocator {
             let old_start = range.start;
             let new_start = old_start + size;
             if new_start == range.end {
-                // Took the range
+                // Took the entire range
                 ranges.remove(i);
+            } else {
+                // Update the existing range
+                let range = &mut ranges[i];
+                range.start = new_start;
             }
-            let range = &mut ranges[i];
-            range.start = new_start;
             let mut addr = self.buffer.addr;
             let offset;
             unsafe {
