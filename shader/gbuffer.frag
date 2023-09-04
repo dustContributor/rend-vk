@@ -8,12 +8,7 @@
 #extension GL_ARB_shading_language_include : require
 #endif
 
-#if IS_VULKAN
-#include "shared_vulkan.glsl.frag"
-#else
-#include "shared_opengl.glsl.frag"
-#endif
-
+#include "shared_wrapper.glsl.frag"
 
 // Input parameters.
 ATTR_LOC(0) in vec2 passTexCoord;

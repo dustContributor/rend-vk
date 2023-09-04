@@ -8,12 +8,7 @@
 #extension GL_ARB_shading_language_include : require
 #endif
 
-#if IS_VULKAN
-#include "shared_vulkan.glsl.frag"
-#else
-#include "shared_opengl.glsl.frag"
-#endif
-
+#include "shared_wrapper.glsl.frag"
 
 // Input parameters.
 ATTR_LOC(0) in vec2 passTexCoord;
@@ -43,6 +38,8 @@ SAMPLING(gbMisc, SMP_RT, 2D, 2)
 SAMPLING(gbDepth, SMP_RT, 2D, 3)
 
 void main() {
+	Frustum frustum = READ(PASS, FRUSTUM);
+	ViewRay viewRay = READ(PASS, VIEWRAY);
 	// Fetch shininess value.
 	float shininess = texture(RT_SAMPLER_FOR(2D, gbMisc), passTexCoord).x;
 	// Fetch albedo texel.
@@ -54,8 +51,6 @@ void main() {
   // Fetch depth 
 	float depth = texture(RT_SAMPLER_FOR(2D, gbDepth), passTexCoord).x;
 	// Compute view space position.
-	Frustum frustum = READ(PASS, FRUSTUM);
-	ViewRay viewRay = READ(PASS, VIEWRAY);
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
 	// View space light direction.
 	DirLight dirLight = READ(INST, DIRLIGHT);

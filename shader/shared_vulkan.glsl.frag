@@ -12,7 +12,7 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_debug_printf : enable
+// #extension GL_EXT_debug_printf : enable
 
 #include "shared.glsl.frag"
 // Per vertex data
@@ -40,6 +40,10 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Mat
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer DirLights
 {
     DirLight items[];
+};
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer PointLights
+{
+    PointLight items[];
 };
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer TransformExtras
 {
@@ -108,6 +112,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tra
 #define USING_INST_TRANSFORM_MACRO Transforms transforms;
 #define USING_INST_MATERIAL_MACRO Materials materials;
 #define USING_INST_DIRLIGHT_MACRO DirLights dirLights;
+#define USING_INST_POINTLIGHT_MACRO PointLights pointLights;
 #define USING_INST_TRANSFORM_EXTRA_MACRO TransformExtras transformExtras;
 // Per-pass data definitions
 #define USING_PASS_TRANSFORM_MACRO Transform transform;

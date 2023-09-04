@@ -1,30 +1,30 @@
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_scalar_block_layout : require
+#version 330 core
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Vertices
-{
-    vec3 items[];
-};
+#ifdef IS_EXTERNAL_COMPILER
+#extension GL_GOOGLE_include_directive : require 
+#else
+#extension GL_ARB_shading_language_include : require
+#endif
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
-{
-    vec3 items[];
-};
+#include "shared_wrapper.glsl.frag"
 
-layout(push_constant) uniform Registers
-{
-    Vertices vertices;
-    Normals normals;
-} registers;
+INPUTS_BEGIN
+    USING(ATTR, POSITION)
+    USING(ATTR, NORMAL)
+    USING(ATTR, TEXCOORD)
+    USING(INST, TRANSFORM)
+    USING(INST, INSTANCE_ID)
+INPUTS_END
 
-layout (location = 0) out vec3 passColor;
+// Output parameters.
+ATTR_LOC(0) out vec3 outColor;
 
 void main() {
-    restrict vec3 inPos = registers.vertices.items[gl_VertexIndex].xyz;
-    // restrict vec3 normals = registers.normals.items[gl_VertexIndex];
-    passColor = (inPos + vec3(1.0)) * vec3(0.5);
-    gl_Position = vec4(inPos, 1);
+    // Instance index. Mandatory first line of main.
+    int passInstanceId = READ(INST, INSTANCE_ID);
+    vec3 inPosition = READ(ATTR, POSITION);
+    Transform trns = READ(INST, TRANSFORM);
+    // Projected position.
+    gl_Position = trns.mvp * vec4(inPosition, 1.0);
+    outColor = normalize(abs(gl_Position.xyz));
 }

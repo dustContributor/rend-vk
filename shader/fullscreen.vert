@@ -1,34 +1,31 @@
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
+#version 330 core
+
+#ifdef IS_EXTERNAL_COMPILER
+#extension GL_GOOGLE_include_directive : require 
+#else
+#extension GL_ARB_shading_language_include : require
+#endif
+
+#include "shared_wrapper.glsl.frag"
+
+INPUTS_BEGIN
+    USING(ATTR, POSITION)
+    USING(ATTR, NORMAL)
+    USING(ATTR, TEXCOORD)
+    USING(INST, TRANSFORM)
+    USING(INST, MATERIAL)
+    USING(INST, TRANSFORM_EXTRA)
+    // Always last
+    USING(INST, INSTANCE_ID)
+INPUTS_END
+
 // Output parameters.
-layout (location = 0) out vec2 passTexCoord;
+ATTR_LOC(0) out vec2 passTexCoord;
+ATTR_LOC(1) flat out int passInstanceId;
 
-// layout (location = 0) in vec3 inPos;
-// layout (location = 2) in vec3 inColor;
-
-vec2 texCoordFromVID(int vertexId)
-{
-  // 0
-  // 0, 0
-  // -1, -1, 0
-  // 1
-  // 2, 0
-  // 3, -1, 0
-  // 2
-  // 0, 2
-  // -1, 3, 0
-  return  vertexId == 0 ? vec2(0, 0) :
-          vertexId == 1 ? vec2(2, 0) : vec2(0, 2);
-  // return  vertexId == 0 ? vec2(-1, 1) :
-  //         vertexId == 1 ? vec2(1,1) : vec2(0, -1);  
-  // return  vertexId == 0 ? vec2(-2, 1) :
-  //         vertexId == 1 ? vec2(2,1) : vec2(0, -3);
-}
-
-void main()
-{
+void main() {
+  // Instance index. Mandatory first line of main.
+  passInstanceId = READ(INST, INSTANCE_ID);
   passTexCoord = texCoordFromVID(gl_VertexIndex);
   gl_Position = vec4((passTexCoord * 2.0 - 1.0), 0.0, 1.0);
-  // gl_Position = vec4(passTexCoord, 0.0, 1.0);
 }

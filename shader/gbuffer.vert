@@ -6,11 +6,7 @@
 #extension GL_ARB_shading_language_include : require
 #endif
 
-#ifdef IS_VULKAN
-#include "shared_vulkan.glsl.frag"
-#else
-#include "shared_opengl.glsl.frag"
-#endif
+#include "shared_wrapper.glsl.frag"
 
 INPUTS_BEGIN
     USING(ATTR, POSITION)

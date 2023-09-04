@@ -6,11 +6,7 @@
 #extension GL_ARB_shading_language_include : require
 #endif
 
-#ifdef IS_VULKAN
-#include "shared_vulkan.glsl.frag"
-#else
-#include "shared_opengl.glsl.frag"
-#endif
+#include "shared_wrapper.glsl.frag"
 
 INPUTS_BEGIN
 	UNUSED_INPUT(0) // pass data
@@ -26,8 +22,7 @@ INPUTS_END
 ATTR_LOC(0) out vec2 passTexCoord;
 ATTR_LOC(1) flat out int passInstanceId;
 
-void main()
-{
+void main() {
   // Instance index. Mandatory first line of main.
   passInstanceId = READ(INST, INSTANCE_ID);
   passTexCoord = texCoordFromVID(gl_VertexIndex);
