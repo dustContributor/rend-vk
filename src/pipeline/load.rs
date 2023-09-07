@@ -338,9 +338,11 @@ impl Pipeline {
              * the attachment is read from in a previous pass as an input.
              */
             let mut outputs_for_barriers = attachment_outputs.clone();
-            if let Some(att) = depth_stencil_attachment {
-                outputs_for_barriers.push(att.clone())
-            };
+            if writing.depth || writing.stencil {
+                if let Some(att) = depth_stencil_attachment {
+                    outputs_for_barriers.push(att.clone())
+                };
+            }
             let image_barriers = Self::gen_image_barriers_for(
                 passi,
                 &inputs,

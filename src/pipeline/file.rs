@@ -110,7 +110,7 @@ pub struct ViewportDesc {
     pub y: U32OrF32,
     pub width: U32OrF32,
     pub height: U32OrF32,
-} 
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
@@ -454,12 +454,14 @@ impl BlendDesc {
                 src_alpha_blend_factor: vk::BlendFactor::ZERO,
                 dst_alpha_blend_factor: vk::BlendFactor::ZERO,
                 alpha_blend_op: vk::BlendOp::ADD,
-                color_write_mask: vk::ColorComponentFlags::RGBA,
+                color_write_mask: vk::ColorComponentFlags::R
+                    | vk::ColorComponentFlags::G
+                    | vk::ColorComponentFlags::B,
                 ..Default::default()
             })
             .collect();
         let info = vk::PipelineColorBlendStateCreateInfo::builder()
-            .logic_op(vk::LogicOp::CLEAR)
+            .logic_op_enable(false)
             .attachments(&attachments)
             .build();
         (attachments, info)
