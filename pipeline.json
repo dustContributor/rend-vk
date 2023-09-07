@@ -50,6 +50,11 @@
       "fragment": "dir_light.frag"
     },
     {
+      "name": "pointLight",
+      "vertex": "point_light.vert",
+      "fragment": "point_light.frag"
+    },
+    {
       "name": "gbuffer",
       "vertex": "gbuffer.vert",
       "fragment": "gbuffer.frag"
@@ -116,14 +121,16 @@
           "sampler": "LINEAR"
         }
       ],
-      "perInstanceUpdaters": ["DIR_LIGHT"],
+      "perInstanceUpdaters": [
+        "DIR_LIGHT"
+      ],
       "perPassUpdaters": [
         "VIEW_RAY",
         "FRUSTUM"
       ],
       "state": {
         "writing": "COLOR",
-        "depth":  {
+        "depth": {
           "func": "GREATER",
           "rangeStart": 1.0,
           "rangeEnd": 1.0,
@@ -133,13 +140,55 @@
         "scissor": "DEFAULT",
         "viewport": "DEFAULT",
         "stencil": "NO",
-        "triangle": {
-          "frontFace": "CCW",
-          "cullFace": "FRONT",
-          "polygonMode": "FILL"
-        },
+        "triangle": "DEFAULT",
         "blending": "NO",
         "clearing": "COLOR"
+      }
+    },
+    {
+      "name": "pointLight",
+      "isDisabled": true,
+      "program": "pointLight",
+      "batch": "LIGHT_DIR",
+      "depthStencil": "depth",
+      "outputs": [
+        "lightAcc"
+      ],
+      "inputs": [
+        {
+          "name": "albedo",
+          "sampler": "LINEAR"
+        },
+        {
+          "name": "normal",
+          "sampler": "LINEAR"
+        },
+        {
+          "name": "misc",
+          "sampler": "LINEAR"
+        },
+        {
+          "name": "depth",
+          "sampler": "LINEAR"
+        }
+      ],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "POINT_LIGHT"
+      ],
+      "perPassUpdaters": [
+        "VIEW_RAY",
+        "FRUSTUM"
+      ],
+      "state": {
+        "writing": "COLOR",
+        "depth": "DEFAULT",
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "YES",
+        "clearing": "NO"
       }
     },
     {
