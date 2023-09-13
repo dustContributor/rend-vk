@@ -454,9 +454,11 @@ impl BlendDesc {
                 src_alpha_blend_factor: vk::BlendFactor::ZERO,
                 dst_alpha_blend_factor: vk::BlendFactor::ZERO,
                 alpha_blend_op: vk::BlendOp::ADD,
+                // TODO: Apply writing.color_mask ?
                 color_write_mask: vk::ColorComponentFlags::R
                     | vk::ColorComponentFlags::G
-                    | vk::ColorComponentFlags::B,
+                    | vk::ColorComponentFlags::B
+                    | vk::ColorComponentFlags::A,
                 ..Default::default()
             })
             .collect();
