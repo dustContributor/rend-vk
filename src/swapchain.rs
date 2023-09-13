@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::{context::VulkanContext, pipeline::attachment::Attachment};
+use crate::{context::VulkanContext, format::Format, pipeline::attachment::Attachment};
 
 pub struct SwapchainContext {
     pub surface: vk::SurfaceKHR,
@@ -142,11 +142,22 @@ pub fn surface_extent(
 }
 
 pub fn surface_format(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> vk::SurfaceFormatKHR {
-    unsafe {
+    let formats = unsafe {
         ctx.extension
             .surface
             .get_physical_device_surface_formats(ctx.physical_device, surface)
-            .unwrap()[0]
+            .unwrap()
+    };
+    // Try finding the first SRGB format available
+    let srgb = formats
+        .iter()
+        .find(|e| Format::of_u32(e.format.as_raw() as u32).is_srgb());
+    if let Some(fmt) = srgb {
+        *fmt
+    } else {
+        *formats
+            .first()
+            .expect("couldn't list the device's surface formats!")
     }
 }
 
