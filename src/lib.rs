@@ -16,9 +16,6 @@ pub mod texture;
 pub mod updater;
 pub mod window;
 
-pub const DEBUG_ENABLED: bool = true;
-pub const VALIDATION_LAYER_ENABLED: bool = true;
-
 pub trait UsedAsIndex<const T: u8> {
     const MAX_VALUE: u8 = T;
     const MAX_SIZE: usize = Self::MAX_VALUE as usize;

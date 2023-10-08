@@ -2,8 +2,6 @@ use std::{any::TypeId, collections::HashMap};
 
 use ash::vk;
 
-use crate::DEBUG_ENABLED;
-
 #[derive(Clone)]
 pub struct VulkanContext {
     pub entry: ash::Entry,
@@ -52,10 +50,8 @@ impl ExtensionContext {
     where
         T: vk::Handle,
     {
-        if !DEBUG_ENABLED {
-            return false;
-        }
         if !self.debug_utils.is_some() {
+            // Assume no debug utils means debug isn't enabled
             return false;
         }
         let dbg = self.debug_utils.as_ref().unwrap();

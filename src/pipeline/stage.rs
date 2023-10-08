@@ -25,6 +25,7 @@ pub struct Stage {
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
     pub reserved_buffers: Vec<DeviceSlice>,
+    pub is_validation_layer_enabled: bool,
 }
 
 #[derive(Clone)]
@@ -210,7 +211,7 @@ impl Stage {
         total_stages: u32,
         semaphore: vk::Semaphore,
     ) {
-        if crate::VALIDATION_LAYER_ENABLED && current_frame < 1 {
+        if self.is_validation_layer_enabled && current_frame < 1 {
             /*
              * If validation layers are enabled, don't wait the first frame to avoid
              * a validation false positive that locks the main thread for a few seconds

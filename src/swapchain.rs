@@ -12,11 +12,15 @@ pub struct SwapchainContext {
 }
 
 impl SwapchainContext {
-    pub fn make(vulkan_context: &VulkanContext, surface: vk::SurfaceKHR) -> Self {
-        let present_mode = present_mode(&vulkan_context, surface);
+    pub fn make(
+        vulkan_context: &VulkanContext,
+        surface: vk::SurfaceKHR,
+        is_vsync_enabled: bool,
+    ) -> Self {
+        let present_mode = present_mode(&vulkan_context, surface, is_vsync_enabled);
         let surface_extent = surface_extent(&vulkan_context, surface, 0, 0);
         let surface_format = surface_format(&vulkan_context, surface);
-        let swapchain = swapchain(&vulkan_context, surface, surface_extent);
+        let swapchain = swapchain(&vulkan_context, surface, surface_extent, present_mode);
         let swapchain_attachments =
             attachments(&vulkan_context, surface, swapchain, surface_extent);
         Self {
@@ -103,9 +107,9 @@ pub fn swapchain(
     ctx: &VulkanContext,
     surface: vk::SurfaceKHR,
     surface_extent: vk::Extent2D,
+    present_mode: vk::PresentModeKHR,
 ) -> vk::SwapchainKHR {
     let surface_format = surface_format(ctx, surface);
-    let present_mode = present_mode(ctx, surface);
     let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
         .surface(surface)
         .min_image_count(desired_image_count(ctx, surface))
@@ -161,7 +165,11 @@ pub fn surface_format(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> vk::Surfa
     }
 }
 
-pub fn present_mode(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> vk::PresentModeKHR {
+pub fn present_mode(
+    ctx: &VulkanContext,
+    surface: vk::SurfaceKHR,
+    is_vsync_enabled: bool,
+) -> vk::PresentModeKHR {
     let present_modes = unsafe {
         ctx.extension
             .surface
@@ -171,8 +179,15 @@ pub fn present_mode(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> vk::Present
     present_modes
         .iter()
         .cloned()
-        .find(|&mode| mode == vk::PresentModeKHR::FIFO_RELAXED)
-        .unwrap_or(vk::PresentModeKHR::FIFO)
+        // if vsync is enabled, prefer dynamic vsync
+        .find(|&mode| is_vsync_enabled && mode == vk::PresentModeKHR::FIFO_RELAXED)
+        .unwrap_or(if is_vsync_enabled {
+            // otherwise default to hard vsync
+            vk::PresentModeKHR::FIFO
+        } else {
+            // no vsync at all
+            vk::PresentModeKHR::IMMEDIATE
+        })
 }
 
 pub fn desired_image_count(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> u32 {

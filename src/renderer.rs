@@ -446,7 +446,13 @@ impl Renderer {
     }
 }
 
-pub fn make_renderer<F>(instance_extensions: &[*const i8], create_surface: F) -> Renderer
+pub fn make_renderer<F>(
+    is_vsync_enabled: bool,
+    is_debug_enabled: bool,
+    is_validation_layer_enabled: bool,
+    instance_extensions: &[*const i8],
+    create_surface: F,
+) -> Renderer
 where
     F: FnOnce(&ash::Entry, &ash::Instance, *mut vk::SurfaceKHR) -> vk::Result,
 {
@@ -456,16 +462,21 @@ where
     let entry = Entry::linked();
     log::trace!("entry created!");
     log::trace!("creating instance...");
-    let instance = make_instance(&entry, instance_extensions);
+    let instance = make_instance(
+        &entry,
+        instance_extensions,
+        is_debug_enabled,
+        is_validation_layer_enabled,
+    );
     log::trace!("instance created!");
 
-    let debug_context = if crate::DEBUG_ENABLED {
+    let debug_context = if is_debug_enabled {
         Some(Box::new(DebugContext::new(&entry, &instance)))
     } else {
         None
     };
 
-    let debug_utils_ext = if crate::DEBUG_ENABLED {
+    let debug_utils_ext = if is_debug_enabled {
         Some(DebugUtils::new(&entry, &instance))
     } else {
         None
@@ -486,7 +497,12 @@ where
         select_physical_device(&instance, &surface_extension, surface);
     log::trace!("physical device selected!");
     log::trace!("creating device...");
-    let device = make_device(&instance, physical_device, queue_family_index);
+    let device = make_device(
+        &instance,
+        physical_device,
+        queue_family_index,
+        is_debug_enabled,
+    );
     log::trace!("device created!");
 
     let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
@@ -577,7 +593,8 @@ where
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
-    let swapchain_context = swapchain::SwapchainContext::make(&vulkan_context, surface);
+    let swapchain_context =
+        swapchain::SwapchainContext::make(&vulkan_context, surface, is_vsync_enabled);
     log::trace!("swapchain created!");
 
     log::trace!("creating pipeline...");
@@ -585,6 +602,7 @@ where
         &vulkan_context,
         &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
+        is_validation_layer_enabled,
         Some("pipeline.json"),
     );
     log::trace!("pipeline created!");
@@ -652,6 +670,7 @@ pub fn make_device(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
     queue_family_index: u32,
+    is_debug_enabled: bool,
 ) -> ash::Device {
     let mut device_extension_names_raw = vec![
         khr::Swapchain::name().as_ptr(),
@@ -659,7 +678,7 @@ pub fn make_device(
     ];
     let non_semantic_info_name =
         CStr::from_bytes_with_nul(b"VK_KHR_shader_non_semantic_info\0").unwrap();
-    if crate::DEBUG_ENABLED {
+    if is_debug_enabled {
         device_extension_names_raw.push(non_semantic_info_name.as_ptr());
     }
     let features = vk::PhysicalDeviceFeatures {
@@ -714,19 +733,24 @@ pub fn make_device(
     return device;
 }
 
-pub fn make_instance(entry: &ash::Entry, extensions: &[*const i8]) -> ash::Instance {
+pub fn make_instance(
+    entry: &ash::Entry,
+    extensions: &[*const i8],
+    is_debug_enabled: bool,
+    is_validation_layer_enabled: bool,
+) -> ash::Instance {
     let app_name = CStr::from_bytes_with_nul(b"rend-vk\0").unwrap();
 
     let mut layers_names_raw = vec![];
 
     let validation_layer_name =
         CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap();
-    if crate::DEBUG_ENABLED && crate::VALIDATION_LAYER_ENABLED {
+    if is_debug_enabled && is_validation_layer_enabled {
         layers_names_raw.push(validation_layer_name.as_ptr());
     }
 
     let mut instance_extensions = extensions.to_vec();
-    if crate::DEBUG_ENABLED {
+    if is_debug_enabled {
         instance_extensions.push(DebugUtils::name().as_ptr());
     }
 
@@ -747,7 +771,7 @@ pub fn make_instance(entry: &ash::Entry, extensions: &[*const i8]) -> ash::Insta
         .enabled_validation_features(&enabled_validation_features)
         .build();
 
-    if crate::DEBUG_ENABLED {
+    if is_debug_enabled {
         create_info = create_info.push_next(&mut validation_features_ext);
     }
 

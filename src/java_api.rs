@@ -65,6 +65,30 @@ pub struct JavaMipMap {
     pub offset: u32,
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(C, packed(4))]
+pub struct JavaMakeRenderer {
+    pub window: u64,
+    pub instance_extensions: u64,
+    pub instance_extensions_len: u64,
+    pub glfw_create_window_surface: u64,
+    is_vsync_enabled: u8,
+    is_debug_enabled: u8,
+    is_validation_layer_enabled: u8,
+}
+
+impl JavaMakeRenderer {
+    fn is_vsync_enabled(&self) -> bool {
+        self.is_vsync_enabled == JNI_TRUE
+    }
+    fn is_debug_enabled(&self) -> bool {
+        self.is_debug_enabled == JNI_TRUE
+    }
+    fn is_validation_layer_enabled(&self) -> bool {
+        self.is_validation_layer_enabled == JNI_TRUE
+    }
+}
+
 impl ToJava<JavaMipMap> for MipMap {
     fn to_java(&self) -> JavaMipMap {
         JavaMipMap {
@@ -128,10 +152,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
-    window: u64,
-    instance_extensions: u64,
-    instance_extensions_len: u64,
-    glfw_create_window_surface: u64,
+    pars: JavaMakeRenderer,
 ) -> u64 {
     /*
      * VkResult glfwCreateWindowSurface (
@@ -144,21 +165,27 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
         std::mem::transmute::<
             _,
             extern "C" fn(vk::Instance, u64, u64, *const vk::SurfaceKHR) -> vk::Result,
-        >(glfw_create_window_surface as *const ())
+        >(pars.glfw_create_window_surface as *const ())
     };
-    let instance_extensions: &[*const i8] = if instance_extensions_len == 0 {
+    let instance_extensions: &[*const i8] = if pars.instance_extensions_len == 0 {
         &[]
     } else {
         unsafe {
             std::slice::from_raw_parts(
-                instance_extensions as *const *const i8,
-                instance_extensions_len as usize,
+                pars.instance_extensions as *const *const i8,
+                pars.instance_extensions_len as usize,
             )
         }
     };
-    let renderer = renderer::make_renderer(instance_extensions, |_, instance, surface| {
-        glfw_create_window_surface(instance.handle(), window, 0, surface)
-    });
+    let renderer = renderer::make_renderer(
+        pars.is_vsync_enabled(),
+        pars.is_debug_enabled(),
+        pars.is_validation_layer_enabled(),
+        instance_extensions,
+        |_, instance, surface| {
+            glfw_create_window_surface(instance.handle(), pars.window, 0, surface)
+        },
+    );
     let boxed = Box::from(renderer);
     let ptr = Box::into_raw(boxed) as u64;
     log::trace!("renderer finished!");
@@ -423,7 +450,9 @@ fn unpack_render_task_resources(
             ResourceKind::DirLight => unpack_multi_resource::<DirLight>(offset, instances, data),
             // ResourceKind::Frustum => unpack_multi_resources::<Frustum>(start, end, data),
             // ResourceKind::ViewRay => unpack_multi_resources::<ViewRay>(start, end, data),
-            // ResourceKind::PointLight => unpack_multi_resources::<PointLight>(start, end, data),
+            ResourceKind::PointLight => {
+                unpack_multi_resource::<PointLight>(offset, instances, data)
+            }
             // ResourceKind::SpotLight => unpack_multi_resources::<SpotLight>(start, end, data),
             // ResourceKind::Joint => unpack_multi_resources::<Joint>(start, end, data),
             // ResourceKind::Sky => unpack_multi_resources::<Sky>(start, end, data),

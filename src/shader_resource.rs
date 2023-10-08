@@ -132,9 +132,8 @@ pub struct DirLight {
 #[derive(Clone)]
 #[repr(C)]
 pub struct PointLight {
-    pub radius: f32,
-    pub intensity: f32,
     pub color: Vec3,
+    pub radius: f32,
 }
 #[derive(Clone)]
 #[repr(C)]

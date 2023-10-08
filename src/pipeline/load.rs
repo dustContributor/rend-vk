@@ -24,6 +24,7 @@ impl Pipeline {
         ctx: &VulkanContext,
         descriptor_mem: &mut DeviceAllocator,
         default_attachment: Attachment,
+        is_validation_layer_enabled: bool,
         name: Option<&str>,
     ) -> crate::pipeline::Pipeline {
         let pip = Self::read(name);
@@ -400,6 +401,7 @@ impl Pipeline {
             }
             stages.push(crate::pipeline::stage::Stage {
                 name: pass.name.clone(),
+                is_validation_layer_enabled,
                 rendering: super::stage::Rendering {
                     attachments: attachment_rendering,
                     depth_stencil: depth_stencil_rendering,
