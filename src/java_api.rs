@@ -65,30 +65,6 @@ pub struct JavaMipMap {
     pub offset: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[repr(C, packed(4))]
-pub struct JavaMakeRenderer {
-    pub window: u64,
-    pub instance_extensions: u64,
-    pub instance_extensions_len: u64,
-    pub glfw_create_window_surface: u64,
-    is_vsync_enabled: u8,
-    is_debug_enabled: u8,
-    is_validation_layer_enabled: u8,
-}
-
-impl JavaMakeRenderer {
-    fn is_vsync_enabled(&self) -> bool {
-        self.is_vsync_enabled == JNI_TRUE
-    }
-    fn is_debug_enabled(&self) -> bool {
-        self.is_debug_enabled == JNI_TRUE
-    }
-    fn is_validation_layer_enabled(&self) -> bool {
-        self.is_validation_layer_enabled == JNI_TRUE
-    }
-}
-
 impl ToJava<JavaMipMap> for MipMap {
     fn to_java(&self) -> JavaMipMap {
         JavaMipMap {
@@ -152,7 +128,13 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
-    pars: JavaMakeRenderer,
+    window: u64,
+    instance_extensions: u64,
+    instance_extensions_len: u32,
+    glfw_create_window_surface: u64,
+    is_vsync_enabled: u8,
+    is_debug_enabled: u8,
+    is_validation_layer_enabled: u8,
 ) -> u64 {
     /*
      * VkResult glfwCreateWindowSurface (
@@ -165,26 +147,24 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
         std::mem::transmute::<
             _,
             extern "C" fn(vk::Instance, u64, u64, *const vk::SurfaceKHR) -> vk::Result,
-        >(pars.glfw_create_window_surface as *const ())
+        >(glfw_create_window_surface as *const ())
     };
-    let instance_extensions: &[*const i8] = if pars.instance_extensions_len == 0 {
+    let instance_extensions: &[*const i8] = if instance_extensions_len == 0 {
         &[]
     } else {
         unsafe {
             std::slice::from_raw_parts(
-                pars.instance_extensions as *const *const i8,
-                pars.instance_extensions_len as usize,
+                instance_extensions as *const *const i8,
+                instance_extensions_len as usize,
             )
         }
     };
     let renderer = renderer::make_renderer(
-        pars.is_vsync_enabled(),
-        pars.is_debug_enabled(),
-        pars.is_validation_layer_enabled(),
+        is_vsync_enabled == JNI_TRUE,
+        is_debug_enabled == JNI_TRUE,
+        is_validation_layer_enabled == JNI_TRUE,
         instance_extensions,
-        |_, instance, surface| {
-            glfw_create_window_surface(instance.handle(), pars.window, 0, surface)
-        },
+        |_, instance, surface| glfw_create_window_surface(instance.handle(), window, 0, surface),
     );
     let boxed = Box::from(renderer);
     let ptr = Box::into_raw(boxed) as u64;
@@ -384,7 +364,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_placeShaderResource(
     renderer: u64,
     kind: u32,
     resource: u64,
-    resource_len: u64,
+    resource_len: u32,
 ) {
     let mut renderer = to_renderer(renderer);
     let kind = ResourceKind::of_u32(kind);
@@ -416,7 +396,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     instance_count: u32,
     resource_bits: u32,
     resources: u64,
-    resources_len: u64,
+    resources_len: u32,
 ) {
     let mut renderer = to_renderer(renderer);
     let kind = TaskKind::of_u32(kind);
