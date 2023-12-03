@@ -2,11 +2,8 @@
 
 #define IS_FRAGMENT_SHADER 1
 
-#if IS_EXTERNAL_COMPILER
-#extension GL_GOOGLE_include_directive : require 
-#else
-#extension GL_ARB_shading_language_include : require
-#endif
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
 #include "shared_wrapper.glsl.frag"
 

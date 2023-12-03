@@ -2,11 +2,8 @@
 
 #define IS_FRAGMENT_SHADER 1
 
-#if IS_EXTERNAL_COMPILER
-#extension GL_GOOGLE_include_directive : require 
-#else
-#extension GL_ARB_shading_language_include : require
-#endif
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
 #include "shared_wrapper.glsl.frag"
 
@@ -14,7 +11,7 @@
 ATTR_LOC(0) flat in int passInstanceId;
 ATTR_LOC(1) flat in vec3 passViewPosCenter;
 ATTR_LOC(2) flat in float passInvRadius;
-ATTR_LOC(3) flat in vec3 passColor;
+ATTR_LOC(3) flat in vec3 passLightColor;
 
 PASS_DATA_BEGIN
 	USING(PASS, VIEWRAY)
@@ -23,9 +20,9 @@ PASS_DATA_END
 
 INPUTS_BEGIN
 	USING(PASS, DATA)
-  USING(ATTR, POSITION)
-  USING(ATTR, NORMAL)
-  USING(ATTR, TEXCOORD)
+	UNUSED_INPUT(1)
+	UNUSED_INPUT(2)
+	UNUSED_INPUT(3)
   USING(INST, TRANSFORM)
 	USING(INST, POINTLIGHT)
 INPUTS_END
@@ -58,14 +55,14 @@ void main () {
 	// Compute view space position.
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
 	// Light direction.
-	vec3 lgtDir = normalize(passViewPosCenter - viewPos);
+	vec3 lightDir = normalize(passViewPosCenter - viewPos);
 
 	// Attenuation factor.
 	float attenuation = quadraticAttenuation(passViewPosCenter, viewPos, passInvRadius);
 	// Diffuse light term.
-	vec3 diffuse = computeDiffuse(normal, lgtDir) * attenuation * passColor;
+	vec3 diffuse = computeDiffuse(normal, lightDir) * attenuation * passLightColor;
 	// Specular term.
-	vec3 specular = computeSpecular(viewPos, lgtDir, normal, specIntensity, shininess) * attenuation * passColor;
+	vec3 specular = computeSpecular(viewPos, lightDir, normal, specIntensity, shininess) * attenuation * passLightColor;
 
 	// Output to light accumulation buffer.
 	outLightAcc = txAlbedo.xyz * diffuse + specular;

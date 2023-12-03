@@ -1,11 +1,8 @@
 #ifndef SHARED_VULKAN_GLSL
 #define SHARED_VULKAN_GLSL
 
-#ifdef IS_EXTERNAL_COMPILER
-#extension GL_GOOGLE_include_directive : require 
-#else
-#extension GL_ARB_shading_language_include : require
-#endif
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
 #extension GL_ARB_separate_shader_objects : require
 #extension GL_ARB_shading_language_420pack : require

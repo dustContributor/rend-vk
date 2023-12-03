@@ -1,10 +1,7 @@
 #version 330 core
 
-#ifdef IS_EXTERNAL_COMPILER
-#extension GL_GOOGLE_include_directive : require 
-#else
-#extension GL_ARB_shading_language_include : require
-#endif
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
 #include "shared_wrapper.glsl.frag"
 
@@ -21,9 +18,9 @@ INPUTS_END
 
 // Output parameters.
 ATTR_LOC(0) flat out int passInstanceId;
-ATTR_LOC(1) out vec3 passViewPosCenter;
+ATTR_LOC(1) flat out vec3 passViewPosCenter;
 ATTR_LOC(2) flat out float passInvRadius;
-ATTR_LOC(3) flat out vec3 passColor;
+ATTR_LOC(3) flat out vec3 passLightColor;
 
 void main() {
   // Instance index. Mandatory first line of main.
@@ -36,7 +33,7 @@ void main() {
   // Inverse radius used for each fragment
   passInvRadius = 1.0 / pointLight.radius;
   // Pass color so fragment shader doesn't has toread the point light data
-  passColor = pointLight.color;
+  passLightColor = pointLight.color;
 	// Last column is the translation.
   passViewPosCenter = trns.mv[3].xyz;
 		// Matrix contains scaling and positioning.

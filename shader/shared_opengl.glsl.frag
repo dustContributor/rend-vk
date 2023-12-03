@@ -1,14 +1,13 @@
 #ifndef SHARED_OPENGL_GLSL
 #define SHARED_OPENGL_GLSL
 
-#ifdef IS_EXTERNAL_COMPILER
-#extension GL_GOOGLE_include_directive : require 
-#else
-#extension GL_ARB_shading_language_include : require
-#endif
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
 //#pragma optionNV(strict on)
 #extension GL_ARB_shading_language_420pack : require
+// Got renamed in Vulkan
+#define gl_VertexIndex gl_VertexID
 
 #include "shared.glsl.frag"
 
@@ -101,69 +100,76 @@
 #define UBO_SKY_SIZE 96
 #define UBO_STATIC_SHADOW_SIZE 64
 #define UBO_TRANSFORM_EXTRA_SIZE 64
-// divided by size of Transform struct.
+
 #define MAX_UBO_TRANSFORMS	UBO_MAX_SIZE / UBO_TRANSFORM_SIZE
-// divided by size of Material struct.
 #define MAX_UBO_MATERIALS	UBO_MAX_SIZE / UBO_MATERIAL_SIZE
-// divided by size of PointLight struct
+#define MAX_UBO_DIRLIGHTS UBO_MAX_SIZE / UBO_DIRLIGHT_SIZE
 #define MAX_UBO_POINTLIGHTS UBO_MAX_SIZE / UBO_POINTLIGHT_SIZE
-// divided by size of SpotLight struct.
 #define MAX_UBO_SPOTLIGHTS UBO_MAX_SIZE / UBO_SPOTLIGHT_SIZE
-// divided by size of Joint.
 #define MAX_UBO_JOINTS UBO_MAX_SIZE / UBO_JOINT_SIZE
-// divided by size of StaticShadow struct.
 #define MAX_UBO_STATIC_SHADOW UBO_MAX_SIZE / UBO_STATIC_SHADOW_SIZE
-// divided by size of TransformExtra struct.
 #define MAX_UBO_TRANSFORM_EXTRA UBO_MAX_SIZE / UBO_TRANSFORM_EXTRA_SIZE
 
+// Per instance data
 #define READ_INST_TRANSFORM_MACRO transforms[passInstanceId]
 #define READ_INST_MATERIAL_MACRO materials[passInstanceId]
-#define READ_INST_DIRLIGHT_MACRO dirLight
+#define READ_INST_DIRLIGHT_MACRO dirLights[passInstanceId]
 #define READ_INST_FRUSTUM_MACRO frustum
-#define READ_INST_VIEWRAY_MACRO viewRays
+#define READ_INST_VIEWRAY_MACRO viewRay
 #define READ_INST_POINTLIGHT_MACRO pointLights[passInstanceId]
 #define READ_INST_SPOTLIGHT_MACRO spotLights[passInstanceId]
 #define READ_INST_JOINT_MACRO joints[passInstanceId]
 #define READ_INST_SKY_MACRO sky
 #define READ_INST_STATIC_SHADOW_MACRO staticShadows[passInstanceId]
 #define READ_INST_TRANSFORM_EXTRA_MACRO transformExtras[passInstanceId]
-// UBO macro expansions.
-#define USING_UBO_TRANSFORM_MACRO layout ( std140, binding = BIND_UBO_TRANSFORMS ) uniform UBO_TRANSFORMS_NAME {  Transform[MAX_UBO_TRANSFORMS] transforms; }
-#define USING_UBO_MATERIAL_MACRO layout ( std140, binding = BIND_UBO_MATERIAL ) uniform UBO_MATERIAL_NAME {  Material[MAX_UBO_MATERIALS] materials; }
-#define USING_UBO_DIRLIGHT_MACRO layout ( std140, binding = BIND_UBO_DIRLIGHT ) uniform UBO_DIRLIGHT_NAME {  DirLight dirLight; }
-#define USING_UBO_FRUSTUM_MACRO layout ( std140, binding = BIND_UBO_FRUSTUM ) uniform UBO_FRUSTUM_NAME {  Frustum frustum; }
-#define USING_UBO_VIEWRAY_MACRO layout ( std140, binding = BIND_UBO_VIEWRAY ) uniform UBO_VIEWRAY_NAME {  ViewRays viewRays; }
-#define USING_UBO_POINTLIGHT_MACRO layout ( std140, binding = BIND_UBO_POINTLIGHT ) uniform UBO_POINTLIGHT_NAME {  PointLight[MAX_UBO_POINTLIGHTS] pointLights; }
-#define USING_UBO_SPOTLIGHT_MACRO layout ( std140, binding = BIND_UBO_SPOTLIGHT ) uniform UBO_SPOTLIGHT_NAME {  SpotLight[MAX_UBO_SPOTLIGHTS] spotLights; }
-#define USING_UBO_JOINT_MACRO layout ( std140, binding = BIND_UBO_JOINT ) uniform UBO_JOINT_NAME {  Joint[MAX_UBO_JOINTS] joints; }
-#define USING_UBO_SKY_MACRO layout ( std140, binding = BIND_UBO_SKY ) uniform UBO_SKY_NAME {  Sky sky; }
-#define USING_UBO_STATIC_SHADOW_MACRO layout ( std140, binding = BIND_UBO_STATIC_SHADOW ) uniform UBO_STATIC_SHADOW_NAME {  StaticShadow[MAX_UBO_STATIC_SHADOW] staticShadows; }
-#define USING_UBO_TRANSFORM_EXTRA_MACRO layout ( std140, binding = BIND_UBO_TRANSFORM_EXTRA ) uniform UBO_TRANSFORM_EXTRA_NAME {  TransformExtra[MAX_UBO_TRANSFORM_EXTRA] transformExtras; }
-
+// Per pass data
+#define READ_PASS_FRUSTUM_MACRO frustum
+#define READ_PASS_VIEWRAY_MACRO viewRay
+// Per-attribute data
 #define READ_ATTR_POSITION_MACRO inPosition
 #define READ_ATTR_NORMAL_MACRO inNormal
 #define READ_ATTR_COLOR_MACRO inColor
 #define READ_ATTR_TEXCOORD_MACRO inTexCoord
 #define READ_ATTR_JOINT_WEIGHT_MACRO inJointWeight
-#define READ_ATTR_INSTANCE_ID_MACRO inInstanceId
+// Base attribute/instance read macro expansion
+#define READ(TYPE,NAME) READ_##TYPE##_##NAME##_MACRO
+
+// UBO macro expansions for per-instance data
+#define USING_INST_TRANSFORM_MACRO layout ( std140, binding = BIND_UBO_TRANSFORMS ) uniform UBO_TRANSFORMS_NAME {  Transform[MAX_UBO_TRANSFORMS] transforms; };
+#define USING_INST_MATERIAL_MACRO layout ( std140, binding = BIND_UBO_MATERIAL ) uniform UBO_MATERIAL_NAME {  Material[MAX_UBO_MATERIALS] materials; };
+#define USING_INST_DIRLIGHT_MACRO layout ( std140, binding = BIND_UBO_DIRLIGHT ) uniform UBO_DIRLIGHT_NAME {  DirLight[MAX_UBO_DIRLIGHTS] dirLights; };
+#define USING_INST_FRUSTUM_MACRO layout ( std140, binding = BIND_UBO_FRUSTUM ) uniform UBO_FRUSTUM_NAME {  Frustum frustum; };
+#define USING_INST_VIEWRAY_MACRO layout ( std140, binding = BIND_UBO_VIEWRAY ) uniform UBO_VIEWRAY_NAME {  ViewRay viewRay; };
+#define USING_INST_POINTLIGHT_MACRO layout ( std140, binding = BIND_UBO_POINTLIGHT ) uniform UBO_POINTLIGHT_NAME {  PointLight[MAX_UBO_POINTLIGHTS] pointLights; };
+#define USING_INST_SPOTLIGHT_MACRO layout ( std140, binding = BIND_UBO_SPOTLIGHT ) uniform UBO_SPOTLIGHT_NAME {  SpotLight[MAX_UBO_SPOTLIGHTS] spotLights; };
+#define USING_INST_JOINT_MACRO layout ( std140, binding = BIND_UBO_JOINT ) uniform UBO_JOINT_NAME {  Joint[MAX_UBO_JOINTS] joints; };
+#define USING_INST_SKY_MACRO layout ( std140, binding = BIND_UBO_SKY ) uniform UBO_SKY_NAME {  Sky sky; };
+#define USING_INST_STATIC_SHADOW_MACRO layout ( std140, binding = BIND_UBO_STATIC_SHADOW ) uniform UBO_STATIC_SHADOW_NAME {  StaticShadow[MAX_UBO_STATIC_SHADOW] staticShadows; };
+#define USING_INST_TRANSFORM_EXTRA_MACRO layout ( std140, binding = BIND_UBO_TRANSFORM_EXTRA ) uniform UBO_TRANSFORM_EXTRA_NAME {  TransformExtra[MAX_UBO_TRANSFORM_EXTRA] transformExtras; };
+// UBO macro expansions for per-pass data
+#define USING_PASS_FRUSTUM_MACRO layout ( std140, binding = BIND_UBO_FRUSTUM ) uniform UBO_FRUSTUM_NAME {  Frustum frustum; };
+#define USING_PASS_VIEWRAY_MACRO layout ( std140, binding = BIND_UBO_VIEWRAY ) uniform UBO_VIEWRAY_NAME {  ViewRay viewRay; };
+
 // Input attribute macro expansions.
-#define USING_ATTR_POSITION_MACRO layout ( location = ATTRIB_LOC_POSITION ) in vec3 inPosition
-#define USING_ATTR_NORMAL_MACRO layout ( location = ATTRIB_LOC_NORMAL ) in vec3 inNormal
-#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in vec3 inColor
-#define USING_ATTR_TEXCOORD_MACRO layout ( location = ATTRIB_LOC_TEXCOORD ) in vec2 inTexCoord
-#define USING_ATTR_JOINT_WEIGHT_MACRO layout ( location = ATTRIB_LOC_JOINT_WEIGHT ) in uvec3 inJointWeight
-#define USING_ATTR_INSTANCE_ID_MACRO layout ( location = ATTRIB_LOC_INSTANCE_ID ) in int inInstanceId
+#define USING_ATTR_POSITION_MACRO layout ( location = ATTRIB_LOC_POSITION ) in vec3 inPosition;
+#define USING_ATTR_NORMAL_MACRO layout ( location = ATTRIB_LOC_NORMAL ) in vec3 inNormal;
+#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in vec3 inColor;
+#define USING_ATTR_TEXCOORD_MACRO layout ( location = ATTRIB_LOC_TEXCOORD ) in vec2 inTexCoord;
+#define USING_ATTR_JOINT_WEIGHT_MACRO layout ( location = ATTRIB_LOC_JOINT_WEIGHT ) in uvec3 inJointWeight;
+
+// On GL this is an attribute, but use it as conceptually "per instance" data
+#define READ_INST_INSTANCE_ID_MACRO inInstanceId
+#define USING_INST_INSTANCE_ID_MACRO layout ( location = ATTRIB_LOC_INSTANCE_ID ) in int inInstanceId;
 
 #define USING(TYPE, NAME) USING_##TYPE##_##NAME##_MACRO
 
-#define SAMPLING(NAME, SRC, TYPE, INDEX) layout ( binding = SRC##_##INDEX ) uniform sampler##TYPE NAME
+#define SAMPLING(NAME, SRC, TYPE, INDEX) layout ( binding = SRC##_##INDEX ) uniform sampler##TYPE NAME;
 
 #define WRITING(NAME, TYPE, INDEX) layout ( location = RT_##INDEX ) out TYPE NAME
 
-#define READ(TYPE,NAME) READ_##TYPE##_##NAME##_MACRO
-
 // No separate sampler-images in GL so the macro expansion is basic
 #define SAMPLER_FOR(TYPE, NAME, ID) NAME
+#define RT_SAMPLER_FOR(TYPE, NAME) NAME
 
 /* 
 * These macros are unused in the OpenGL pipeline, 
@@ -172,6 +178,10 @@
 // No push constant block required in GL
 #define INPUTS_BEGIN 
 #define INPUTS_END
+// No push constant block required in GL
+#define PASS_DATA_BEGIN 
+#define PASS_DATA_END
+#define USING_PASS_DATA_MACRO
 // Attribs in GL are matched by name
 #define ATTR_LOC(POS)
 // No push constant padding necesary in GL
