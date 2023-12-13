@@ -72,7 +72,7 @@ impl Stage {
          * New rendering info because lifetimes for the
          * arrays inside are too complex to keep around
          */
-        let rendering_info_builder = vk::RenderingInfo::builder()
+        let mut rendering_info_builder = vk::RenderingInfo::builder()
             .color_attachments(&rendering_attachments)
             .render_area(if let Some(att) = self.outputs.first() {
                 att.render_area_no_offset()
@@ -80,11 +80,10 @@ impl Stage {
                 default_attachment.render_area_no_offset()
             })
             .layer_count(1);
-        let rendering_info = if let Some(att) = self.rendering.depth_stencil {
-            rendering_info_builder.depth_attachment(&att).build()
-        } else {
-            rendering_info_builder.build()
-        };
+        if let Some(att) = &self.rendering.depth_stencil {
+            rendering_info_builder = rendering_info_builder.depth_attachment(att);
+        }
+        let rendering_info = rendering_info_builder.build();
         /*
          *  At this point we already waited for the previous stage invocation to finish,
          *  we can free the buffers used back then.
