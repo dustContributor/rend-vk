@@ -40,7 +40,7 @@ SAMPLING(matNormal, SMP_TEX, 2D, 1)
 void main() {
 	Material mat = READ(INST, MATERIAL);
 	// Compute flipped Y axis tex coord.
-	vec2 texCoord = flipTexCoord(passTexCoord);
+	vec2 texCoord = flipTexCoord(passTexCoord) * mat.scaling;
 	// Fetch material shininess.
 	float shininess = mat.shininess;
 	// Fetch diffuse texel.

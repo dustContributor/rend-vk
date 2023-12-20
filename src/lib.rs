@@ -21,3 +21,7 @@ pub trait UsedAsIndex<const T: u8> {
     const MAX_SIZE: usize = Self::MAX_VALUE as usize;
     const MAX_LEN: usize = Self::MAX_SIZE + 1;
 }
+
+pub fn pos_mul(mul: usize, val: usize) -> usize {
+    ((val + mul - 1) / mul) * mul
+}

@@ -116,9 +116,11 @@ pub struct TransformExtra {
 #[repr(C)]
 pub struct Material {
     pub shininess: f32,
+    pub scaling: f32,
     pub diffuse_handle: u32,
     pub normal_handle: u32,
     pub glow_handle: u32,
+    pub padding: u32,
 }
 #[derive(Clone)]
 #[repr(C)]

@@ -9,6 +9,7 @@ use bitvec::view::BitView;
 
 use crate::{
     format::Format,
+    pos_mul,
     render_task::{self, TaskKind},
     renderer::{self, MeshBuffer, Renderer},
     shader_resource::*,
@@ -173,23 +174,23 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
 }
 
 #[no_mangle]
-pub extern "C" fn Java_game_render_vulkan_RendVkApi_alignOf(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceAlignOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
-) -> u64 {
+) -> u32 {
     let kind = ResourceKind::of_u32(kind);
-    kind.resource_align() as u64
+    kind.resource_align() as u32
 }
 
 #[no_mangle]
-pub extern "C" fn Java_game_render_vulkan_RendVkApi_sizeOf(
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceSizeOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
     kind: u32,
-) -> u64 {
+) -> u32 {
     let kind = ResourceKind::of_u32(kind);
-    kind.resource_size() as u64
+    kind.resource_size() as u32
 }
 
 #[no_mangle]
@@ -468,8 +469,9 @@ fn unpack_resource<T>(start: usize, count: usize, data: &[u8]) -> (&[T], usize)
 where
     T: WrapResource<T>,
 {
-    let end = start + size_of::<T>() * count;
-    let (prefix, items, sufix) = unsafe { data[start..end].align_to::<T>() };
+    let start_aligned = pos_mul(core::mem::align_of::<T>(), start);
+    let end = start_aligned + size_of::<T>() * count;
+    let (prefix, items, sufix) = unsafe { data[start_aligned..end].align_to::<T>() };
     if sufix.len() > 0 || prefix.len() > 0 {
         panic!(
             "misaligned struct array! sufix length: {}, prefix length: {}",

@@ -45,10 +45,12 @@ struct TransformExtra
 struct Material
 {
   float shininess;
+  float scaling;
 #ifdef IS_VULKAN
   int diffuseId;
   int normalMapId;
   int glowMapId;
+  int padding; // pad to 24 bytes
 #endif
 };
 
