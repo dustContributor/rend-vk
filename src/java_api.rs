@@ -470,15 +470,8 @@ where
     T: WrapResource<T>,
 {
     let start_aligned = pos_mul(core::mem::align_of::<T>(), start);
-    let end = start_aligned + size_of::<T>() * count;
-    let (prefix, items, sufix) = unsafe { data[start_aligned..end].align_to::<T>() };
-    if sufix.len() > 0 || prefix.len() > 0 {
-        panic!(
-            "misaligned struct array! sufix length: {}, prefix length: {}",
-            sufix.len(),
-            prefix.len()
-        );
-    }
+    let items =
+        unsafe { std::slice::from_raw_parts(data[start_aligned..].as_ptr().cast::<T>(), count) };
     if items.len() != count {
         panic!(
             "unexpected resource {} count! expected {}, got {}",
