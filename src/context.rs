@@ -55,7 +55,7 @@ impl ExtensionContext {
             return false;
         }
         let dbg = self.debug_utils.as_ref().unwrap();
-        let c_name = std::ffi::CString::new(name.clone()).unwrap();
+        let c_name = std::ffi::CString::new(name).unwrap();
         let type_id = TypeId::of::<T>();
         let object_type = OBJECT_TYPES_BY_TYPE_ID.get(&type_id).unwrap().clone();
         let name_info = vk::DebugUtilsObjectNameInfoEXT::builder()
