@@ -168,8 +168,7 @@
 #define WRITING(NAME, TYPE, INDEX) layout ( location = RT_##INDEX ) out TYPE NAME
 
 // No separate sampler-images in GL so the macro expansion is basic
-#define SAMPLER_FOR(TYPE, NAME, ID) NAME
-#define RT_SAMPLER_FOR(TYPE, NAME) NAME
+#define SAMPLER_FOR(NAME, TYPE, TIDX, SIDX)  NAME
 
 /* 
 * These macros are unused in the OpenGL pipeline, 

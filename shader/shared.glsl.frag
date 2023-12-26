@@ -1,6 +1,10 @@
 #ifndef SHARED_GLSL
 #define SHARED_GLSL
 
+#ifdef IS_VULKAN
+#extension GL_EXT_shader_explicit_arithmetic_types : require 
+#endif
+
 // Numeric constants.
 #define NUM_PI 3.1415927
 #define NUM_TAU 6.2831855
@@ -47,10 +51,13 @@ struct Material
   float shininess;
   float scaling;
 #ifdef IS_VULKAN
-  int diffuseId;
-  int normalMapId;
-  int glowMapId;
-  int padding; // pad to 24 bytes
+  uint32_t diffuseId;
+  uint32_t normalId;
+  uint32_t glowId;
+  uint8_t diffuseSamplerId;
+  uint8_t normalSamplerId;
+  uint8_t glowSamplerId;
+  uint8_t padding; // pad to 24 bytes
 #endif
 };
 

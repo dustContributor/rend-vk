@@ -9,6 +9,7 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_explicit_arithmetic_types : require
 // #extension GL_EXT_debug_printf : enable
 
 #include "shared.glsl.frag"
@@ -50,7 +51,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tra
 
 #define DESC_SET_SAMPLER 0
 #define DESC_SET_TEXTURE 1
-#define DESC_SET_TARGET_IMAGE 2
+#define DESC_SET_ATTACHMENT 2
 
 // Per vertex attributes
 #define READ_ATTR_POSITION_MACRO registers.positions.items[gl_VertexIndex]
@@ -87,8 +88,8 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tra
 #define READ(TYPE,NAME) READ_##TYPE##_##NAME##_MACRO
 
 // Default and pre-defined descriptor sets
-#define DESCRIPTOR_SAMPLER_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform sampler smp;
-#define DESCRIPTOR_TEXTURE_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform texture2D textures[];
+#define DESCRIPTOR_SAMPLER_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform sampler[] samplers;
+#define DESCRIPTOR_TEXTURE_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform texture2D[] textures;
 #define DESCRIPTOR_SAMPLER_MACRO(NAME, BIND) DESCRIPTOR_SAMPLER_##NAME##_MACRO(BIND)
 #define DESCRIPTOR_TEXTURE_MACRO(NAME, BIND) DESCRIPTOR_TEXTURE_##NAME##_MACRO(BIND)
 #define DESCRIPTOR_TARGET_IMAGE_MACRO(NAME, BIND) layout (set = DESC_SET_TARGET_IMAGE, binding = BIND) uniform texture2D NAME;
@@ -139,8 +140,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Pas
 // Output attribute location
 #define ATTR_LOC(POS) layout (location = POS)
 // Separate image-sampler usage
-#define RT_SAMPLER_FOR(TYPE, NAME) sampler##TYPE## \( NAME, smp )
-#define SAMPLER_FOR(TYPE, NAME, ID) sampler##TYPE## \( textures[nonuniformEXT(ID)], smp )
+#define SAMPLER_FOR(NAME, TYPE, TIDX, SIDX) sampler##TYPE## \( textures[nonuniformEXT(TIDX)], samplers[nonuniformEXT(SIDX)] )
 /* 
 * These macros are unused in the Vulkan pipeline, 
 * define them here to avoid compiler errors.
@@ -148,7 +148,9 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Pas
 #define SAMPLING_SHW_TEX(NAME, TYPE, INDEX) 
 #define SAMPLING_SMP_TEX(NAME, TYPE, INDEX) 
 // With render targets instead we directly map them to descriptors at the specified binding points
-#define SAMPLING_SMP_RT(NAME, TYPE, INDEX) layout (set = DESC_SET_TARGET_IMAGE, binding = INDEX) uniform texture##TYPE NAME;
+#define SAMPLING_SMP_RT(NAME, TYPE, INDEX) \
+layout (set = DESC_SET_ATTACHMENT, binding = INDEX) uniform sampler##TYPE NAME;
+
 #define SAMPLING(NAME, SRC, TYPE, INDEX) SAMPLING_##SRC(NAME, TYPE, INDEX)
 
 #endif // SHARED_VULKAN_GLSL

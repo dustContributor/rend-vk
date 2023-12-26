@@ -43,10 +43,10 @@ void main() {
 	vec2 texCoord = flipTexCoord(passTexCoord) * mat.scaling;
 	// Fetch material shininess.
 	float shininess = mat.shininess;
-	// Fetch diffuse texel.
-	vec4 txDiffuse = texture(SAMPLER_FOR(2D, matDiffuse, mat.diffuseId), texCoord); 
-	// Fetch normal texel.
-	vec4 txNormal = texture(SAMPLER_FOR(2D, matNormal, mat.normalMapId), texCoord); 
+	// Fetch diffuse texel. 
+	vec4 txDiffuse = texture(SAMPLER_FOR(matDiffuse, 2D, mat.diffuseId, mat.diffuseSamplerId), texCoord); 
+	// Fetch normal texel. 
+	vec4 txNormal = texture(SAMPLER_FOR(matNormal, 2D, mat.normalId, mat.normalSamplerId), texCoord); 
 	// // Get specular map factor.
 	float fspec = txNormal.w;
 	// // Perturbed normal.

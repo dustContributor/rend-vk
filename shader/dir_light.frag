@@ -38,15 +38,15 @@ void main() {
 	Frustum frustum = READ(PASS, FRUSTUM);
 	ViewRay viewRay = READ(PASS, VIEWRAY);
 	// Fetch shininess value.
-	float shininess = texture(RT_SAMPLER_FOR(2D, gbMisc), passTexCoord).x;
+	float shininess = texture(gbMisc, passTexCoord).x;
 	// Fetch albedo texel.
-	vec4 txAlbedo = texture(RT_SAMPLER_FOR(2D, gbAlbedo), passTexCoord).xyzw;
+	vec4 txAlbedo = texture(gbAlbedo, passTexCoord).xyzw;
 	// Fetch specular intensity.
 	float specIntensity = txAlbedo.w;
 	// Fetch g buffer normal and decode it.
-	vec3 normal = decodeNormal(texture(RT_SAMPLER_FOR(2D, gbNormal), passTexCoord).xy);
+	vec3 normal = decodeNormal(texture(gbNormal, passTexCoord).xy);
   // Fetch depth 
-	float depth = texture(RT_SAMPLER_FOR(2D, gbDepth), passTexCoord).x;
+	float depth = texture(gbDepth, passTexCoord).x;
 	// Compute view space position.
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
 	// View space light direction.
