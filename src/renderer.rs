@@ -22,7 +22,12 @@ use crate::{
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     format::Format,
-    pipeline::{self, attachment::Attachment, Pipeline},
+    pipeline::{
+        self,
+        attachment::Attachment,
+        sampler::{Sampler, SamplerKey},
+        Pipeline,
+    },
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
     swapchain,
@@ -109,6 +114,38 @@ impl Renderer {
         if let Some(batch) = self.batches_by_task_type.get_mut(task.kind as usize) {
             batch.push(task)
         }
+    }
+
+    pub fn try_get_sampler(&self, key: SamplerKey) -> Option<u32> {
+        match self.pipeline.samplers_by_key.get(&key) {
+            Some(s) => Some(s.position),
+            None => None,
+        }
+    }
+
+    pub fn get_sampler(&mut self, key: SamplerKey) -> u32 {
+        let id = self.try_get_sampler(key);
+        if id.is_some() {
+            return id.unwrap();
+        }
+        //  Sampler for this key not found, generate one
+        let id = self.pipeline.samplers_by_key.len() as u32;
+        let name = format!("{}", id);
+        let sampler = Sampler::of_key(&self.vulkan_context, name, key);
+        let samplers_by_key = &mut self.pipeline.samplers_by_key;
+        //  store it for later querying
+        samplers_by_key.insert(key, sampler.clone());
+        let sampler_descriptors = &mut self.pipeline.sampler_descriptors;
+        // Write its descriptor into the GPU for later shader usage
+        sampler_descriptors.place_sampler_at(
+            id,
+            0,
+            sampler.sampler,
+            &self.vulkan_context.extension.descriptor_buffer,
+        );
+        sampler_descriptors.into_device_single_at(0, id);
+        // Return the ID for referencing on the client side
+        return id;
     }
 
     pub fn fetch_mesh(&self, id: u32) -> Option<&MeshBuffer> {

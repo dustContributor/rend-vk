@@ -2,7 +2,7 @@ use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::{format, shader_resource::ResourceKind};
+use crate::{format, shader_resource::ResourceKind, UsedAsIndex};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,10 +158,14 @@ pub struct ClearDesc {
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, strum_macros::Display)]
+#[repr(u8)]
 pub enum Filtering {
     Linear,
     Nearest,
 }
+
+const MAX_FILTERING: u8 = Filtering::Nearest.to_u8();
+impl UsedAsIndex<MAX_FILTERING> for Filtering {}
 
 impl Filtering {
     pub fn to_vk(self) -> vk::Filter {
@@ -176,16 +180,40 @@ impl Filtering {
             Self::Nearest => vk::SamplerMipmapMode::NEAREST,
         }
     }
+
+    pub const fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v) }
+        }
+    }
+
+    pub const fn of_u32(v: u32) -> Self {
+        if v > (Self::MAX_VALUE as u32) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub const fn to_u8(self) -> u8 {
+        self as u8
+    }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, strum_macros::Display)]
+#[repr(u8)]
 pub enum WrapMode {
     Repeat,
     MirroredRepeat,
     ClampToEdge,
 }
+
+const MAX_WRAP_MODE: u8 = WrapMode::ClampToEdge.to_u8();
+impl crate::UsedAsIndex<MAX_WRAP_MODE> for WrapMode {}
 
 impl WrapMode {
     pub fn to_vk(self) -> vk::SamplerAddressMode {
@@ -194,6 +222,26 @@ impl WrapMode {
             Self::Repeat => vk::SamplerAddressMode::REPEAT,
             Self::MirroredRepeat => vk::SamplerAddressMode::MIRRORED_REPEAT,
         }
+    }
+
+    pub const fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v) }
+        }
+    }
+
+    pub const fn of_u32(v: u32) -> Self {
+        if v > (Self::MAX_VALUE as u32) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub const fn to_u8(self) -> u8 {
+        self as u8
     }
 }
 

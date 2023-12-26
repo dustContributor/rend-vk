@@ -9,6 +9,10 @@ use bitvec::view::BitView;
 
 use crate::{
     format::Format,
+    pipeline::{
+        file::{Filtering, WrapMode},
+        sampler::SamplerKey,
+    },
     pos_mul,
     render_task::{self, TaskKind},
     renderer::{self, MeshBuffer, Renderer},
@@ -21,6 +25,8 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 // Convenience definitions
 const JNI_FALSE: u8 = 0;
 const JNI_TRUE: u8 = 1;
+
+const MISSING_SAMPLER_ID: i32 = -1;
 
 trait ToJava<T> {
     fn to_java(&self) -> T;
@@ -202,6 +208,47 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     let mut renderer = to_renderer(renderer);
     renderer.render();
     Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    filter: u8,
+    wrap_mode: u8,
+    anisotropy: u8,
+) -> i32 {
+    let renderer = to_renderer(renderer);
+    let sampler = renderer.try_get_sampler(SamplerKey {
+        filter: Filtering::of_u8(filter),
+        wrap_mode: WrapMode::of_u8(wrap_mode),
+        anisotropy,
+    });
+    Box::leak(renderer);
+    match sampler {
+        Some(id) => id.try_into().unwrap(),
+        None => MISSING_SAMPLER_ID,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    filter: u8,
+    wrap_mode: u8,
+    anisotropy: u8,
+) -> i32 {
+    let mut renderer = to_renderer(renderer);
+    let sampler = renderer.get_sampler(SamplerKey {
+        filter: Filtering::of_u8(filter),
+        wrap_mode: WrapMode::of_u8(wrap_mode),
+        anisotropy,
+    });
+    Box::leak(renderer);
+    sampler.try_into().unwrap()
 }
 
 #[no_mangle]
