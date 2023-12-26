@@ -24,7 +24,7 @@ pub struct Target {
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInput {
     pub name: String,
-    pub sampler: SamplerKind,
+    pub sampler: Filtering,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,11 +157,46 @@ pub struct ClearDesc {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone, strum_macros::Display)]
-pub enum SamplerKind {
-    Nearest,
+#[derive(Copy, Clone, Eq, PartialEq, Hash, strum_macros::Display)]
+pub enum Filtering {
     Linear,
+    Nearest,
 }
+
+impl Filtering {
+    pub fn to_vk(self) -> vk::Filter {
+        match self {
+            Self::Linear => vk::Filter::LINEAR,
+            Self::Nearest => vk::Filter::NEAREST,
+        }
+    }
+    pub fn to_vk_mip_map(self) -> vk::SamplerMipmapMode {
+        match self {
+            Self::Linear => vk::SamplerMipmapMode::LINEAR,
+            Self::Nearest => vk::SamplerMipmapMode::NEAREST,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, strum_macros::Display)]
+pub enum WrapMode {
+    Repeat,
+    MirroredRepeat,
+    ClampToEdge,
+}
+
+impl WrapMode {
+    pub fn to_vk(self) -> vk::SamplerAddressMode {
+        match self {
+            Self::ClampToEdge => vk::SamplerAddressMode::CLAMP_TO_EDGE,
+            Self::Repeat => vk::SamplerAddressMode::REPEAT,
+            Self::MirroredRepeat => vk::SamplerAddressMode::MIRRORED_REPEAT,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 #[derive(Copy, Clone)]
@@ -175,7 +210,7 @@ const DEFAULT_STENCIL_CLEAR_VALUE: u32 = 0;
 const DEFAULT_COLOR_CLEAR_VALUE: u32 = 0;
 
 impl UpdaterKind {
-    pub fn to_resource_kind(self) -> ResourceKind {
+    pub const fn to_resource_kind(self) -> ResourceKind {
         ResourceKind::of_u32(self as u32)
     }
 }

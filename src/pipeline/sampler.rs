@@ -1,56 +1,58 @@
-use ash::vk::{self, SamplerMipmapMode};
+use ash::vk::{self};
 
 use crate::context::VulkanContext;
 
-use super::file::SamplerKind;
+use super::file::{Filtering, WrapMode};
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct SamplerKey {
+    pub filter: Filtering,
+    pub wrap_mode: WrapMode,
+    pub anisotropy: u8,
+}
 
 #[derive(Clone)]
 pub struct Sampler {
     pub name: String,
     pub sampler: vk::Sampler,
     pub descriptor_offset: usize,
+    pub position: u32,
 }
 
 impl Sampler {
-    pub fn of(ctx: &VulkanContext, name: String, is_linear: bool) -> Self {
-        let info = Self::info_of(is_linear);
+    pub fn of_key(ctx: &VulkanContext, name: String, key: SamplerKey) -> Self {
+        Self::of(ctx, name, key.filter, key.wrap_mode, key.anisotropy)
+    }
+
+    pub fn of(
+        ctx: &VulkanContext,
+        name: String,
+        filter: Filtering,
+        wrap_mode: WrapMode,
+        anisotropy: u8,
+    ) -> Self {
+        let info = Self::info_of(filter, wrap_mode, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
         ctx.try_set_debug_name(&name, sampler);
         Self {
             name,
             sampler,
             descriptor_offset: 0,
+            position: 0,
         }
     }
 
-    pub fn of_kind(ctx: &VulkanContext, kind: SamplerKind) -> Self {
-        let name = kind.to_string();
-        let is_linear = match kind {
-            SamplerKind::Linear => true,
-            SamplerKind::Nearest => false,
-        };
-        Self::of(ctx, name, is_linear)
-    }
-
-    fn info_of(is_linear: bool) -> vk::SamplerCreateInfo {
-        let filter = if is_linear {
-            vk::Filter::LINEAR
-        } else {
-            vk::Filter::NEAREST
-        };
+    fn info_of(filter: Filtering, wrap_mode: WrapMode, anisotropy: u8) -> vk::SamplerCreateInfo {
         vk::SamplerCreateInfo::builder()
-            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-            .anisotropy_enable(false)
+            .address_mode_u(wrap_mode.to_vk())
+            .address_mode_v(wrap_mode.to_vk())
+            .address_mode_w(wrap_mode.to_vk())
+            .anisotropy_enable(if anisotropy > 1 { true } else { false })
             .compare_enable(false)
-            .mipmap_mode(if is_linear {
-                SamplerMipmapMode::LINEAR
-            } else {
-                SamplerMipmapMode::NEAREST
-            })
-            .min_filter(filter)
-            .mag_filter(filter)
+            .mipmap_mode(filter.to_vk_mip_map())
+            .min_filter(filter.to_vk())
+            .mag_filter(filter.to_vk())
+            .max_anisotropy(anisotropy as f32)
             .max_lod(vk::LOD_CLAMP_NONE)
             .build()
     }

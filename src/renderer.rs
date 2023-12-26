@@ -73,6 +73,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub const ID_TEST_TRIANGLE: u32 = 0;
+    pub const MAX_SAMPLERS: u32 = 32;
 
     pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");

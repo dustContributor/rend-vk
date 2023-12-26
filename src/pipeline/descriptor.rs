@@ -36,10 +36,10 @@ impl DescriptorBuffer {
         subsets: u32,
         is_array: bool,
     ) -> Self {
-        assert!(count > 0, "Cant have zero sized descriptor buffers!");
+        assert!(count > 0, "cant have zero sized descriptor buffers!");
         assert!(
             BufferKind::Descriptor == mem.buffer.kind,
-            "Allocator with kind {} passed, kind {} needed!",
+            "allocator with kind {} passed, kind {} needed!",
             mem.buffer.kind,
             BufferKind::Descriptor
         );
@@ -82,7 +82,7 @@ impl DescriptorBuffer {
             buffer
         } else {
             panic!(
-                "Not enough memory for the descriptor! Requested: {}, available: {}",
+                "not enough memory for the descriptor! Requested: {}, available: {}",
                 buffer_size,
                 mem.available()
             )
@@ -128,10 +128,13 @@ impl DescriptorBuffer {
             .build();
         unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
         match descriptor_type {
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER => {
+                props.combined_image_sampler_descriptor_size
+            }
             vk::DescriptorType::SAMPLED_IMAGE => props.sampled_image_descriptor_size,
             vk::DescriptorType::UNIFORM_BUFFER => props.uniform_buffer_descriptor_size,
             vk::DescriptorType::SAMPLER => props.sampler_descriptor_size,
-            _ => panic!("Unsupported descriptor type {:?}", descriptor_type),
+            _ => panic!("unsupported descriptor type {:?}", descriptor_type),
         }
     }
 
@@ -221,6 +224,34 @@ impl DescriptorBuffer {
         )
     }
 
+    pub fn place_image_sampler(
+        &mut self,
+        subset: u32,
+        desc: vk::DescriptorImageInfo,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
+    ) -> (usize, u32) {
+        self.place_image_sampler_at(self.next_free() as u32, subset, desc, desc_buffer_instance)
+    }
+
+    pub fn place_image_sampler_at(
+        &mut self,
+        index: u32,
+        subset: u32,
+        desc: vk::DescriptorImageInfo,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
+    ) -> (usize, u32) {
+        self.get_desc_and_place(
+            index,
+            subset,
+            desc,
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            desc_buffer_instance,
+            |e| vk::DescriptorDataEXT {
+                p_combined_image_sampler: e,
+            },
+        )
+    }
+
     pub fn place_ubo(
         &mut self,
         subset: u32,
@@ -281,10 +312,6 @@ impl DescriptorBuffer {
         self.place_at(index, subset, &data)
     }
 
-    pub fn into_device(&mut self) {
-        self.into_device_at(0)
-    }
-
     pub fn read_host(&self) -> Vec<u8> {
         self.host.to_vec()
     }
@@ -296,10 +323,14 @@ impl DescriptorBuffer {
         slice.to_vec()
     }
 
+    pub fn into_device(&mut self) {
+        self.into_device_at(0)
+    }
+
     pub fn into_device_at(&mut self, subset: u32) {
         assert!(
             subset < self.subsets,
-            "Subset {} out of bounds! Total subsets {}",
+            "subset {} out of bounds! total {}",
             subset,
             self.subset_size
         );
@@ -308,6 +339,33 @@ impl DescriptorBuffer {
             let src = self.host.as_ptr();
             let dst = self.device.addr.add(offset) as *mut u8;
             let len = self.host.len();
+            std::ptr::copy_nonoverlapping(src, dst, len)
+        };
+    }
+
+    pub fn into_device_single(&mut self, index: u32) {
+        self.into_device_single_at(0, index)
+    }
+
+    pub fn into_device_single_at(&mut self, subset: u32, index: u32) {
+        assert!(
+            subset < self.subsets,
+            "subset {} out of bounds! total {}",
+            subset,
+            self.subset_size
+        );
+        assert!(
+            index < self.count,
+            "index {} out of bounds! total {}",
+            index,
+            self.count
+        );
+        let device_offset = self.offset_at(index, subset);
+        let host_offset = self.offset_at(index, 0);
+        unsafe {
+            let src = self.host.as_ptr().add(host_offset);
+            let dst = self.device.addr.add(device_offset) as *mut u8;
+            let len = self.descriptor_size;
             std::ptr::copy_nonoverlapping(src, dst, len)
         };
     }

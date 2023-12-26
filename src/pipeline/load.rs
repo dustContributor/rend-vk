@@ -5,11 +5,15 @@ use std::{
     process::Command,
 };
 
-use super::{descriptor::DescriptorBuffer, file::*};
+use super::{
+    descriptor::DescriptorBuffer,
+    file::*,
+    sampler::{Sampler, SamplerKey},
+};
 use crate::shader;
-use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment};
+use crate::texture::MipMap;
+use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment, renderer::Renderer};
 use crate::{context::VulkanContext, texture};
-use crate::{pipeline::sampler, texture::MipMap};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -147,32 +151,12 @@ impl Pipeline {
         attachments_by_name.insert(&default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let enabled_passes: Vec<_> = pip.passes.into_iter().filter(|e| !e.is_disabled).collect();
-        let linear_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Linear);
-        let nearest_sampler = sampler::Sampler::of_kind(&ctx, SamplerKind::Nearest);
-        let mut sampler_descriptors = Self::init_samplers(ctx, descriptor_mem, 2);
-        let image_descriptors = Self::init_images(ctx, descriptor_mem);
-        let linear_sampler = sampler::Sampler {
-            descriptor_offset: sampler_descriptors
-                .place_sampler_at(
-                    0,
-                    0,
-                    linear_sampler.sampler,
-                    &ctx.extension.descriptor_buffer,
-                )
-                .0,
-            ..linear_sampler
-        };
-        let nearest_sampler = sampler::Sampler {
-            descriptor_offset: sampler_descriptors
-                .place_sampler_at(
-                    1,
-                    0,
-                    nearest_sampler.sampler,
-                    &ctx.extension.descriptor_buffer,
-                )
-                .0,
-            ..nearest_sampler
-        };
+        let image_descriptors = Self::image_desc_buffer(ctx, descriptor_mem);
+        let mut sampler_descriptors =
+            Self::sampler_desc_buffer(ctx, descriptor_mem, Renderer::MAX_SAMPLERS);
+
+        let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
+
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {
@@ -232,6 +216,26 @@ impl Pipeline {
                         .clone()
                 })
                 .collect();
+            let attachment_samplers: Vec<_> = pass
+                .inputs
+                .iter()
+                .map(|i| {
+                    let key = SamplerKey {
+                        filter: i.sampler,
+                        wrap_mode: WrapMode::ClampToEdge,
+                        anisotropy: 1u8,
+                    };
+                    match samplers_by_key.get(&key) {
+                        Some(s) => s.clone(),
+                        None => {
+                            let mut smp = Sampler::of_key(ctx, format!("sampler_{}", i.name), key);
+                            smp.position = samplers_by_key.len() as u32;
+                            samplers_by_key.insert(key, smp.clone());
+                            smp
+                        }
+                    }
+                })
+                .collect();
             let attachment_output_formats: Vec<_> =
                 attachment_outputs.iter().map(|e| e.vk_format).collect();
             // We only need blend state for color attachments, ignoring depth/stencil
@@ -270,29 +274,31 @@ impl Pipeline {
                 .map(|e| e.info)
                 .collect::<Vec<_>>();
 
-            let mut input_descriptors = (pass.inputs.len() > 0).then(|| {
-                Box::new(Self::init_inputs(
+            let mut attachment_descriptors = (pass.inputs.len() > 0).then(|| {
+                Box::new(Self::attachment_image_desc_buffer(
                     ctx,
                     descriptor_mem,
+                    &pass.name,
                     pass.inputs.len() as u32,
                 ))
             });
 
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
-            let make_attachment_descriptor = |e: &Attachment| -> Attachment {
+            let make_attachment_descriptor = |e: (&Attachment, &Sampler)| -> Attachment {
                 let desc = vk::DescriptorImageInfo::builder()
                     .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
-                    .image_view(e.view)
+                    .image_view(e.0.view)
+                    .sampler(e.1.sampler)
                     .build();
-                let (descriptor_offset, descriptor_index) = input_descriptors
+                let (descriptor_offset, descriptor_index) = attachment_descriptors
                     .as_mut()
                     .unwrap()
-                    .place_image(0, desc, &ctx.extension.descriptor_buffer);
+                    .place_image_sampler(0, desc, &ctx.extension.descriptor_buffer);
                 Attachment {
                     descriptor_offset,
                     descriptor_index,
-                    ..e.clone()
+                    ..e.0.clone()
                 }
             };
             // Final passes have special rendering attachment info hanlding on render.
@@ -300,9 +306,11 @@ impl Pipeline {
                 .outputs
                 .iter()
                 .position(|e| Attachment::DEFAULT_NAME == e);
+
             // Generate attachment structs with the proper descriptor index/offset
             let inputs: Vec<_> = attachment_inputs
                 .iter()
+                .zip(attachment_samplers.iter())
                 .map(make_attachment_descriptor)
                 .collect();
 
@@ -351,7 +359,7 @@ impl Pipeline {
                 &enabled_passes,
             );
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
-            if let Some(d) = &input_descriptors {
+            if let Some(d) = &attachment_descriptors {
                 set_layouts.push(d.layout)
             }
             let pipeline_layout = unsafe {
@@ -395,7 +403,7 @@ impl Pipeline {
             ctx.try_set_debug_name(&pass.name, graphics_pipeline);
             ctx.try_set_debug_name(&pass.name, pipeline_layout);
 
-            if let Some(d) = &mut input_descriptors {
+            if let Some(d) = &mut attachment_descriptors {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
@@ -425,7 +433,7 @@ impl Pipeline {
                 index: stage_index,
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
-                input_descriptors,
+                attachment_descriptors,
                 reserved_buffers: Vec::new(),
             });
             // Increment for next stage
@@ -439,20 +447,30 @@ impl Pipeline {
             unsafe { ctx.device.destroy_shader_module(shader.info.module, None) };
         }
 
+        //  Place all sampler descriptors into the descriptor buffer and write to the GPU
+        let mut positioned_samplers = samplers_by_key.values().collect::<Vec<_>>();
+        positioned_samplers.sort_by(|a, b| a.position.cmp(&b.position));
+        for sampler in positioned_samplers {
+            sampler_descriptors.place_sampler_at(
+                0,
+                sampler.position,
+                sampler.sampler,
+                &ctx.extension.descriptor_buffer,
+            );
+        }
         sampler_descriptors.into_device();
         // image_descriptors.into_device();
 
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
-            linear_sampler,
-            nearest_sampler,
             image_descriptors,
             sampler_descriptors,
+            samplers_by_key,
         };
     }
 
-    pub fn init_images(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
+    pub fn image_desc_buffer(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
         let desc_buffer = DescriptorBuffer::of(
             ctx,
             mem,
@@ -465,16 +483,18 @@ impl Pipeline {
         desc_buffer
     }
 
-    pub fn init_inputs(
+    pub fn attachment_image_desc_buffer(
         ctx: &VulkanContext,
         mem: &mut DeviceAllocator,
+        prefix: &str,
         size: u32,
     ) -> DescriptorBuffer {
+        let name = format!("{}_attachments", prefix);
         let desc_buffer = DescriptorBuffer::of(
             ctx,
             mem,
-            "targets".to_string(),
-            DescriptorType::SAMPLED_IMAGE,
+            name,
+            DescriptorType::COMBINED_IMAGE_SAMPLER,
             size,
             1,
             false,
@@ -482,7 +502,7 @@ impl Pipeline {
         desc_buffer
     }
 
-    pub fn init_samplers(
+    pub fn sampler_desc_buffer(
         ctx: &VulkanContext,
         mem: &mut DeviceAllocator,
         size: u32,

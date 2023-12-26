@@ -19,7 +19,7 @@ pub struct Stage {
     pub inputs: Vec<Attachment>,
     pub per_instance_updaters: Vec<ResourceKind>,
     pub per_pass_updaters: Vec<ResourceKind>,
-    pub input_descriptors: Option<Box<DescriptorBuffer>>,
+    pub attachment_descriptors: Option<Box<DescriptorBuffer>>,
     pub task_kind: TaskKind,
     pub index: u32,
     pub is_final: bool,
@@ -95,7 +95,7 @@ impl Stage {
         ];
         let mut desc_buffer_indices = vec![0, 1];
         let mut desc_buffer_offsets = vec![0, 0];
-        if let Some(desc) = &self.input_descriptors {
+        if let Some(desc) = &self.attachment_descriptors {
             desc_buffer_info.push(desc.binding_info());
             desc_buffer_indices.push(2);
             desc_buffer_offsets.push(0);
