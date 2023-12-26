@@ -228,8 +228,8 @@ impl Pipeline {
                     match samplers_by_key.get(&key) {
                         Some(s) => s.clone(),
                         None => {
-                            let mut smp = Sampler::of_key(ctx, format!("sampler_{}", i.name), key);
-                            smp.position = samplers_by_key.len() as u32;
+                            let name = format!("sampler_{}", i.name);
+                            let smp = Sampler::of_key(ctx, name, key, samplers_by_key.len() as u8);
                             samplers_by_key.insert(key, smp.clone());
                             smp
                         }
@@ -453,7 +453,7 @@ impl Pipeline {
         for sampler in positioned_samplers {
             sampler_descriptors.place_sampler_at(
                 0,
-                sampler.position,
+                sampler.position as u32,
                 sampler.sampler,
                 &ctx.extension.descriptor_buffer,
             );

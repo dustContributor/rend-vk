@@ -116,14 +116,14 @@ impl Renderer {
         }
     }
 
-    pub fn try_get_sampler(&self, key: SamplerKey) -> Option<u32> {
+    pub fn try_get_sampler(&self, key: SamplerKey) -> Option<u8> {
         match self.pipeline.samplers_by_key.get(&key) {
             Some(s) => Some(s.position),
             None => None,
         }
     }
 
-    pub fn get_sampler(&mut self, key: SamplerKey) -> u32 {
+    pub fn get_sampler(&mut self, key: SamplerKey) -> u8 {
         let id = self.try_get_sampler(key);
         if id.is_some() {
             return id.unwrap();
@@ -131,7 +131,7 @@ impl Renderer {
         //  Sampler for this key not found, generate one
         let id = self.pipeline.samplers_by_key.len() as u32;
         let name = format!("{}", id);
-        let sampler = Sampler::of_key(&self.vulkan_context, name, key);
+        let sampler = Sampler::of_key(&self.vulkan_context, name, key, id as u8);
         let samplers_by_key = &mut self.pipeline.samplers_by_key;
         //  store it for later querying
         samplers_by_key.insert(key, sampler.clone());
@@ -145,7 +145,7 @@ impl Renderer {
         );
         sampler_descriptors.into_device_single_at(0, id);
         // Return the ID for referencing on the client side
-        return id;
+        return id as u8;
     }
 
     pub fn fetch_mesh(&self, id: u32) -> Option<&MeshBuffer> {

@@ -120,7 +120,10 @@ pub struct Material {
     pub diffuse_handle: u32,
     pub normal_handle: u32,
     pub glow_handle: u32,
-    pub padding: u32,
+    pub diffuse_sampler: u8,
+    pub normal_sampler: u8,
+    pub glow_sampler: u8,
+    pub padding: u8,
 }
 #[derive(Clone)]
 #[repr(C)]

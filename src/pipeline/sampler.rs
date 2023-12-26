@@ -16,12 +16,12 @@ pub struct Sampler {
     pub name: String,
     pub sampler: vk::Sampler,
     pub descriptor_offset: usize,
-    pub position: u32,
+    pub position: u8,
 }
 
 impl Sampler {
-    pub fn of_key(ctx: &VulkanContext, name: String, key: SamplerKey) -> Self {
-        Self::of(ctx, name, key.filter, key.wrap_mode, key.anisotropy)
+    pub fn of_key(ctx: &VulkanContext, name: String, key: SamplerKey, position: u8) -> Self {
+        Self::of(ctx, name, key.filter, key.wrap_mode, key.anisotropy, position)
     }
 
     pub fn of(
@@ -30,7 +30,14 @@ impl Sampler {
         filter: Filtering,
         wrap_mode: WrapMode,
         anisotropy: u8,
+        position: u8,
     ) -> Self {
+        if position as u32 >= crate::renderer::Renderer::MAX_SAMPLERS {
+            panic!(
+                "can't allocate more samplers than {}!",
+                crate::renderer::Renderer::MAX_SAMPLERS
+            );
+        }
         let info = Self::info_of(filter, wrap_mode, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
         ctx.try_set_debug_name(&name, sampler);
@@ -38,7 +45,7 @@ impl Sampler {
             name,
             sampler,
             descriptor_offset: 0,
-            position: 0,
+            position,
         }
     }
 

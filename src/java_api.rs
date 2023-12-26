@@ -26,7 +26,7 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 const JNI_FALSE: u8 = 0;
 const JNI_TRUE: u8 = 1;
 
-const MISSING_SAMPLER_ID: i32 = -1;
+const MISSING_SAMPLER_ID: u8 = u8::MAX;
 
 trait ToJava<T> {
     fn to_java(&self) -> T;
@@ -218,7 +218,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
     filter: u8,
     wrap_mode: u8,
     anisotropy: u8,
-) -> i32 {
+) -> u8 {
     let renderer = to_renderer(renderer);
     let sampler = renderer.try_get_sampler(SamplerKey {
         filter: Filtering::of_u8(filter),
@@ -240,7 +240,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
     filter: u8,
     wrap_mode: u8,
     anisotropy: u8,
-) -> i32 {
+) -> u8 {
     let mut renderer = to_renderer(renderer);
     let sampler = renderer.get_sampler(SamplerKey {
         filter: Filtering::of_u8(filter),
