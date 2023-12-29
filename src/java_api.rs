@@ -517,16 +517,17 @@ where
     T: WrapResource<T>,
 {
     let start_aligned = pos_mul(core::mem::align_of::<T>(), start);
-    let items =
-        unsafe { std::slice::from_raw_parts(data[start_aligned..].as_ptr().cast::<T>(), count) };
-    if items.len() != count {
-        panic!(
-            "unexpected resource {} count! expected {}, got {}",
-            std::any::type_name::<T>(),
-            count,
-            items.len()
-        );
-    }
+    let slice_aligned = &data[start_aligned..];
+
+    assert!(
+        slice_aligned.len() >= count * std::mem::size_of::<T>(),
+        "unexpected resource {} count! expected {count}, got only {}",
+        std::any::type_name::<T>(),
+        slice_aligned.len() / std::mem::size_of::<T>()
+    );
+
+    let items = unsafe { std::slice::from_raw_parts(slice_aligned.as_ptr().cast::<T>(), count) };
+
     let next_end = items.as_ptr_range().end as usize - data.as_ptr() as usize;
     return (items, next_end);
 }
