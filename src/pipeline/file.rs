@@ -9,7 +9,7 @@ use crate::{format, shader_resource::ResourceKind, UsedAsIndex};
 pub struct Pipeline {
     pub targets: Vec<Target>,
     pub programs: Vec<Program>,
-    pub passes: Vec<Pass>,
+    pub passes: Vec<PipelineStep>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +28,7 @@ pub struct AttachmentInput {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Pass {
+pub struct RenderPass {
     pub name: String,
     pub program: String,
     pub depth_stencil: Option<String>,
@@ -41,6 +41,61 @@ pub struct Pass {
     #[serde(default)]
     pub is_disabled: bool,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Copy, Clone)]
+pub struct BlitRect {
+    pub x: U32OrF32,
+    pub y: U32OrF32,
+    pub width: U32OrF32,
+    pub height: U32OrF32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone)]
+pub enum BlitAttribute {
+    Color,
+    Depth,
+    Stencil,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlitPass {
+    pub name: String,
+    pub input: String,
+    pub input_rect: BlitRect,
+    pub output: String,
+    pub output_rect: BlitRect,
+    pub filter: Filtering,
+    pub attributes: Vec<BlitAttribute>,
+    #[serde(default)]
+    pub is_disabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum PipelineStep {
+    Render(RenderPass),
+    Blit(BlitPass),
+}
+
+impl PipelineStep {
+    pub fn is_disabled(&self) -> bool {
+        match self {
+            PipelineStep::Render(p) => p.is_disabled,
+            PipelineStep::Blit(p) => p.is_disabled,
+        }
+    }
+    pub fn name(&self) -> &str {
+        match self {
+            PipelineStep::Render(p) => &p.name,
+            PipelineStep::Blit(p) => &p.name,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone)]

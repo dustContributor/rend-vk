@@ -14,6 +14,7 @@ mod load;
 pub mod sampler;
 pub mod stage;
 mod state;
+mod barrier_gen;
 
 // Fixed descriptor set indices
 pub const DESCRIPTOR_SET_SAMPLER: u32 = 0;

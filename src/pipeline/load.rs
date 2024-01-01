@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{
+    barrier_gen::BarrierGen,
     descriptor::DescriptorBuffer,
     file::*,
     sampler::{Sampler, SamplerKey},
@@ -32,6 +33,7 @@ impl Pipeline {
         name: Option<&str>,
     ) -> crate::pipeline::Pipeline {
         let pip = Self::read(name);
+        let barrier_gen = BarrierGen::new(&pip.passes);
         let shaders_by_name: HashMap<_, _> = pip
             .programs
             .iter()
@@ -150,7 +152,7 @@ impl Pipeline {
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(&default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
-        let enabled_passes: Vec<_> = pip.passes.into_iter().filter(|e| !e.is_disabled).collect();
+        let enabled_passes: Vec<_> = pip.passes.iter().filter(|e| !e.is_disabled()).collect();
         let image_descriptors = Self::image_desc_buffer(ctx, descriptor_mem);
         let mut sampler_descriptors =
             Self::sampler_desc_buffer(ctx, descriptor_mem, Renderer::MAX_SAMPLERS);
@@ -160,14 +162,19 @@ impl Pipeline {
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {
-            let writing = Self::handle_option(pass.state.writing.clone());
-            let depth = Self::handle_option(pass.state.depth.clone());
-            let blending = Self::handle_option(pass.state.blending.clone());
-            let stencil = Self::handle_option(pass.state.stencil.clone());
-            let viewport = Self::handle_option(pass.state.viewport.clone());
-            let scissor = Self::handle_option(pass.state.scissor.clone());
-            let triangle = Self::handle_option(pass.state.triangle.clone());
-            let clearing = Self::handle_option(pass.state.clearing.clone());
+            let render_pass;
+            match pass {
+                PipelineStep::Render(tmp) => render_pass = tmp,
+                PipelineStep::Blit(_) => continue,
+            };
+            let writing = Self::handle_option(render_pass.state.writing.clone());
+            let depth = Self::handle_option(render_pass.state.depth.clone());
+            let blending = Self::handle_option(render_pass.state.blending.clone());
+            let stencil = Self::handle_option(render_pass.state.stencil.clone());
+            let viewport = Self::handle_option(render_pass.state.viewport.clone());
+            let scissor = Self::handle_option(render_pass.state.scissor.clone());
+            let triangle = Self::handle_option(render_pass.state.triangle.clone());
+            let clearing = Self::handle_option(render_pass.state.clearing.clone());
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
             let viewports = [viewport.to_vk(&depth, window_width as f32, window_height as f32)];
@@ -176,10 +183,10 @@ impl Pipeline {
                 .scissors(&scissors)
                 .viewports(&viewports);
             let rasterization_state = triangle.to_vk();
-            let depth_stencil_attachment = match &pass.depth_stencil {
+            let depth_stencil_attachment = match &render_pass.depth_stencil {
                 Some(name) => Some(attachments_by_name.get(&name.to_string()).expect(&format!(
                     "depth stencil attachment {} missing for pass {}!",
-                    name, pass.name
+                    name, render_pass.name
                 ))),
                 _ => None,
             };
@@ -196,7 +203,7 @@ impl Pipeline {
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
             // TODO: Check why if depth output isn't placed last, VVL errors get reported
-            let attachment_outputs: Vec<_> = pass
+            let attachment_outputs: Vec<_> = render_pass
                 .outputs
                 .iter()
                 .map(|e| {
@@ -206,7 +213,7 @@ impl Pipeline {
                         .clone()
                 })
                 .collect();
-            let attachment_inputs: Vec<_> = pass
+            let attachment_inputs: Vec<_> = render_pass
                 .inputs
                 .iter()
                 .map(|e| {
@@ -216,7 +223,7 @@ impl Pipeline {
                         .clone()
                 })
                 .collect();
-            let attachment_samplers: Vec<_> = pass
+            let attachment_samplers: Vec<_> = render_pass
                 .inputs
                 .iter()
                 .map(|i| {
@@ -248,14 +255,14 @@ impl Pipeline {
                 if writing.stencil || !stencil.disabled {
                     let att = depth_stencil_attachment.expect(&format!(
                         "stencil attachment for writing/testing not set for pass {}!",
-                        pass.name
+                        render_pass.name
                     ));
                     b = b.stencil_attachment_format(att.vk_format);
                 }
                 if writing.depth || depth.testing {
                     let att = depth_stencil_attachment.expect(&format!(
                         "depth attachment for writing/testing not set for pass {}!",
-                        pass.name
+                        render_pass.name
                     ));
                     b = b.depth_attachment_format(att.vk_format);
                 }
@@ -267,19 +274,19 @@ impl Pipeline {
                 ..Default::default()
             };
             let shader_stages = shader_programs_by_name
-                .get(&pass.program)
-                .expect(&format!("program {} missing!", pass.program))
+                .get(&render_pass.program)
+                .expect(&format!("program {} missing!", render_pass.program))
                 .shaders
                 .iter()
                 .map(|e| e.info)
                 .collect::<Vec<_>>();
 
-            let mut attachment_descriptors = (pass.inputs.len() > 0).then(|| {
+            let mut attachment_descriptors = (render_pass.inputs.len() > 0).then(|| {
                 Box::new(Self::attachment_image_desc_buffer(
                     ctx,
                     descriptor_mem,
-                    &pass.name,
-                    pass.inputs.len() as u32,
+                    &render_pass.name,
+                    render_pass.inputs.len() as u32,
                 ))
             });
 
@@ -302,7 +309,7 @@ impl Pipeline {
                 }
             };
             // Final passes have special rendering attachment info hanlding on render.
-            let default_attachment_index = pass
+            let default_attachment_index = render_pass
                 .outputs
                 .iter()
                 .position(|e| Attachment::DEFAULT_NAME == e);
@@ -352,12 +359,8 @@ impl Pipeline {
                     outputs_for_barriers.push(att.clone())
                 };
             }
-            let image_barriers = Self::gen_image_barriers_for(
-                passi,
-                &inputs,
-                &outputs_for_barriers,
-                &enabled_passes,
-            );
+            let image_barriers =
+                barrier_gen.gen_image_barriers_for(passi, &inputs, &outputs_for_barriers);
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &attachment_descriptors {
                 set_layouts.push(d.layout)
@@ -400,30 +403,30 @@ impl Pipeline {
             .expect("Unable to create graphics pipeline");
             let graphics_pipeline = graphics_pipelines[0];
 
-            ctx.try_set_debug_name(&pass.name, graphics_pipeline);
-            ctx.try_set_debug_name(&pass.name, pipeline_layout);
+            ctx.try_set_debug_name(&render_pass.name, graphics_pipeline);
+            ctx.try_set_debug_name(&render_pass.name, pipeline_layout);
 
             if let Some(d) = &mut attachment_descriptors {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
             stages.push(crate::pipeline::stage::Stage {
-                name: pass.name.clone(),
+                name: render_pass.name.clone(),
                 is_validation_layer_enabled,
                 rendering: super::stage::Rendering {
                     attachments: attachment_rendering,
                     depth_stencil: depth_stencil_rendering,
                     default_attachment_index,
                 },
-                task_kind: pass.batch,
+                task_kind: render_pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,
-                per_instance_updaters: pass
+                per_instance_updaters: render_pass
                     .per_instance_updaters
                     .iter()
                     .map(|e| e.to_resource_kind())
                     .collect(),
-                per_pass_updaters: pass
+                per_pass_updaters: render_pass
                     .per_pass_updaters
                     .iter()
                     .map(|e| e.to_resource_kind())
@@ -535,101 +538,5 @@ impl Pipeline {
                 U32OrF32::F32(v) => (ref_height * v).ceil() as u32,
             },
         }
-    }
-
-    fn gen_image_barriers_for(
-        currenti: usize,
-        inputs: &Vec<Attachment>,
-        outputs: &Vec<Attachment>,
-        passes: &Vec<Pass>,
-    ) -> Vec<vk::ImageMemoryBarrier2> {
-        let mut i = currenti;
-        let mut barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
-        fn wrap_around(index: usize, length: usize) -> usize {
-            if index == 0 {
-                length - 1
-            } else {
-                index - 1
-            }
-        }
-        for input in inputs {
-            if Attachment::DEFAULT_NAME == input.name {
-                panic!("Can't read from the default attachment!")
-            }
-            loop {
-                i = wrap_around(i, passes.len());
-                if i == currenti {
-                    // Looped back to current pass, nothing to check
-                    break;
-                }
-                let prev = &passes[i];
-                if prev.inputs.iter().any(|e| e.name.eq(&input.name)) {
-                    // Already issued barrier before
-                    break;
-                }
-                if !prev.outputs.contains(&input.name) {
-                    // Continue to previous pass
-                    continue;
-                }
-                // Image was written to before, barrier for reading
-                let barrier = vk::ImageMemoryBarrier2::builder()
-                    .image(input.image)
-                    .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-                    .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
-                    .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-                    .new_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
-                    .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-                    .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
-                    .subresource_range(Attachment::default_subresource_range(input.format.aspect()))
-                    .build();
-                barriers.push(barrier);
-                break;
-            }
-        }
-        for output in outputs {
-            if Attachment::DEFAULT_NAME == output.name {
-                /*
-                 * Handled in the rendering loop, since the swapchain
-                 * changes which image this barrier refers to.
-                 */
-                continue;
-            }
-            loop {
-                i = wrap_around(i, passes.len());
-                if i == currenti {
-                    // Looped back to current pass, nothing to check
-                    break;
-                }
-                let prev = &passes[i];
-                if prev.outputs.contains(&output.name) {
-                    // Already issued barrier before
-                    break;
-                }
-                if !prev.inputs.iter().any(|e| e.name.eq(&output.name)) {
-                    // Continue to previous pass
-                    continue;
-                }
-                // Image was read before, issue barrier for writing
-                let barrier = vk::ImageMemoryBarrier2::builder()
-                    .image(output.image)
-                    .src_access_mask(vk::AccessFlags2::MEMORY_READ)
-                    .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-                    .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-                    .src_stage_mask(vk::PipelineStageFlags2::NONE)
-                    .dst_stage_mask(if output.format.has_depth_or_stencil() {
-                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
-                    } else {
-                        vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
-                    })
-                    .subresource_range(Attachment::default_subresource_range(
-                        output.format.aspect(),
-                    ))
-                    .build();
-                barriers.push(barrier);
-                break;
-            }
-        }
-        return barriers;
     }
 }
