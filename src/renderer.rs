@@ -730,6 +730,8 @@ pub fn make_device(
         scalar_block_layout: 1,
         runtime_descriptor_array: 1,
         shader_sampled_image_array_non_uniform_indexing: 1,
+        storage_buffer8_bit_access: 1,
+        shader_int8: 1,
         ..Default::default()
     };
     let mut features13 = vk::PhysicalDeviceVulkan13Features {

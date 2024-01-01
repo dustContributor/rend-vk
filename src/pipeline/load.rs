@@ -10,6 +10,7 @@ use super::{
     descriptor::DescriptorBuffer,
     file::*,
     sampler::{Sampler, SamplerKey},
+    stage::Rendering,
 };
 use crate::shader;
 use crate::texture::MipMap;
@@ -133,7 +134,7 @@ impl Pipeline {
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "memory"), texture.memory);
                 ctx.try_set_debug_name(&format!("{}_{}", f.name, "view"), texture.view);
                 return (
-                    &f.name,
+                    f.name.clone(),
                     Attachment {
                         name: f.name.clone(),
                         format: f.format,
@@ -150,7 +151,7 @@ impl Pipeline {
             .collect();
         let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
         // Default attachment is provided by the caller since it depends on the swapchain.
-        attachments_by_name.insert(&default_attachment_name, default_attachment);
+        attachments_by_name.insert(default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let enabled_passes: Vec<_> = pip.passes.iter().filter(|e| !e.is_disabled()).collect();
         let image_descriptors = Self::image_desc_buffer(ctx, descriptor_mem);
@@ -162,10 +163,21 @@ impl Pipeline {
         let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
         let mut stage_index = 0u32;
         for (passi, pass) in enabled_passes.iter().enumerate() {
-            let render_pass;
-            match pass {
-                PipelineStep::Render(tmp) => render_pass = tmp,
-                PipelineStep::Blit(_) => continue,
+            let render_pass = match pass {
+                PipelineStep::Blit(blit) => {
+                    let blit_stage = Self::build_blit_stage(
+                        blit,
+                        &barrier_gen,
+                        passi,
+                        is_validation_layer_enabled,
+                        &attachments_by_name,
+                    );
+                    stages.push(blit_stage);
+                    // Nothing else to do for blit stages
+                    continue;
+                }
+                // Render pass requires the longer setup below
+                PipelineStep::Render(render) => render,
             };
             let writing = Self::handle_option(render_pass.state.writing.clone());
             let depth = Self::handle_option(render_pass.state.depth.clone());
@@ -203,26 +215,16 @@ impl Pipeline {
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
             // TODO: Check why if depth output isn't placed last, VVL errors get reported
-            let attachment_outputs: Vec<_> = render_pass
-                .outputs
-                .iter()
-                .map(|e| {
-                    attachments_by_name
-                        .get(e)
-                        .expect(&format!("output attachment {e} missing!"))
-                        .clone()
-                })
-                .collect();
-            let attachment_inputs: Vec<_> = render_pass
-                .inputs
-                .iter()
-                .map(|e| {
-                    attachments_by_name
-                        .get(&e.name)
-                        .expect(&format!("input attachment {} missing!", e.name))
-                        .clone()
-                })
-                .collect();
+            let attachment_outputs =
+                Self::find_attachments(&render_pass.outputs, &attachments_by_name);
+            let attachment_inputs = Self::find_attachments(
+                &render_pass
+                    .inputs
+                    .iter()
+                    .map(|e| e.name.clone())
+                    .collect::<Vec<_>>(),
+                &attachments_by_name,
+            );
             let attachment_samplers: Vec<_> = render_pass
                 .inputs
                 .iter()
@@ -471,6 +473,58 @@ impl Pipeline {
             sampler_descriptors,
             samplers_by_key,
         };
+    }
+
+    fn find_attachments(
+        names: &[String],
+        attachments_by_name: &HashMap<String, Attachment>,
+    ) -> Vec<Attachment> {
+        names
+            .iter()
+            .map(|e| {
+                attachments_by_name
+                    .get(e)
+                    .expect(&format!("attachment {e} missing!"))
+                    .clone()
+            })
+            .collect()
+    }
+
+    fn build_blit_stage(
+        blit: &BlitPass,
+        barrier_gen: &BarrierGen,
+        index: usize,
+        is_validation_layer_enabled: bool,
+        attachments_by_name: &HashMap<String, Attachment>,
+    ) -> crate::pipeline::stage::Stage {
+        let outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
+        let inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
+        let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
+        crate::pipeline::stage::Stage {
+            name: blit.name.clone(),
+            index: index.try_into().unwrap(),
+            is_validation_layer_enabled,
+            image_barriers,
+            // Not really needed but keep around for debugging
+            inputs,
+            outputs,
+            // A blit command cant happen right before a swapchain present
+            is_final: false,
+            // Of no consequence, it wont iterate over render tasks
+            task_kind: crate::render_task::TaskKind::Fullscreen,
+            // Nothing else is needed to issue a blit command
+            rendering: Rendering {
+                attachments: Vec::new(),
+                depth_stencil: None,
+                default_attachment_index: None,
+            },
+            pipeline: vk::Pipeline::null(),
+            layout: vk::PipelineLayout::null(),
+            per_instance_updaters: Vec::new(),
+            per_pass_updaters: Vec::new(),
+            attachment_descriptors: None,
+            reserved_buffers: Vec::new(),
+        }
     }
 
     pub fn image_desc_buffer(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
