@@ -14,6 +14,8 @@ struct Pass {
 pub struct BarrierGen {
     passes: Vec<Pass>,
 }
+
+#[derive(Default)]
 struct BarrierEval {
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
@@ -29,31 +31,24 @@ impl BarrierEval {
         new_layout: vk::ImageLayout,
     ) -> Self {
         Self {
-            already_issued: false,
-            keep_searching: false,
             src_access,
             old_layout,
             new_layout,
+            ..Default::default()
         }
     }
 
     fn already_issued() -> Self {
         Self {
             already_issued: true,
-            keep_searching: false,
-            src_access: vk::AccessFlags2::NONE,
-            old_layout: vk::ImageLayout::UNDEFINED,
-            new_layout: vk::ImageLayout::UNDEFINED,
+            ..Default::default()
         }
     }
 
     fn next_pass() -> Self {
         Self {
-            already_issued: false,
             keep_searching: true,
-            src_access: vk::AccessFlags2::NONE,
-            old_layout: vk::ImageLayout::UNDEFINED,
-            new_layout: vk::ImageLayout::UNDEFINED,
+            ..Default::default()
         }
     }
 }
@@ -103,44 +98,89 @@ impl BarrierGen {
         BarrierGen { passes: tmp }
     }
 
-    fn eval_barrier_for(prev: &Pass, input: &Attachment, curr_is_blitting: bool) -> BarrierEval {
-        let new_layout = if curr_is_blitting {
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL
-        } else {
-            vk::ImageLayout::READ_ONLY_OPTIMAL
-        };
-        if prev.inputs.iter().any(|e| e.eq(&input.name)) {
-            // Previous pass had this attachment as an input
-            if (prev.is_blitting && curr_is_blitting) || (!prev.is_blitting && !curr_is_blitting) {
-                // Already issued this same barrier before
-                return BarrierEval::already_issued();
+    fn output_barrier_for(
+        prev_pass: &Pass,
+        attachment: &Attachment,
+        current_is_blitting: bool,
+    ) -> BarrierEval {
+        Self::eval_barrier_for(prev_pass, attachment, current_is_blitting, true)
+    }
+
+    fn input_barrier_for(
+        prev_pass: &Pass,
+        attachment: &Attachment,
+        current_is_blitting: bool,
+    ) -> BarrierEval {
+        Self::eval_barrier_for(prev_pass, attachment, current_is_blitting, false)
+    }
+
+    fn eval_barrier_for(
+        prev_pass: &Pass,
+        attachment: &Attachment,
+        current_is_blitting: bool,
+        is_output: bool,
+    ) -> BarrierEval {
+        let new_layout = if current_is_blitting {
+            // Blitting outputs require "transfer dst", inputs "transfer src"
+            if is_output {
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL
+            } else {
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL
             }
-            if prev.is_blitting {
-                // Curr is not blitting, prev was. Issue a transition from transfer src
+        } else {
+            // Non blitting outputs require "attachment", inputs "read only"
+            if is_output {
+                vk::ImageLayout::ATTACHMENT_OPTIMAL
+            } else {
+                vk::ImageLayout::READ_ONLY_OPTIMAL
+            }
+        };
+        if prev_pass.inputs.iter().any(|e| e.eq(&attachment.name)) {
+            // Previous pass had this attachment as an input
+            if !is_output {
+                // Only check for same barriers if it's evaluating an input against inputs
+                if (prev_pass.is_blitting && current_is_blitting)
+                    || (!prev_pass.is_blitting && !current_is_blitting)
+                {
+                    // Already issued this same barrier before
+                    return BarrierEval::already_issued();
+                }
+            }
+            if prev_pass.is_blitting {
+                // Prev was blitting, curr isnt. Issue a transition from transfer src
                 return BarrierEval::of(
                     vk::AccessFlags2::MEMORY_READ,
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                     new_layout,
                 );
             }
-            // Curr is blitting, prev wasn't. Issue a transition from shader read
+            // Curr is blitting, prev wasn't. Issue a transition from read only
             return BarrierEval::of(
                 vk::AccessFlags2::MEMORY_READ,
                 vk::ImageLayout::READ_ONLY_OPTIMAL,
                 new_layout,
             );
         }
-        if prev.outputs.contains(&input.name) {
+        if prev_pass.outputs.contains(&attachment.name) {
             // Previous pass had this attachment as an output
-            if prev.is_blitting {
-                // Prev was blitting. Issue a transition from transfer dst
+            if is_output {
+                // Only check for same barriers if it's evaluating an output against outputs
+                if (prev_pass.is_blitting && current_is_blitting)
+                    || (!prev_pass.is_blitting && !current_is_blitting)
+                {
+                    // Already issued this same barrier before
+                    return BarrierEval::already_issued();
+                }
+            }
+            if prev_pass.is_blitting {
+                // Prev was blitting, curr isnt. Issue a transition from transfer dst
                 return BarrierEval::of(
                     vk::AccessFlags2::MEMORY_WRITE,
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                     new_layout,
                 );
             }
-            // Prev wasn't blitting. Issue a transition from fragment shader write
+            // Prev wasn't blitting. Issue a transition from output attachment
             return BarrierEval::of(
                 vk::AccessFlags2::MEMORY_WRITE,
                 vk::ImageLayout::ATTACHMENT_OPTIMAL,
@@ -177,17 +217,8 @@ impl BarrierGen {
                     // Looped back to current pass, nothing to check
                     break;
                 }
-                // DEBUG - ERROR:VALIDATION
-                // [UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout (1303270965)]:
-                // Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ]
-                // Object 0: handle = 0x7ffff1ec1280, type = VK_OBJECT_TYPE_COMMAND_BUFFER; |
-                //  MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0]
-                //  command buffer VkCommandBuffer 0x7ffff1ec1280[] expects VkImage
-                //  0x310000000031[depth_image] (subresource: aspectMask 0x2 array layer 0, mip level 0)
-                //  to be in layout VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL--instead,
-                //  current layout is VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL.
                 let prev = &self.passes[i];
-                let ev_barrier = Self::eval_barrier_for(prev, input, curr_is_blitting);
+                let ev_barrier = Self::input_barrier_for(prev, input, curr_is_blitting);
                 if ev_barrier.already_issued {
                     break;
                 }
@@ -224,52 +255,19 @@ impl BarrierGen {
                     break;
                 }
                 let prev = &self.passes[i];
-                let old_layout;
-                let src_access;
-                if prev.outputs.contains(&output.name) {
-                    // Previous pass had this attachment as an output
-                    if (prev.is_blitting && curr_is_blitting)
-                        || (!prev.is_blitting && !curr_is_blitting)
-                    {
-                        // Already issued this same barrier before
-                        break;
-                    }
-                    if prev.is_blitting {
-                        // Curr is not blitting, prev was. Issue a transition from transfer dst
-                        old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
-                        src_access = vk::AccessFlags2::MEMORY_WRITE;
-                    } else {
-                        // Curr is blitting, prev wasn't. Issue a transition from shader write
-                        old_layout = vk::ImageLayout::ATTACHMENT_OPTIMAL;
-                        src_access = vk::AccessFlags2::MEMORY_WRITE;
-                    }
-                } else if prev.inputs.iter().any(|e| e.eq(&output.name)) {
-                    // Previous pass had this attachment as an input
-                    if prev.is_blitting {
-                        // Prev was blitting. Issue a transition from transfer dst
-                        old_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-                        src_access = vk::AccessFlags2::MEMORY_READ;
-                    } else {
-                        // Prev wasn't blitting. Issue a transition from fragment shader read
-                        old_layout = vk::ImageLayout::READ_ONLY_OPTIMAL;
-                        src_access = vk::AccessFlags2::MEMORY_READ;
-                    }
-                } else {
-                    // Continue to previous pass
+                let ev_barrier = Self::output_barrier_for(prev, output, curr_is_blitting);
+                if ev_barrier.already_issued {
+                    break;
+                }
+                if ev_barrier.keep_searching {
                     continue;
                 }
-                // Image was read before, issue barrier for writing
-                let new_layout = if curr_is_blitting {
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL
-                } else {
-                    vk::ImageLayout::ATTACHMENT_OPTIMAL
-                };
                 let barrier = vk::ImageMemoryBarrier2::builder()
                     .image(output.image)
-                    .src_access_mask(src_access)
+                    .src_access_mask(ev_barrier.src_access)
                     .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-                    .old_layout(old_layout)
-                    .new_layout(new_layout)
+                    .old_layout(ev_barrier.old_layout)
+                    .new_layout(ev_barrier.new_layout)
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
                     .dst_stage_mask(if output.format.has_depth_or_stencil() {
                         vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
