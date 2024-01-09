@@ -4,13 +4,14 @@ use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
     pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
     render_task::{RenderTask, TaskKind},
-    renderer::MeshBuffer,
     shader_resource::{ResourceKind, SingleResource},
     updater,
 };
 use ash::vk::{self, ShaderStageFlags};
 
-pub struct Stage {
+use super::stage::Stage;
+
+pub struct RenderStage {
     pub name: String,
     pub rendering: Rendering,
     pub pipeline: vk::Pipeline,
@@ -35,23 +36,12 @@ pub struct Rendering {
     pub default_attachment_index: Option<usize>,
 }
 
-impl Stage {
-    pub fn render(
-        &mut self,
-        ctx: &crate::context::VulkanContext,
-        batches_by_task_type: &Vec<Vec<RenderTask>>,
-        mesh_buffers_by_id: &HashMap<u32, MeshBuffer>,
-        shader_resources_by_kind: &HashMap<ResourceKind, SingleResource>,
-        sampler_descriptors: &DescriptorBuffer,
-        image_descriptors: &DescriptorBuffer,
-        buffer_allocator: &DeviceAllocator,
-        command_buffer: vk::CommandBuffer,
-        default_attachment: &Attachment,
-    ) {
+impl Stage for RenderStage {
+    fn work(&mut self, ctx: super::stage::RenderContext) {
         let mut image_barriers = self.image_barriers.clone();
         if self.is_final {
             image_barriers.push(Attachment::default_attachment_write_barrier(
-                default_attachment.image,
+                ctx.default_attachment.image,
             ));
         }
         if !image_barriers.is_empty() {
@@ -59,8 +49,9 @@ impl Stage {
                 .image_memory_barriers(&image_barriers)
                 .build();
             unsafe {
-                ctx.device
-                    .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
+                ctx.vulkan
+                    .device
+                    .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
             }
         }
         let mut rendering_attachments = self.rendering.attachments.clone();
@@ -70,7 +61,7 @@ impl Stage {
              * the view with the current swapchain target
              */
             rendering_attachments[dai] = vk::RenderingAttachmentInfo {
-                image_view: default_attachment.view,
+                image_view: ctx.default_attachment.view,
                 ..rendering_attachments[dai]
             };
         };
@@ -83,7 +74,7 @@ impl Stage {
             .render_area(if let Some(att) = self.outputs.first() {
                 att.render_area_no_offset()
             } else {
-                default_attachment.render_area_no_offset()
+                ctx.default_attachment.render_area_no_offset()
             })
             .layer_count(1);
         if let Some(att) = &self.rendering.depth_stencil {
@@ -94,10 +85,10 @@ impl Stage {
          *  At this point we already waited for the previous stage invocation to finish,
          *  we can free the buffers used back then.
          */
-        self.release_reserved_buffers(&buffer_allocator);
+        self.release_reserved_buffers(&ctx.buffer_allocator);
         let mut desc_buffer_info = vec![
-            sampler_descriptors.binding_info(),
-            image_descriptors.binding_info(),
+            ctx.sampler_descriptors.binding_info(),
+            ctx.image_descriptors.binding_info(),
         ];
         let mut desc_buffer_indices = vec![0, 1];
         let mut desc_buffer_offsets = vec![0, 0];
@@ -107,32 +98,35 @@ impl Stage {
             desc_buffer_offsets.push(0);
         }
         unsafe {
-            ctx.extension
+            ctx.vulkan
+                .extension
                 .descriptor_buffer
-                .cmd_bind_descriptor_buffers(command_buffer, &desc_buffer_info);
-            ctx.extension
+                .cmd_bind_descriptor_buffers(ctx.command_buffer, &desc_buffer_info);
+            ctx.vulkan
+                .extension
                 .descriptor_buffer
                 .cmd_set_descriptor_buffer_offsets(
-                    command_buffer,
+                    ctx.command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
                     self.layout,
                     0,
                     &desc_buffer_indices,
                     &desc_buffer_offsets,
                 );
-            ctx.device
-                .cmd_begin_rendering(command_buffer, &rendering_info);
-            ctx.device.cmd_bind_pipeline(
-                command_buffer,
+            ctx.vulkan
+                .device
+                .cmd_begin_rendering(ctx.command_buffer, &rendering_info);
+            ctx.vulkan.device.cmd_bind_pipeline(
+                ctx.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
         }
         let per_pass_buffers =
-            self.reserve_pass_buffers(&buffer_allocator, shader_resources_by_kind);
-        let tasks = &batches_by_task_type[self.task_kind.to_usize()];
+            self.reserve_pass_buffers(&ctx.buffer_allocator, ctx.shader_resources_by_kind);
+        let tasks = &ctx.batches_by_task_type[self.task_kind.to_usize()];
         for task in tasks {
-            let mesh_buffer = mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
+            let mesh_buffer = ctx.mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
             let is_indexed = !mesh_buffer.indices.is_empty();
             // Most of the time it's nowehere near going to be close to 32 addresses
             let mut push_constants: Vec<u64> = Vec::with_capacity(32);
@@ -147,13 +141,13 @@ impl Stage {
                 ]);
             }
             // Third, the per-instance date for the task, uploaded per task
-            push_constants.extend(&self.reserve_instance_buffers(&buffer_allocator, task));
+            push_constants.extend(&self.reserve_instance_buffers(&ctx.buffer_allocator, task));
             // Now we push the data into the command stream and issue the draws
             unsafe {
                 if !push_constants.is_empty() {
                     let push_constants = push_constants.align_to::<u8>().1;
-                    ctx.device.cmd_push_constants(
-                        command_buffer,
+                    ctx.vulkan.device.cmd_push_constants(
+                        ctx.command_buffer,
                         self.layout,
                         ShaderStageFlags::ALL_GRAPHICS,
                         0u32,
@@ -161,14 +155,14 @@ impl Stage {
                     );
                 }
                 if is_indexed {
-                    ctx.device.cmd_bind_index_buffer(
-                        command_buffer,
+                    ctx.vulkan.device.cmd_bind_index_buffer(
+                        ctx.command_buffer,
                         mesh_buffer.indices.buffer,
                         mesh_buffer.indices.offset,
                         vk::IndexType::UINT32,
                     );
-                    ctx.device.cmd_draw_indexed(
-                        command_buffer,
+                    ctx.vulkan.device.cmd_draw_indexed(
+                        ctx.command_buffer,
                         mesh_buffer.count,
                         task.instance_count,
                         0,
@@ -176,8 +170,8 @@ impl Stage {
                         0,
                     );
                 } else {
-                    ctx.device.cmd_draw(
-                        command_buffer,
+                    ctx.vulkan.device.cmd_draw(
+                        ctx.command_buffer,
                         mesh_buffer.count,
                         task.instance_count,
                         0,
@@ -187,82 +181,49 @@ impl Stage {
             }
         }
         // End drawing this stage
-        unsafe { ctx.device.cmd_end_rendering(command_buffer) }
+        unsafe { ctx.vulkan.device.cmd_end_rendering(ctx.command_buffer) }
         if !self.is_final {
             // Nothing else to do
             return;
         }
         // Need to transition for presenting
         let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
-            default_attachment.image,
+            ctx.default_attachment.image,
         )];
         let barrier_dep_info = vk::DependencyInfo::builder()
             .image_memory_barriers(&present_image_barriers)
             .build();
         unsafe {
-            ctx.device
-                .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
+            ctx.vulkan
+                .device
+                .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
         }
     }
 
-    pub fn wait_for_previous_frame(
-        &self,
-        device: &ash::Device,
-        current_frame: u64,
-        total_stages: u32,
-        semaphore: vk::Semaphore,
-    ) {
-        if self.is_validation_layer_enabled && current_frame < 1 {
-            /*
-             * If validation layers are enabled, don't wait the first frame to avoid
-             * a validation false positive that locks the main thread for a few seconds
-             */
-            return;
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn index(&self) -> u32 {
+        self.index
+    }
+
+    fn is_validation_layer_enabled(&self) -> bool {
+        self.is_validation_layer_enabled
+    }
+
+    fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_pipeline(self.pipeline, None);
+            device.destroy_pipeline_layout(self.layout, None);
+            if let Some(desc) = &self.attachment_descriptors {
+                desc.destroy(device)
+            }
         }
-        let wait_value = [self.signal_value_for(current_frame, total_stages)];
-        let pass_timeline_semaphores = [semaphore];
-        let wait_info = vk::SemaphoreWaitInfo::builder()
-            .values(&wait_value)
-            .semaphores(&pass_timeline_semaphores)
-            .build();
-        unsafe {
-            device
-                .wait_semaphores(
-                    &wait_info,
-                    std::time::Duration::from_secs(1).as_nanos() as u64,
-                )
-                .unwrap()
-        };
     }
+}
 
-    pub fn signal_next_frame(
-        &self,
-        device: &ash::Device,
-        current_frame: u64,
-        total_stages: u32,
-        semaphore: vk::Semaphore,
-        queue: vk::Queue,
-    ) {
-        let signal_value = self.signal_value_for(current_frame + 1, total_stages);
-        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
-            .semaphore(semaphore)
-            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
-            .value(signal_value)
-            .build()];
-        let signal_submit_infos = [vk::SubmitInfo2::builder()
-            .signal_semaphore_infos(&pass_semaphore_signal_info)
-            .build()];
-        unsafe {
-            device
-                .queue_submit2(queue, &signal_submit_infos, vk::Fence::null())
-                .unwrap()
-        };
-    }
-
-    fn signal_value_for(&self, current_frame: u64, total_stages: u32) -> u64 {
-        crate::pipeline::signal_value_for(current_frame, total_stages, self.index)
-    }
-
+impl RenderStage {
     fn release_reserved_buffers(&mut self, mem: &DeviceAllocator) {
         for buffer in self.reserved_buffers.drain(..) {
             mem.free(buffer);

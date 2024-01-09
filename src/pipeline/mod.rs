@@ -5,16 +5,16 @@ use self::sampler::SamplerKey;
 
 use crate::pipeline::attachment::Attachment;
 use crate::pipeline::sampler::Sampler;
-use crate::pipeline::render_stage::Stage;
 
 pub mod attachment;
+mod barrier_gen;
 pub mod descriptor;
 pub mod file;
 mod load;
-pub mod sampler;
 pub mod render_stage;
+pub mod sampler;
+pub mod stage;
 mod state;
-mod barrier_gen;
 
 // Fixed descriptor set indices
 pub const DESCRIPTOR_SET_SAMPLER: u32 = 0;
@@ -22,7 +22,7 @@ pub const DESCRIPTOR_SET_TEXTURE: u32 = 1;
 pub const DESCRIPTOR_SET_TARGET_IMAGE: u32 = 2;
 
 pub struct Pipeline {
-    pub stages: Vec<Stage>,
+    pub stages: Vec<Box<dyn stage::Stage>>,
     pub attachments: Vec<Attachment>,
     pub image_descriptors: DescriptorBuffer,
     pub sampler_descriptors: DescriptorBuffer,
@@ -51,11 +51,8 @@ impl Pipeline {
                 e.destroy(device);
             }
             for stage in &self.stages {
-                device.destroy_pipeline(stage.pipeline, None);
-                device.destroy_pipeline_layout(stage.layout, None);
-                if let Some(desc) = &stage.attachment_descriptors {
-                    desc.destroy(device)
-                }
+                stage.destroy(device);
+                
             }
             for attachment in &self.attachments {
                 if attachment.is_default() {

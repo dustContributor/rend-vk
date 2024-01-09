@@ -9,8 +9,9 @@ use super::{
     barrier_gen::BarrierGen,
     descriptor::DescriptorBuffer,
     file::*,
-    sampler::{Sampler, SamplerKey},
     render_stage::Rendering,
+    sampler::{Sampler, SamplerKey},
+    stage::Stage,
 };
 use crate::shader;
 use crate::texture::MipMap;
@@ -412,7 +413,7 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
-            stages.push(crate::pipeline::render_stage::Stage {
+            stages.push(crate::pipeline::render_stage::RenderStage {
                 name: render_pass.name.clone(),
                 is_validation_layer_enabled,
                 rendering: super::render_stage::Rendering {
@@ -467,7 +468,10 @@ impl Pipeline {
         // image_descriptors.into_device();
 
         return crate::pipeline::Pipeline {
-            stages,
+            stages: stages
+                .into_iter()
+                .map(|e| Box::new(e) as Box<dyn Stage>)
+                .collect(),
             attachments: attachments_by_name.into_values().collect(),
             image_descriptors,
             sampler_descriptors,
@@ -496,11 +500,11 @@ impl Pipeline {
         index: usize,
         is_validation_layer_enabled: bool,
         attachments_by_name: &HashMap<String, Attachment>,
-    ) -> crate::pipeline::render_stage::Stage {
+    ) -> crate::pipeline::render_stage::RenderStage {
         let outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
         let inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
-        crate::pipeline::render_stage::Stage {
+        crate::pipeline::render_stage::RenderStage {
             name: blit.name.clone(),
             index: index.try_into().unwrap(),
             is_validation_layer_enabled,

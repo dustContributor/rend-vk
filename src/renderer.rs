@@ -26,7 +26,7 @@ use crate::{
         self,
         attachment::Attachment,
         sampler::{Sampler, SamplerKey},
-        Pipeline,
+        stage, Pipeline,
     },
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
@@ -399,17 +399,17 @@ impl Renderer {
                 total_stages,
                 self.pass_timeline_semaphore,
             );
-            stage.render(
-                &self.vulkan_context,
-                &self.batches_by_task_type,
-                &self.mesh_buffers_by_id,
-                &self.shader_resources_by_kind,
-                &sampler_descriptors,
-                &image_descriptors,
-                &buffer_allocator,
-                self.draw_command_buffer,
+            stage.work(stage::RenderContext {
+                vulkan: &self.vulkan_context,
+                batches_by_task_type: &self.batches_by_task_type,
+                mesh_buffers_by_id: &self.mesh_buffers_by_id,
+                shader_resources_by_kind: &self.shader_resources_by_kind,
+                sampler_descriptors: &sampler_descriptors,
+                image_descriptors: &image_descriptors,
+                buffer_allocator: &buffer_allocator,
+                command_buffer: self.draw_command_buffer,
                 default_attachment,
-            );
+            });
             stage.signal_next_frame(
                 &self.vulkan_context.device,
                 current_frame,
