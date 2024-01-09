@@ -212,7 +212,12 @@ pub fn make(
                 vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
             } else {
                 vk::ImageUsageFlags::COLOR_ATTACHMENT
-            }) | vk::ImageUsageFlags::SAMPLED
+            }) 
+            // for attachment sampling
+            | vk::ImageUsageFlags::SAMPLED
+            // transfer flags for blits
+            | vk::ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::TRANSFER_SRC 
         } else {
             vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED
         },

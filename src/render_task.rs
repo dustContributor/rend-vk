@@ -28,6 +28,9 @@ pub enum TaskKind {
     Nuklear,
 }
 
+const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
+impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
+
 impl TaskKind {
     pub const fn mask(self) -> u32 {
         !(u32::MAX << self as u32)
@@ -69,9 +72,6 @@ impl TaskKind {
         self as usize
     }
 }
-
-const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
-impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
 pub struct RenderTask {
     pub kind: TaskKind,

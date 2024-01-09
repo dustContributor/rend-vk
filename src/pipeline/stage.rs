@@ -54,9 +54,15 @@ impl Stage {
                 default_attachment.image,
             ));
         }
-        let barrier_dep_info = vk::DependencyInfo::builder()
-            .image_memory_barriers(&image_barriers)
-            .build();
+        if !image_barriers.is_empty() {
+            let barrier_dep_info = vk::DependencyInfo::builder()
+                .image_memory_barriers(&image_barriers)
+                .build();
+            unsafe {
+                ctx.device
+                    .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
+            }
+        }
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
             /*
@@ -114,10 +120,6 @@ impl Stage {
                     &desc_buffer_indices,
                     &desc_buffer_offsets,
                 );
-        }
-        unsafe {
-            ctx.device
-                .cmd_pipeline_barrier2(command_buffer, &barrier_dep_info);
             ctx.device
                 .cmd_begin_rendering(command_buffer, &rendering_info);
             ctx.device.cmd_bind_pipeline(

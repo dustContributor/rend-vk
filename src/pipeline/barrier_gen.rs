@@ -81,7 +81,6 @@ impl BarrierGen {
                     }
                     Pass {
                         is_blitting: false,
-                        // depth_stencil: p.depth_stencil.clone(),
                         inputs,
                         outputs,
                     }
@@ -89,7 +88,6 @@ impl BarrierGen {
                 // Blit pass has only one input/output, re-represent as single item vecs
                 PipelineStep::Blit(p) => Pass {
                     is_blitting: true,
-                    // depth_stencil: None,
                     inputs: [p.input.clone()].into(),
                     outputs: [p.output.clone()].into(),
                 },
