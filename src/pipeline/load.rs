@@ -10,7 +10,7 @@ use super::{
     descriptor::DescriptorBuffer,
     file::*,
     sampler::{Sampler, SamplerKey},
-    stage::Rendering,
+    render_stage::Rendering,
 };
 use crate::shader;
 use crate::texture::MipMap;
@@ -412,10 +412,10 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
-            stages.push(crate::pipeline::stage::Stage {
+            stages.push(crate::pipeline::render_stage::Stage {
                 name: render_pass.name.clone(),
                 is_validation_layer_enabled,
-                rendering: super::stage::Rendering {
+                rendering: super::render_stage::Rendering {
                     attachments: attachment_rendering,
                     depth_stencil: depth_stencil_rendering,
                     default_attachment_index,
@@ -496,11 +496,11 @@ impl Pipeline {
         index: usize,
         is_validation_layer_enabled: bool,
         attachments_by_name: &HashMap<String, Attachment>,
-    ) -> crate::pipeline::stage::Stage {
+    ) -> crate::pipeline::render_stage::Stage {
         let outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
         let inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
-        crate::pipeline::stage::Stage {
+        crate::pipeline::render_stage::Stage {
             name: blit.name.clone(),
             index: index.try_into().unwrap(),
             is_validation_layer_enabled,

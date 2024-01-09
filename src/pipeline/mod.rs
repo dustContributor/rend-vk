@@ -5,14 +5,14 @@ use self::sampler::SamplerKey;
 
 use crate::pipeline::attachment::Attachment;
 use crate::pipeline::sampler::Sampler;
-use crate::pipeline::stage::Stage;
+use crate::pipeline::render_stage::Stage;
 
 pub mod attachment;
 pub mod descriptor;
 pub mod file;
 mod load;
 pub mod sampler;
-pub mod stage;
+pub mod render_stage;
 mod state;
 mod barrier_gen;
 
