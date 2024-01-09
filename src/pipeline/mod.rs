@@ -8,6 +8,7 @@ use crate::pipeline::sampler::Sampler;
 
 pub mod attachment;
 mod barrier_gen;
+pub mod blit_stage;
 pub mod descriptor;
 pub mod file;
 mod load;
@@ -52,7 +53,6 @@ impl Pipeline {
             }
             for stage in &self.stages {
                 stage.destroy(device);
-                
             }
             for attachment in &self.attachments {
                 if attachment.is_default() {
