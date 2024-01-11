@@ -6,6 +6,7 @@ use super::{
 };
 
 struct Pass {
+    name: String,
     inputs: Vec<String>,
     outputs: Vec<String>,
     is_blitting: bool,
@@ -80,6 +81,7 @@ impl BarrierGen {
                         }
                     }
                     Pass {
+                        name: p.name.clone(),
                         is_blitting: false,
                         inputs,
                         outputs,
@@ -87,6 +89,7 @@ impl BarrierGen {
                 }
                 // Blit pass has only one input/output, re-represent as single item vecs
                 PipelineStep::Blit(p) => Pass {
+                    name: p.name.clone(),
                     is_blitting: true,
                     inputs: [p.input.clone()].into(),
                     outputs: [p.output.clone()].into(),
@@ -195,8 +198,7 @@ impl BarrierGen {
         inputs: &Vec<Attachment>,
         outputs: &Vec<Attachment>,
     ) -> Vec<vk::ImageMemoryBarrier2> {
-        let mut i = currenti;
-        let mut barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
+        let mut barriers: Vec<(&str, bool, vk::ImageMemoryBarrier2)> = Vec::new();
         let curr_is_blitting = self.passes[currenti].is_blitting;
         fn wrap_around(index: usize, length: usize) -> usize {
             if index == 0 {
@@ -209,6 +211,8 @@ impl BarrierGen {
             if Attachment::DEFAULT_NAME == input.name {
                 panic!("Can't read from the default attachment!")
             }
+            // Search back starting from current passs
+            let mut i = currenti;
             loop {
                 i = wrap_around(i, self.passes.len());
                 if i == currenti {
@@ -234,7 +238,7 @@ impl BarrierGen {
                     .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
                     .subresource_range(Attachment::default_subresource_range(input.format.aspect()))
                     .build();
-                barriers.push(barrier);
+                barriers.push((&input.name, false, barrier));
                 break;
             }
         }
@@ -246,6 +250,8 @@ impl BarrierGen {
                  */
                 continue;
             }
+            // Search back starting from current passs
+            let mut i = currenti;
             loop {
                 i = wrap_around(i, self.passes.len());
                 if i == currenti {
@@ -276,10 +282,34 @@ impl BarrierGen {
                         output.format.aspect(),
                     ))
                     .build();
-                barriers.push(barrier);
+                barriers.push((&output.name, true, barrier));
                 break;
             }
         }
-        return barriers;
+        if log::log_enabled!(log::Level::Debug) {
+            // Log the generated barriers if we're in debug logging level
+            log::debug!(
+                "emitted {} barriers for pass {} at index {}",
+                barriers.len(),
+                self.passes[currenti].name,
+                currenti,
+            );
+            barriers.iter().enumerate().for_each(|e| {
+                let tmp = format!("{:?}", e.1 .2)
+                    .replace("{", "{\n")
+                    .replace(", ", ",\n ")
+                    .replace("}", "\n}");
+                log::debug!(
+                    "pass {} at {}, barrier {}, {}: {} \n{}",
+                    self.passes[currenti].name,
+                    currenti,
+                    e.0,
+                    if e.1 .1 { "output" } else { "input" },
+                    e.1 .0,
+                    tmp,
+                );
+            });
+        }
+        return barriers.iter().map(|e| e.2).collect();
     }
 }
