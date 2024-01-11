@@ -51,6 +51,27 @@ pub struct BlitRect {
     pub height: U32OrF32,
 }
 
+impl BlitRect {
+    pub fn to_vk(&self, window_width: f32, window_height: f32) -> [vk::Offset3D; 2] {
+        let x = self.x.scale(window_width);
+        let y = self.y.scale(window_height);
+        let width = self.width.scale(window_width);
+        let height = self.height.scale(window_height);
+        [
+            vk::Offset3D {
+                z: 0,
+                x: x as i32,
+                y: y as i32,
+            },
+            vk::Offset3D {
+                z: 1,
+                x: width as i32,
+                y: height as i32,
+            },
+        ]
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone)]
@@ -72,6 +93,33 @@ pub struct BlitPass {
     pub attributes: Vec<BlitAttribute>,
     #[serde(default)]
     pub is_disabled: bool,
+}
+
+impl BlitPass {
+    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::ImageBlit {
+        let aspect_flags = self
+            .attributes
+            .iter()
+            .map(|e| match e {
+                BlitAttribute::Color => vk::ImageAspectFlags::COLOR,
+                BlitAttribute::Depth => vk::ImageAspectFlags::DEPTH,
+                BlitAttribute::Stencil => vk::ImageAspectFlags::STENCIL,
+            })
+            .reduce(|acc, e| acc | e)
+            .expect("missing attributes to blit!");
+        let layer = vk::ImageSubresourceLayers {
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+            aspect_mask: aspect_flags,
+        };
+        vk::ImageBlit {
+            dst_subresource: layer,
+            src_subresource: layer,
+            src_offsets: self.input_rect.to_vk(window_width, window_height),
+            dst_offsets: self.output_rect.to_vk(window_width, window_height),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -306,6 +354,15 @@ impl WrapMode {
 pub enum U32OrF32 {
     U32(u32),
     F32(f32),
+}
+
+impl U32OrF32 {
+    fn scale(self, size: f32) -> f32 {
+        match self {
+            U32OrF32::U32(v) => v as f32,
+            U32OrF32::F32(v) => size * v,
+        }
+    }
 }
 
 const DEFAULT_DEPTH_CLEAR_VALUE: f32 = 1.0;

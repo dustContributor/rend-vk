@@ -161,19 +161,20 @@ impl Pipeline {
 
         let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
 
-        let mut stages = Vec::<_>::with_capacity(enabled_passes.len());
-        let mut stage_index = 0u32;
-        for (passi, pass) in enabled_passes.iter().enumerate() {
+        let mut stages = Vec::<Box<dyn Stage>>::with_capacity(enabled_passes.len());
+        for (pass_index, pass) in enabled_passes.iter().enumerate() {
             let render_pass = match pass {
                 PipelineStep::Blit(blit) => {
                     let blit_stage = Self::build_blit_stage(
                         blit,
                         &barrier_gen,
-                        passi,
+                        pass_index,
                         is_validation_layer_enabled,
+                        window_width,
+                        window_height,
                         &attachments_by_name,
                     );
-                    stages.push(blit_stage);
+                    stages.push(Box::new(blit_stage));
                     // Nothing else to do for blit stages
                     continue;
                 }
@@ -363,7 +364,7 @@ impl Pipeline {
                 };
             }
             let image_barriers =
-                barrier_gen.gen_image_barriers_for(passi, &inputs, &outputs_for_barriers);
+                barrier_gen.gen_image_barriers_for(pass_index, &inputs, &outputs_for_barriers);
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &attachment_descriptors {
                 set_layouts.push(d.layout)
@@ -413,7 +414,7 @@ impl Pipeline {
                 // If there are any input descriptors, write them into device memory
                 d.into_device()
             }
-            stages.push(crate::pipeline::render_stage::RenderStage {
+            stages.push(Box::new(crate::pipeline::render_stage::RenderStage {
                 name: render_pass.name.clone(),
                 is_validation_layer_enabled,
                 rendering: super::render_stage::Rendering {
@@ -436,14 +437,12 @@ impl Pipeline {
                     .collect(),
                 inputs,
                 outputs: attachment_outputs,
-                index: stage_index,
+                index: pass_index as u32,
                 is_final: default_attachment_index.is_some(),
                 image_barriers,
                 attachment_descriptors,
                 reserved_buffers: Vec::new(),
-            });
-            // Increment for next stage
-            stage_index += 1;
+            }));
         }
         for shader in shader_programs_by_name
             .into_values()
@@ -468,10 +467,7 @@ impl Pipeline {
         // image_descriptors.into_device();
 
         return crate::pipeline::Pipeline {
-            stages: stages
-                .into_iter()
-                .map(|e| Box::new(e) as Box<dyn Stage>)
-                .collect(),
+            stages,
             attachments: attachments_by_name.into_values().collect(),
             image_descriptors,
             sampler_descriptors,
@@ -499,35 +495,22 @@ impl Pipeline {
         barrier_gen: &BarrierGen,
         index: usize,
         is_validation_layer_enabled: bool,
+        window_width: u32,
+        window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
-    ) -> crate::pipeline::render_stage::RenderStage {
-        let outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
-        let inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
+    ) -> crate::pipeline::blit_stage::BlitStage {
+        let mut outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
+        let mut inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
-        crate::pipeline::render_stage::RenderStage {
+        crate::pipeline::blit_stage::BlitStage {
             name: blit.name.clone(),
             index: index.try_into().unwrap(),
             is_validation_layer_enabled,
             image_barriers,
-            // Not really needed but keep around for debugging
-            inputs,
-            outputs,
-            // A blit command cant happen right before a swapchain present
-            is_final: false,
-            // Of no consequence, it wont iterate over render tasks
-            task_kind: crate::render_task::TaskKind::Fullscreen,
-            // Nothing else is needed to issue a blit command
-            rendering: Rendering {
-                attachments: Vec::new(),
-                depth_stencil: None,
-                default_attachment_index: None,
-            },
-            pipeline: vk::Pipeline::null(),
-            layout: vk::PipelineLayout::null(),
-            per_instance_updaters: Vec::new(),
-            per_pass_updaters: Vec::new(),
-            attachment_descriptors: None,
-            reserved_buffers: Vec::new(),
+            filter: blit.filter.to_vk(),
+            region: blit.to_vk(window_width as f32, window_height as f32),
+            input: inputs.remove(0),
+            output: outputs.remove(0),
         }
     }
 
