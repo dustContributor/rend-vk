@@ -21,6 +21,7 @@ impl WindowContext {
                 f64::from(width),
                 f64::from(height),
             ))
+            .with_visible(true)
             .build(&event_loop)
             .unwrap();
         WindowContext {

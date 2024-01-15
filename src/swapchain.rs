@@ -18,7 +18,7 @@ impl SwapchainContext {
         is_vsync_enabled: bool,
     ) -> Self {
         let present_mode = present_mode(&vulkan_context, surface, is_vsync_enabled);
-        let surface_extent = surface_extent(&vulkan_context, surface, 0, 0);
+        let surface_extent = surface_extent(&vulkan_context, surface, 1280, 720);
         let surface_format = surface_format(&vulkan_context, surface);
         let swapchain = swapchain(&vulkan_context, surface, surface_extent, present_mode);
         let swapchain_attachments =
