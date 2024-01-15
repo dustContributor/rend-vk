@@ -1,10 +1,17 @@
 use std::collections::HashMap;
 
+use ash::vk;
+
 use self::descriptor::DescriptorBuffer;
 use self::sampler::SamplerKey;
 
+use crate::buffer::DeviceAllocator;
+
 use crate::pipeline::attachment::Attachment;
 use crate::pipeline::sampler::Sampler;
+use crate::render_task::RenderTask;
+use crate::renderer::MeshBuffer;
+use crate::shader_resource::{ResourceKind, SingleResource};
 
 pub mod attachment;
 mod barrier_gen;
@@ -34,13 +41,94 @@ pub fn signal_value_for(current_frame: u64, total_stages: u32, stage_index: u32)
     current_frame * total_stages as u64 + stage_index as u64
 }
 
+#[derive(Clone)]
+pub struct RenderContext<'a> {
+    pub vulkan: &'a crate::context::VulkanContext,
+    pub batches_by_task_type: &'a Vec<Vec<RenderTask>>,
+    pub mesh_buffers_by_id: &'a HashMap<u32, MeshBuffer>,
+    pub shader_resources_by_kind: &'a HashMap<ResourceKind, SingleResource>,
+    pub sampler_descriptors: &'a DescriptorBuffer,
+    pub image_descriptors: &'a DescriptorBuffer,
+    pub buffer_allocator: &'a DeviceAllocator,
+    pub command_buffer: vk::CommandBuffer,
+    pub default_attachment: &'a Attachment,
+}
+
 impl Pipeline {
+    pub fn process_stages(
+        &mut self,
+        pass_semaphore: vk::Semaphore,
+        render_queue: vk::Queue,
+        current_frame: u64,
+        render_context: RenderContext,
+    ) {
+        let total_stages = self.stages.len() as u32;
+        for stage in self.stages.iter_mut() {
+            stage.wait_for_previous_frame(
+                &render_context.vulkan.device,
+                current_frame,
+                total_stages,
+                pass_semaphore,
+            );
+            stage.work(render_context.clone());
+            stage.signal_next_frame(
+                &render_context.vulkan.device,
+                current_frame,
+                total_stages,
+                pass_semaphore,
+                render_queue,
+            );
+        }
+    }
+
     pub fn total_stages(&self) -> u32 {
         self.stages.len() as u32
     }
 
     pub fn signal_value_for(&self, current_frame: u64, stage_index: u32) -> u64 {
         signal_value_for(current_frame, self.total_stages(), stage_index)
+    }
+
+    pub fn gen_initial_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+        let mut first_layout_by_image: HashMap<
+            vk::Image,
+            (vk::ImageLayout, vk::ImageSubresourceRange),
+        > = HashMap::new();
+
+        self.stages
+            .iter()
+            .flat_map(|e| e.image_barriers())
+            .for_each(|barrier| {
+                if first_layout_by_image.contains_key(&barrier.image) {
+                    // Already registered the first occurence of this image
+                    return;
+                }
+                first_layout_by_image.insert(
+                    barrier.image,
+                    (barrier.old_layout, barrier.subresource_range),
+                );
+            });
+
+        let initial_barriers: Vec<_> = first_layout_by_image
+            .into_iter()
+            .map(|e| {
+                let image = e.0;
+                let layout = e.1 .0;
+                let subr = e.1 .1;
+                vk::ImageMemoryBarrier2::builder()
+                    .image(image)
+                    .src_access_mask(vk::AccessFlags2::NONE)
+                    .dst_access_mask(vk::AccessFlags2::NONE)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(layout)
+                    .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+                    .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+                    .subresource_range(subr)
+                    .build()
+            })
+            .collect();
+
+        return initial_barriers;
     }
 
     pub fn destroy(&self, device: &ash::Device) {

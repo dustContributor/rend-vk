@@ -37,7 +37,7 @@ pub struct Rendering {
 }
 
 impl Stage for RenderStage {
-    fn work(&mut self, ctx: super::stage::RenderContext) {
+    fn work(&mut self, ctx: super::RenderContext) {
         let mut image_barriers = self.image_barriers.clone();
         if self.is_final {
             image_barriers.push(Attachment::default_attachment_write_barrier(
@@ -210,6 +210,10 @@ impl Stage for RenderStage {
 
     fn is_validation_layer_enabled(&self) -> bool {
         self.is_validation_layer_enabled
+    }
+
+    fn image_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+        self.image_barriers.clone()
     }
 
     fn destroy(&self, device: &ash::Device) {

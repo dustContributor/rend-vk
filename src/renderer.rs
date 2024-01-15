@@ -26,7 +26,7 @@ use crate::{
         self,
         attachment::Attachment,
         sampler::{Sampler, SamplerKey},
-        stage, Pipeline,
+        Pipeline,
     },
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
@@ -60,11 +60,10 @@ pub struct Renderer {
     optimal_transition_queue: Vec<u32>,
     ongoing_optimal_transitions: Vec<(u32, u64)>,
 
-    present_queue: vk::Queue,
+    main_queue: vk::Queue,
 
     pool: vk::CommandPool,
     draw_command_buffer: vk::CommandBuffer,
-    _setup_command_buffer: vk::CommandBuffer,
 
     present_complete_semaphore: vk::Semaphore,
     rendering_complete_semaphore: vk::Semaphore,
@@ -82,6 +81,7 @@ impl Renderer {
 
     pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");
+        unsafe { self.vulkan_context.device.device_wait_idle().unwrap() };
         self.pipeline.destroy(&self.vulkan_context.device);
         for e in [&self.general_allocator, &self.descriptor_allocator] {
             e.destroy(&self.vulkan_context.device);
@@ -89,7 +89,6 @@ impl Renderer {
         unsafe {
             let destroy_semaphore = |s| self.vulkan_context.device.destroy_semaphore(s, None);
             let destroy_fence = |s| self.vulkan_context.device.destroy_fence(s, None);
-            self.vulkan_context.device.device_wait_idle().unwrap();
             destroy_semaphore(self.present_complete_semaphore);
             destroy_semaphore(self.rendering_complete_semaphore);
             destroy_semaphore(self.pass_timeline_semaphore);
@@ -290,10 +289,24 @@ impl Renderer {
         self.shader_resources_by_kind.insert(kind, item);
     }
 
-    pub fn render(&mut self) {
-        unsafe {
-            let (present_index, _) = self
-                .vulkan_context
+    fn draw_record_submit_commands<F>(&mut self, recording: F)
+    where
+        F: Fn(&mut Renderer, vk::CommandBuffer),
+    {
+        self.record_submit_commands(
+            self.draw_command_buffer,
+            self.draw_commands_reuse_fence,
+            self.main_queue,
+            &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+            &[self.present_complete_semaphore],
+            &[self.rendering_complete_semaphore],
+            recording,
+        );
+    }
+
+    fn acquire_next_swapchain_attachment(&self) -> (u32, Attachment) {
+        let (present_index, _) = unsafe {
+            self.vulkan_context
                 .extension
                 .swapchain
                 .acquire_next_image(
@@ -302,37 +315,103 @@ impl Renderer {
                     self.present_complete_semaphore,
                     vk::Fence::null(),
                 )
-                .unwrap();
-            let default_attachment =
-                self.swapchain_context.attachments[present_index as usize].clone();
-            self.record_submit_commandbuffer(
-                self.draw_command_buffer,
-                self.draw_commands_reuse_fence,
-                self.present_queue,
-                &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-                &[self.present_complete_semaphore],
-                &[self.rendering_complete_semaphore],
-                &default_attachment,
-            );
-            let wait_semaphores = [self.rendering_complete_semaphore];
-            let swapchains = [self.swapchain_context.swapchain];
-            let image_indices = [present_index];
-            let present_info = vk::PresentInfoKHR::builder()
-                .wait_semaphores(&wait_semaphores)
-                .swapchains(&swapchains)
-                .image_indices(&image_indices);
+                .unwrap()
+        };
+        let attachment = self.swapchain_context.attachments[present_index as usize].clone();
+        return (present_index, attachment);
+    }
+
+    fn present(&self, swapchain_attachment_index: u32) {
+        let wait_semaphores = [self.rendering_complete_semaphore];
+        let swapchains = [self.swapchain_context.swapchain];
+        let image_indices = [swapchain_attachment_index];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&wait_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        unsafe {
             self.vulkan_context
                 .extension
                 .swapchain
-                .queue_present(self.present_queue, &present_info)
-                .unwrap();
-            // Next frame ID
-            self.incr_current_frame();
-            // Clear batch queues for next frame
-            for batch in &mut self.batches_by_task_type {
-                batch.clear();
-            }
+                .queue_present(self.main_queue, &present_info)
+                .expect("queue present failed!");
+        };
+    }
+
+    pub fn render(&mut self) {
+        let (attachment_index, default_attachment) = self.acquire_next_swapchain_attachment();
+
+        self.setup_frame();
+
+        self.draw_record_submit_commands(|r, c| {
+            r.process_pipeline(c, &default_attachment);
+        });
+
+        self.present(attachment_index);
+
+        // Clear batch queues for next frame
+        for batch in &mut self.batches_by_task_type {
+            batch.clear();
         }
+        // Increment ID for next frame
+        self.incr_current_frame();
+    }
+
+    fn submit_and_wait<F>(&mut self, recording: F)
+    where
+        F: Fn(&mut Renderer, vk::CommandBuffer),
+    {
+        let cmd_buffer = self.draw_command_buffer;
+        unsafe {
+            self.vulkan_context
+                .device
+                .reset_command_buffer(cmd_buffer, vk::CommandBufferResetFlags::RELEASE_RESOURCES)
+                .expect("reset command buffer failed!");
+
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            self.vulkan_context
+                .device
+                .begin_command_buffer(cmd_buffer, &begin_info)
+                .expect("begin commandbuffer failed!");
+
+            recording(self, cmd_buffer);
+
+            self.vulkan_context
+                .device
+                .end_command_buffer(cmd_buffer)
+                .expect("end command buffer failed!");
+
+            let wait_mask = [vk::PipelineStageFlags::ALL_COMMANDS];
+            let command_buffers = [cmd_buffer];
+
+            let submit_info = vk::SubmitInfo::builder()
+                .wait_dst_stage_mask(&wait_mask)
+                .wait_semaphores(&[])
+                .command_buffers(&command_buffers);
+
+            let submit_infos = [submit_info.build()];
+
+            self.vulkan_context
+                .device
+                .reset_fences(&[self.draw_commands_reuse_fence])
+                .expect("fence reset failed!");
+
+            self.vulkan_context
+                .device
+                .queue_submit(
+                    self.main_queue,
+                    &submit_infos,
+                    self.draw_commands_reuse_fence,
+                )
+                .expect("queue submit failed!");
+
+            self.vulkan_context
+                .device
+                .device_wait_idle()
+                .expect("wait idle failed!");
+        };
     }
 
     fn incr_current_frame(&self) -> u64 {
@@ -343,14 +422,8 @@ impl Renderer {
         self.current_frame.load(Ordering::Relaxed)
     }
 
-    fn process_stages(&mut self, default_attachment: &Attachment) {
-        let current_frame = self.get_current_frame();
-        let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
-        let image_descriptors = self.pipeline.image_descriptors.clone();
-        let buffer_allocator = self.general_allocator.clone();
-        let total_stages = self.pipeline.total_stages();
-        let pipeline = &mut self.pipeline;
-
+    fn setup_frame(&mut self) {
+        // Process any queued texture transitions
         if !self.ongoing_optimal_transitions.is_empty() {
             let current_timeline_counter = unsafe {
                 self.vulkan_context
@@ -381,46 +454,48 @@ impl Renderer {
             });
             if prev_len != self.ongoing_optimal_transitions.len() {
                 // Update the descriptors on the device
-                pipeline.image_descriptors.into_device();
+                self.pipeline.image_descriptors.into_device();
             }
         }
+    }
+
+    fn process_pipeline(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        default_attachment: &Attachment,
+    ) {
+        let current_frame = self.get_current_frame();
+        let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
+        let image_descriptors = self.pipeline.image_descriptors.clone();
 
         for texture_id in self.optimal_transition_queue.drain(..) {
             let texture = &self.textures_by_id[&texture_id];
             texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
-            self.ongoing_optimal_transitions
-                .push((texture_id, pipeline.signal_value_for(current_frame + 1, 0)))
+            self.ongoing_optimal_transitions.push((
+                texture_id,
+                self.pipeline.signal_value_for(current_frame + 1, 0),
+            ))
         }
 
-        for stage in pipeline.stages.iter_mut() {
-            stage.wait_for_previous_frame(
-                &self.vulkan_context.device,
-                current_frame,
-                total_stages,
-                self.pass_timeline_semaphore,
-            );
-            stage.work(stage::RenderContext {
+        self.pipeline.process_stages(
+            self.pass_timeline_semaphore,
+            self.main_queue,
+            current_frame,
+            pipeline::RenderContext {
                 vulkan: &self.vulkan_context,
                 batches_by_task_type: &self.batches_by_task_type,
                 mesh_buffers_by_id: &self.mesh_buffers_by_id,
                 shader_resources_by_kind: &self.shader_resources_by_kind,
                 sampler_descriptors: &sampler_descriptors,
                 image_descriptors: &image_descriptors,
-                buffer_allocator: &buffer_allocator,
-                command_buffer: self.draw_command_buffer,
+                buffer_allocator: &self.general_allocator,
+                command_buffer,
                 default_attachment,
-            });
-            stage.signal_next_frame(
-                &self.vulkan_context.device,
-                current_frame,
-                total_stages,
-                self.pass_timeline_semaphore,
-                self.present_queue,
-            );
-        }
+            },
+        );
     }
 
-    fn record_submit_commandbuffer(
+    fn record_submit_commands<F>(
         &mut self,
         command_buffer: vk::CommandBuffer,
         command_buffer_reuse_fence: vk::Fence,
@@ -428,8 +503,10 @@ impl Renderer {
         wait_mask: &[vk::PipelineStageFlags],
         wait_semaphores: &[vk::Semaphore],
         signal_semaphores: &[vk::Semaphore],
-        default_attachment: &Attachment,
-    ) {
+        recording: F,
+    ) where
+        F: Fn(&mut Renderer, vk::CommandBuffer),
+    {
         unsafe {
             self.vulkan_context
                 .device
@@ -457,7 +534,7 @@ impl Renderer {
                 .begin_command_buffer(command_buffer, &command_buffer_begin_info)
                 .expect("begin commandbuffer failed!");
 
-            self.process_stages(default_attachment);
+            recording(self, command_buffer);
 
             self.vulkan_context
                 .device
@@ -546,72 +623,9 @@ where
     let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
     let descriptor_buffer_ext = ash::extensions::ext::DescriptorBuffer::new(&instance, &device);
 
-    log::trace!("creating command buffers...");
-    let present_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
-
-    let pool_create_info = vk::CommandPoolCreateInfo::builder()
-        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-        .queue_family_index(queue_family_index);
-
-    let pool = unsafe { device.create_command_pool(&pool_create_info, None).unwrap() };
-
-    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
-        .command_buffer_count(2)
-        .command_pool(pool)
-        .level(vk::CommandBufferLevel::PRIMARY);
-
-    let command_buffers = unsafe {
-        device
-            .allocate_command_buffers(&command_buffer_allocate_info)
-            .unwrap()
-    };
-    let setup_command_buffer = command_buffers[0];
-    let draw_command_buffer = command_buffers[1];
-    log::trace!("command buffers created!");
-
-    log::trace!("creating fences...");
-    let fence_create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
-    let draw_commands_reuse_fence = unsafe {
-        device
-            .create_fence(&fence_create_info, None)
-            .expect("Create fence failed.")
-    };
-    let setup_commands_reuse_fence = unsafe {
-        device
-            .create_fence(&fence_create_info, None)
-            .expect("Create fence failed.")
-    };
-    log::trace!("fences created!");
-
-    log::trace!("creating semaphores...");
-    let semaphore_create_info = vk::SemaphoreCreateInfo::default();
-    let present_complete_semaphore = unsafe {
-        device
-            .create_semaphore(&semaphore_create_info, None)
-            .unwrap()
-    };
-    let rendering_complete_semaphore = unsafe {
-        device
-            .create_semaphore(&semaphore_create_info, None)
-            .unwrap()
-    };
-    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::builder()
-        .initial_value(0)
-        .semaphore_type(vk::SemaphoreType::TIMELINE)
-        .build();
-    let timeline_semaphore_create_info = vk::SemaphoreCreateInfo::builder()
-        .push_next(&mut timeline_semaphore_type_create_info)
-        .build();
-    let pass_timeline_semaphore = unsafe {
-        device
-            .create_semaphore(&timeline_semaphore_create_info, None)
-            .unwrap()
-    };
-    log::trace!("semaphores created!");
-
     let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
-    let vulkan_context = VulkanContext {
+    let ctx = VulkanContext {
         entry,
         device,
         instance,
@@ -625,19 +639,94 @@ where
         },
     };
 
+    log::trace!("creating command buffers...");
+    let present_queue = unsafe { ctx.device.get_device_queue(queue_family_index, 0) };
+    ctx.try_set_debug_name("present_queue", present_queue);
+
+    let pool_create_info = vk::CommandPoolCreateInfo::builder()
+        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+        .queue_family_index(queue_family_index);
+
+    let pool = unsafe {
+        ctx.device
+            .create_command_pool(&pool_create_info, None)
+            .unwrap()
+    };
+    ctx.try_set_debug_name("command_pool", pool);
+
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
+        .command_buffer_count(2)
+        .command_pool(pool)
+        .level(vk::CommandBufferLevel::PRIMARY);
+
+    let command_buffers = unsafe {
+        ctx.device
+            .allocate_command_buffers(&command_buffer_allocate_info)
+            .unwrap()
+    };
+    let setup_command_buffer = command_buffers[0];
+    let draw_command_buffer = command_buffers[1];
+    ctx.try_set_debug_name("setup_command_buffer", setup_command_buffer);
+    ctx.try_set_debug_name("draw_command_buffer", draw_command_buffer);
+    log::trace!("command buffers created!");
+
+    log::trace!("creating fences...");
+    let fence_create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+    let draw_commands_reuse_fence = unsafe {
+        ctx.device
+            .create_fence(&fence_create_info, None)
+            .expect("Create fence failed.")
+    };
+    let setup_commands_reuse_fence = unsafe {
+        ctx.device
+            .create_fence(&fence_create_info, None)
+            .expect("Create fence failed.")
+    };
+    ctx.try_set_debug_name("draw_commands_reuse_fence", draw_commands_reuse_fence);
+    ctx.try_set_debug_name("setup_commands_reuse_fence", setup_commands_reuse_fence);
+    log::trace!("fences created!");
+
+    log::trace!("creating semaphores...");
+    let semaphore_create_info = vk::SemaphoreCreateInfo::default();
+    let present_complete_semaphore = unsafe {
+        ctx.device
+            .create_semaphore(&semaphore_create_info, None)
+            .unwrap()
+    };
+    let rendering_complete_semaphore = unsafe {
+        ctx.device
+            .create_semaphore(&semaphore_create_info, None)
+            .unwrap()
+    };
+    ctx.try_set_debug_name("present_complete_semaphore", present_complete_semaphore);
+    ctx.try_set_debug_name("rendering_complete_semaphore", rendering_complete_semaphore);
+    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::builder()
+        .initial_value(0)
+        .semaphore_type(vk::SemaphoreType::TIMELINE)
+        .build();
+    let timeline_semaphore_create_info = vk::SemaphoreCreateInfo::builder()
+        .push_next(&mut timeline_semaphore_type_create_info)
+        .build();
+    let pass_timeline_semaphore = unsafe {
+        ctx.device
+            .create_semaphore(&timeline_semaphore_create_info, None)
+            .unwrap()
+    };
+    ctx.try_set_debug_name("pass_timeline_semaphore", pass_timeline_semaphore);
+    log::trace!("semaphores created!");
+
     log::trace!("creating allocators...");
-    let mut general_allocator = DeviceAllocator::new_general(&vulkan_context, 64 * 1024 * 1024);
-    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&vulkan_context, 1024 * 1024);
+    let mut general_allocator = DeviceAllocator::new_general(&ctx, 64 * 1024 * 1024);
+    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&ctx, 1024 * 1024);
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
-    let swapchain_context =
-        swapchain::SwapchainContext::make(&vulkan_context, surface, is_vsync_enabled);
+    let swapchain_context = swapchain::SwapchainContext::make(&ctx, surface, is_vsync_enabled);
     log::trace!("swapchain created!");
 
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
-        &vulkan_context,
+        &ctx,
         &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
         is_validation_layer_enabled,
@@ -667,15 +756,14 @@ where
         batches_by_task_type,
         debug_context,
         swapchain_context: Box::new(swapchain_context),
-        vulkan_context: Box::new(vulkan_context),
+        vulkan_context: Box::new(ctx),
         general_allocator: Box::new(general_allocator),
         descriptor_allocator: Box::new(descriptor_allocator),
         mesh_buffers_by_id,
         mesh_buffer_ids,
         textures_by_id,
         draw_command_buffer,
-        present_queue,
-        _setup_command_buffer: setup_command_buffer,
+        main_queue: present_queue,
         rendering_complete_semaphore,
         pass_timeline_semaphore,
         present_complete_semaphore,
@@ -700,6 +788,19 @@ where
         }],
         0,
     );
+    log::trace!("issuing initial layout transitions...");
+    renderer.submit_and_wait(|r, c| {
+        let barriers = r.pipeline.gen_initial_barriers();
+        let barrier_dep_info = vk::DependencyInfo::builder()
+            .image_memory_barriers(&barriers)
+            .build();
+        unsafe {
+            r.vulkan_context
+                .device
+                .cmd_pipeline_barrier2(c, &barrier_dep_info);
+        }
+    });
+    log::trace!("initial layout transitions issued!");
     log::trace!("renderer finished!");
     return renderer;
 }

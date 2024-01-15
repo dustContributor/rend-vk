@@ -26,7 +26,11 @@ impl Stage for BlitStage {
         self.is_validation_layer_enabled
     }
 
-    fn work(&mut self, ctx: super::stage::RenderContext) {
+    fn image_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+        self.image_barriers.clone()
+    }
+
+    fn work(&mut self, ctx: super::RenderContext) {
         if !self.image_barriers.is_empty() {
             let barrier_dep_info = vk::DependencyInfo::builder()
                 .image_memory_barriers(&self.image_barriers)

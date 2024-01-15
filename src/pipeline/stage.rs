@@ -1,34 +1,14 @@
-use std::collections::HashMap;
-
-use crate::{
-    buffer::DeviceAllocator,
-    pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
-    render_task::RenderTask,
-    renderer::MeshBuffer,
-    shader_resource::{ResourceKind, SingleResource},
-};
 use ash::vk;
-
-pub struct RenderContext<'a> {
-    pub vulkan: &'a crate::context::VulkanContext,
-    pub batches_by_task_type: &'a Vec<Vec<RenderTask>>,
-    pub mesh_buffers_by_id: &'a HashMap<u32, MeshBuffer>,
-    pub shader_resources_by_kind: &'a HashMap<ResourceKind, SingleResource>,
-    pub sampler_descriptors: &'a DescriptorBuffer,
-    pub image_descriptors: &'a DescriptorBuffer,
-    pub buffer_allocator: &'a DeviceAllocator,
-    pub command_buffer: vk::CommandBuffer,
-    pub default_attachment: &'a Attachment,
-}
 
 pub trait Stage {
     fn name(&self) -> &str;
     fn index(&self) -> u32;
     fn is_validation_layer_enabled(&self) -> bool;
+    fn image_barriers(&self) -> Vec<vk::ImageMemoryBarrier2>;
 
     fn destroy(&self, device: &ash::Device);
 
-    fn work(&mut self, ctx: RenderContext);
+    fn work(&mut self, ctx: super::RenderContext);
 
     fn wait_for_previous_frame(
         &self,

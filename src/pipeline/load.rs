@@ -9,7 +9,6 @@ use super::{
     barrier_gen::BarrierGen,
     descriptor::DescriptorBuffer,
     file::*,
-    render_stage::Rendering,
     sampler::{Sampler, SamplerKey},
     stage::Stage,
 };
@@ -365,6 +364,7 @@ impl Pipeline {
             }
             let image_barriers =
                 barrier_gen.gen_image_barriers_for(pass_index, &inputs, &outputs_for_barriers);
+
             let mut set_layouts = vec![sampler_descriptors.layout, image_descriptors.layout];
             if let Some(d) = &attachment_descriptors {
                 set_layouts.push(d.layout)
