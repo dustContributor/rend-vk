@@ -1,11 +1,18 @@
-use std::{collections::HashMap, mem::size_of};
+use std::{
+    collections::HashMap,
+    mem::{size_of, size_of_val},
+};
 
 use ash::vk;
 
-use glam::{Mat4, Vec3, Vec4, Vec4Swizzles};
+use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use rend_vk::{
-    shader_resource::{Frustum, MultiResource, ResourceKind, Transform, TransformExtra, ViewRay},
+    pipeline::sampler::SamplerKey,
+    shader_resource::{
+        Frustum, Material, MultiResource, ResourceKind, Transform, TransformExtra, ViewRay,
+    },
+    texture::MipMap,
     window::WindowContext,
     *,
 };
@@ -44,8 +51,8 @@ fn main() {
         },
     );
     let view = Mat4::look_at_rh(
-        Vec3::new(-3.0, 2.0, -3.0),
-        Vec3::new(-3.0, 2.0, -2.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),
     );
     let fov_y_radians = 60.0f32.to_radians();
@@ -54,6 +61,12 @@ fn main() {
     let far_plane = 256f32;
     let proj = Mat4::perspective_rh(fov_y_radians, aspect_ratio, near_plane, far_plane);
     let inv_proj = proj.inverse();
+
+    let quad_model = Mat4::from_scale_rotation_translation(
+        Vec3::new(10.0, 10.0, 10.0),
+        Quat::from_rotation_y(0.0f32.to_radians()),
+        Vec3::new(0.0, -1.0, 0.0),
+    );
 
     let gen_quad = |renderer: &mut renderer::Renderer| {
         let xs = 0.5f32;
@@ -65,33 +78,33 @@ fn main() {
         ];
         let indices = [2u32, 3, 1, 2, 1, 0];
         let id = renderer.gen_mesh(
-            vertices.len() as u32,
-            normals.len() as u32,
-            tex_coords.len() as u32,
-            indices.len() as u32,
+            size_of_val(&vertices) as u32,
+            size_of_val(&normals) as u32,
+            size_of_val(&tex_coords) as u32,
+            size_of_val(&indices) as u32,
             indices.len() as u32,
         );
-        let mesh = renderer.fetch_mesh(id).unwrap();
+        let mesh = renderer.fetch_mesh(id).expect("missing mesh!");
         unsafe {
             std::ptr::copy_nonoverlapping(
-                vertices.as_ptr() as *const u8,
-                mesh.vertices.addr as *mut u8,
-                size_of::<f32>() * vertices.len(),
+                vertices.as_ptr(),
+                mesh.vertices.addr as *mut f32,
+                vertices.len(),
             );
             std::ptr::copy_nonoverlapping(
-                normals.as_ptr() as *const u8,
-                mesh.normals.addr as *mut u8,
-                size_of::<f32>() * normals.len(),
+                normals.as_ptr(),
+                mesh.normals.addr as *mut f32,
+                normals.len(),
             );
             std::ptr::copy_nonoverlapping(
-                tex_coords.as_ptr() as *const u8,
-                mesh.tex_coords.addr as *mut u8,
-                size_of::<f32>() * tex_coords.len(),
+                tex_coords.as_ptr(),
+                mesh.tex_coords.addr as *mut f32,
+                tex_coords.len(),
             );
             std::ptr::copy_nonoverlapping(
-                indices.as_ptr() as *const u8,
-                mesh.indices.addr as *mut u8,
-                size_of::<u32>() * indices.len(),
+                indices.as_ptr(),
+                mesh.indices.addr as *mut u32,
+                indices.len(),
             );
         };
         return id;
@@ -129,26 +142,44 @@ fn main() {
         }
     };
 
+    let quad_texture_mips = [MipMap {
+        height: 1,
+        width: 1,
+        offset: 0,
+        index: 0,
+        size: 4,
+    }];
+    let quad_texture_id = renderer.gen_texture(
+        "quad_texture".to_string(),
+        format::Format::R8G8B8A8_UNORM,
+        &quad_texture_mips,
+        quad_texture_mips.iter().map(|e| e.size).sum(),
+    );
+    let quad_texture = renderer
+        .fetch_texture(quad_texture_id)
+        .expect("missing texture!");
+    unsafe {
+        let pixel = [0xFF00FF00u32];
+        if let Some(b) = &quad_texture.staging {
+            std::ptr::copy_nonoverlapping(
+                pixel.as_ptr() as *const u8,
+                b.addr as *mut u8,
+                size_of::<u32>(),
+            );
+        }
+    }
+    renderer.queue_texture_for_uploading(quad_texture_id);
+
     let fullscreen_mesh_id = renderer.gen_mesh(3, 0, 0, 0, 3);
     let quad_mesh_id = gen_quad(&mut renderer);
-    let quad_model = Mat4::from_translation(Vec3::new(-10.0, 1.0, 10.0));
-    // quad_model.add
+
+    let sampler_id = renderer.get_sampler(SamplerKey {
+        anisotropy: 1,
+        filter: pipeline::file::Filtering::Linear,
+        wrap_mode: pipeline::file::WrapMode::ClampToEdge,
+    });
 
     window_context.event_loop(|| {
-        let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
-        quad_resources.insert(
-            ResourceKind::Transform,
-            MultiResource::Transform(vec![Transform {
-                mv: quad_model * view,
-                mvp: quad_model * view * proj,
-            }]),
-        );
-        quad_resources.insert(
-            ResourceKind::TransformExtra,
-            MultiResource::TransformExtra(vec![TransformExtra {
-                prev_mvp: quad_model * view * proj,
-            }]),
-        );
         renderer.place_shader_resource(
             ResourceKind::Frustum,
             shader_resource::SingleResource::Frustum(gen_frustum()),
@@ -163,12 +194,40 @@ fn main() {
             kind: render_task::TaskKind::Fullscreen,
             resources: HashMap::new(),
         });
-        renderer.add_task_to_queue(render_task::RenderTask {
-            mesh_buffer_id: quad_mesh_id,
-            instance_count: 1,
-            kind: render_task::TaskKind::MeshStatic,
-            resources: quad_resources,
-        });
+        if renderer.is_texture_uploaded(quad_texture_id) {
+            let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
+            quad_resources.insert(
+                ResourceKind::Transform,
+                MultiResource::Transform(vec![Transform {
+                    mv: quad_model * view,
+                    mvp: quad_model * view * proj,
+                }]),
+            );
+            quad_resources.insert(
+                ResourceKind::TransformExtra,
+                MultiResource::TransformExtra(vec![TransformExtra {
+                    prev_mvp: quad_model * view * proj,
+                }]),
+            );
+            quad_resources.insert(
+                ResourceKind::Material,
+                MultiResource::Material(vec![Material {
+                    diffuse_handle: quad_texture_id,
+                    normal_handle: quad_texture_id,
+                    diffuse_sampler: sampler_id,
+                    normal_sampler: sampler_id,
+                    scaling: 1.0,
+                    shininess: 127.0,
+                    ..Default::default()
+                }]),
+            );
+            renderer.add_task_to_queue(render_task::RenderTask {
+                mesh_buffer_id: quad_mesh_id,
+                instance_count: 1,
+                kind: render_task::TaskKind::MeshStatic,
+                resources: quad_resources,
+            });
+        }
         renderer.render();
     });
     let mut renderer = renderer;
