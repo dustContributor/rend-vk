@@ -936,15 +936,12 @@ pub fn select_physical_device(
             .enumerate_physical_devices()
             .expect("Physical device error")
     };
-    devices
+    let mut tmp: Vec<_> = devices
         .iter()
-        .find_map(|pdevice| {
+        .map(|pdevice| {
             let properties = unsafe { instance.get_physical_device_properties(*pdevice) };
             let is_discrete = vk::PhysicalDeviceType::DISCRETE_GPU == properties.device_type;
-            if !is_discrete {
-                return None;
-            }
-            unsafe {
+            let supports_graphic_and_surface = unsafe {
                 instance
                     .get_physical_device_queue_family_properties(*pdevice)
                     .iter()
@@ -965,9 +962,32 @@ pub fn select_physical_device(
                             None
                         }
                     })
-            }
+            };
+            (is_discrete, supports_graphic_and_surface)
         })
-        .expect("Couldn't find a suitable physical device!")
+        .collect();
+    
+    tmp.sort_by(|a, b| {
+        // Prefer discrete devices
+        if a.0 && !b.0 {
+            return std::cmp::Ordering::Greater;
+        }
+        if b.0 && !a.0 {
+            return std::cmp::Ordering::Less;
+        }
+        // Prefer devices with graphics queue and surface support
+        if a.1.is_some() && b.1.is_none() {
+            return std::cmp::Ordering::Greater;
+        }
+        if b.1.is_some() && a.1.is_none() {
+            return std::cmp::Ordering::Less;
+        }
+        return std::cmp::Ordering::Equal;
+    });
+    // Just pick the first and use it
+    tmp.iter()
+        .find_map(|e| e.1)
+        .expect("couldn't find a suitable physical device!")
 }
 
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {

@@ -112,7 +112,7 @@ pub struct Transform {
 pub struct TransformExtra {
     pub prev_mvp: Mat4,
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[repr(C)]
 pub struct Material {
     pub shininess: f32,

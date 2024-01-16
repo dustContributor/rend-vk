@@ -122,9 +122,13 @@ impl Stage for RenderStage {
                 self.pipeline,
             );
         }
-        let per_pass_buffers =
-            self.reserve_pass_buffers(&ctx.buffer_allocator, ctx.shader_resources_by_kind);
         let tasks = &ctx.batches_by_task_type[self.task_kind.to_usize()];
+        let per_pass_buffers = if tasks.is_empty() {
+            // Nothing to draw, nothing to reserve
+            Vec::new()
+        } else {
+            self.reserve_pass_buffers(&ctx.buffer_allocator, ctx.shader_resources_by_kind)
+        };
         for task in tasks {
             let mesh_buffer = ctx.mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
             let is_indexed = !mesh_buffer.indices.is_empty();
