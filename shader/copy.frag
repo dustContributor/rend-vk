@@ -1,20 +1,47 @@
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
+#version 330 core
 
-layout (set = 0, binding = 0) uniform sampler smpler;
-layout (set = 1, binding = 0) uniform texture2D txture;
+#extension GL_GOOGLE_include_directive : enable 
+#extension GL_ARB_shading_language_include : enable 
 
-layout (location = 0) in vec2 passTexCoord;
+#include "shared_wrapper.glsl.frag"
 
-layout (location = 0) out vec4 outColor;
+DESCRIPTOR(SAMPLER, DEFAULT, 0)
+SAMPLING(gbLightAcc, SMP_RT, 2D, 0)
+SAMPLING(gbNormal, SMP_RT, 2D, 1)
+SAMPLING(gbAlbedo, SMP_RT, 2D, 2)
+SAMPLING(gbMisc, SMP_RT, 2D, 3)
+// SAMPLING(gbDepth, SMP_RT, 2D, 4)
 
-vec3 colorIfNaN (vec3 val, vec3 color) {
-  return any(isnan(val.xyz)) ? color : val;
-}
+// Input parameters.
+ATTR_LOC(0) in vec2 passTexCoord;
+
+PASS_DATA_BEGIN
+    USING(PASS, VIEWRAY)
+    USING(PASS, FRUSTUM)
+PASS_DATA_END
+
+INPUTS_BEGIN
+	USING(PASS, DATA)
+INPUTS_END
+
+// Output parameters.
+ATTR_LOC(0) out vec4 outFrag;
 
 void main() {
-   vec2 tc = passTexCoord;
-   vec3 color = texture(sampler2D(txture, smpler), vec2(tc.x, tc.y)).xyz;
-   outColor = vec4(color, 1);
+   vec2 texCoord = apiTexCoord(passTexCoord);
+	vec4 txAlbedo = texture(gbAlbedo, texCoord).xyzw;
+	vec3 txLightAcc = texture(gbLightAcc, texCoord).xyz;
+	vec3 txNormal = texture(gbNormal, texCoord).xyz;
+	vec3 txMisc = texture(gbMisc, texCoord).xyz;
+
+	Frustum frustum = READ(PASS, FRUSTUM);
+	ViewRay viewRay = READ(PASS, VIEWRAY);
+
+   vec3 outColor = txLightAcc.xyz;
+   float luminosity = luminosity(outColor);
+   outColor *= (luminosity / (luminosity + 1.0));
+   outColor = pow(outColor, vec3(1.0/2.2));
+   outColor = colorIfNaN(outColor);
+   outColor = colorIfInf(outColor);
+   outFrag = vec4(outColor, 1);
 }

@@ -535,4 +535,23 @@ float quadraticAttenuation ( vec3 lgtCenter, vec3 viewPos, float invRadius )
   return max(0.0, 1.0 - att);
 }
 
+/* Debugging helpers */
+#ifdef GL_EXT_debug_printf
+#extension GL_EXT_debug_printf : enable
+
+void print(vec4 v) {
+  debugPrintfEXT("\nvec4 {x: %f, y: %f, z: %f, w: %f}", v.x, v.y, v.z, v.w);
+}
+void print(vec3 v) {
+  debugPrintfEXT("\nvec3 {x: %f, y: %f, z: %f}", v.x, v.y, v.z);
+}
+void print(vec2 v) {
+  debugPrintfEXT("\nvec2 {x: %f, y: %f}", v.x, v.y);
+}
+void print(mat4 v) {
+  debugPrintfEXT("\nmat4 {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}", v[0].x, v[0].y, v[0].z, v[0].w, v[1].x, v[1].y, v[1].z, v[1].w, v[2].x, v[2].y, v[2].z, v[2].w, v[3].x, v[3].y, v[3].z, v[3].w);
+}
+
+#endif //GL_EXT_debug_printf
+
 #endif // SHARED_GLSL

@@ -27,7 +27,6 @@ ATTR_LOC(5) flat out int passInstanceId;
 void main() {
     // Instance index. Mandatory first line of main.
     passInstanceId = READ(INST, INSTANCE_ID);
-    // debugPrintfEXT("instance id: %d", passInstanceId);
     vec3 inPosition = READ(ATTR, POSITION);
     Transform trns = READ(INST, TRANSFORM);
     mat4 prevMvp = READ(INST, TRANSFORM_EXTRA).prevMvp;
