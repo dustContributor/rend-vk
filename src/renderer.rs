@@ -608,9 +608,9 @@ where
     let surface_extension = khr::Surface::new(&entry, &instance);
     // let make_surface = func: unsafe extern "C" fn(u64, *mut c_void),
     log::trace!("selecting physical device...");
-    let (physical_device, queue_family_index) =
+    let (physical_device, name, queue_family_index) =
         select_physical_device(&instance, &surface_extension, surface);
-    log::trace!("physical device selected!");
+    log::trace!("physical device {name} with queue index {queue_family_index} selected!");
     log::trace!("creating device...");
     let device = make_device(
         &instance,
@@ -930,7 +930,7 @@ pub fn select_physical_device(
     instance: &ash::Instance,
     surface_extension: &khr::Surface,
     window_surface: vk::SurfaceKHR,
-) -> (vk::PhysicalDevice, u32) {
+) -> (vk::PhysicalDevice, String, u32) {
     let devices = unsafe {
         instance
             .enumerate_physical_devices()
@@ -941,6 +941,12 @@ pub fn select_physical_device(
         .map(|pdevice| {
             let properties = unsafe { instance.get_physical_device_properties(*pdevice) };
             let is_discrete = vk::PhysicalDeviceType::DISCRETE_GPU == properties.device_type;
+            let tmp_bytes: Vec<_> = properties
+                .device_name
+                .into_iter()
+                .map(|b| b as u8)
+                .collect();
+            let device_name = CStr::from_bytes_until_nul(&tmp_bytes).unwrap();
             let supports_graphic_and_surface = unsafe {
                 instance
                     .get_physical_device_queue_family_properties(*pdevice)
@@ -957,7 +963,11 @@ pub fn select_physical_device(
                                     )
                                     .unwrap();
                         if supports_graphic_and_surface {
-                            Some((*pdevice, index as u32))
+                            Some((
+                                *pdevice,
+                                device_name.to_str().unwrap().to_owned(),
+                                index as u32,
+                            ))
                         } else {
                             None
                         }
@@ -966,26 +976,25 @@ pub fn select_physical_device(
             (is_discrete, supports_graphic_and_surface)
         })
         .collect();
-    
     tmp.sort_by(|a, b| {
         // Prefer discrete devices
         if a.0 && !b.0 {
-            return std::cmp::Ordering::Greater;
-        }
-        if b.0 && !a.0 {
             return std::cmp::Ordering::Less;
+        }
+        if !a.0 && b.0 {
+            return std::cmp::Ordering::Greater;
         }
         // Prefer devices with graphics queue and surface support
         if a.1.is_some() && b.1.is_none() {
-            return std::cmp::Ordering::Greater;
-        }
-        if b.1.is_some() && a.1.is_none() {
             return std::cmp::Ordering::Less;
+        }
+        if a.1.is_none() && b.1.is_some() {
+            return std::cmp::Ordering::Greater;
         }
         return std::cmp::Ordering::Equal;
     });
     // Just pick the first and use it
-    tmp.iter()
+    tmp.into_iter()
         .find_map(|e| e.1)
         .expect("couldn't find a suitable physical device!")
 }
