@@ -1,0 +1,13 @@
+appenders:
+  file:
+    kind: file
+    path: rend-vk.log
+    encoder:
+      pattern: "{d(%Y-%m-%dT%H:%M:%S%.3f)} {l} - {m}{n}"
+  stdout:
+    kind: console
+
+root:
+  level: trace
+  appenders:
+    - file

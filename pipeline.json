@@ -10,7 +10,7 @@
     {
       "name": "normal",
       "group": "gbuffer",
-      "format": "R16G16_SNORM",
+      "format": "R16G16_SFLOAT",
       "width": 1.0,
       "height": 1.0
     },
@@ -68,6 +68,7 @@
   "passes": [
     {
       "name": "gbuffer",
+      "type": "render",
       "program": "gbuffer",
       "batch": "MESH_STATIC",
       "depthStencil": "depth",
@@ -96,7 +97,9 @@
       }
     },
     {
+      "isDisabled": false,
       "name": "dirlight",
+      "type": "render",
       "program": "dirlight",
       "batch": "LIGHT_DIR",
       "depthStencil": "depth",
@@ -146,10 +149,11 @@
       }
     },
     {
-      "name": "pointLight",
       "isDisabled": true,
+      "name": "pointLight",
+      "type": "render",
       "program": "pointLight",
-      "batch": "LIGHT_DIR",
+      "batch": "LIGHT_POINT",
       "depthStencil": "depth",
       "outputs": [
         "lightAcc"
@@ -193,6 +197,53 @@
     },
     {
       "isDisabled": false,
+      "type": "blit",
+      "name": "resize",
+      "input": "lightAcc",
+      "inputRect": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 1.0,
+        "height": 1.0
+      },
+      "output": "misc",
+      "outputRect": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0.25,
+        "height": 0.25
+      },
+      "filter": "LINEAR",
+      "attributes": [
+        "COLOR"
+      ]
+    },
+    {
+      "isDisabled": false,
+      "type": "blit",
+      "name": "resize2",
+      "input": "misc",
+      "inputRect": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0.25,
+        "height": 0.25
+      },
+      "output": "lightAcc",
+      "outputRect": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 1.0,
+        "height": 1.0
+      },
+      "filter": "LINEAR",
+      "attributes": [
+        "COLOR"
+      ]
+    },
+    {
+      "isDisabled": false,
+      "type": "render",
       "name": "copy",
       "program": "copy",
       "batch": "FULLSCREEN",
