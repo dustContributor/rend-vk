@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    mem::{size_of, size_of_val},
-};
+use std::{collections::HashMap, mem::size_of_val};
 
 use ash::vk;
 
@@ -10,7 +7,8 @@ use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use rend_vk::{
     pipeline::sampler::SamplerKey,
     shader_resource::{
-        Frustum, Material, MultiResource, ResourceKind, Transform, TransformExtra, ViewRay,
+        DirLight, Frustum, Material, MultiResource, ResourceKind, Transform, TransformExtra,
+        ViewRay,
     },
     texture::MipMap,
     window::WindowContext,
@@ -50,11 +48,14 @@ fn main() {
             }
         },
     );
-    let view = Mat4::look_at_rh(
-        Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(0.0, 0.0, -1.0),
-        Vec3::new(0.0, 1.0, 0.0),
-    );
+    let view = {
+        let pos = Vec3::new(0.0, 0.0, -10.0);
+        Mat4::look_at_rh(
+            pos,
+            pos + Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 1.0, 0.0),
+        )
+    };
     let fov_y_radians = 60.0f32.to_radians();
     let aspect_ratio = window_width / window_height;
     let near_plane = 0.3f32;
@@ -64,7 +65,12 @@ fn main() {
 
     let quad_model = Mat4::from_scale_rotation_translation(
         Vec3::new(10.0, 10.0, 10.0),
-        Quat::from_rotation_y(0.0f32.to_radians()),
+        Quat::from_euler(
+            glam::EulerRot::XYZ,
+            -90.0f32.to_radians(),
+            0.0,
+            45.0f32.to_radians(),
+        ),
         Vec3::new(0.0, -1.0, 0.0),
     );
 
@@ -143,11 +149,11 @@ fn main() {
     };
 
     let quad_texture_mips = [MipMap {
-        height: 1,
-        width: 1,
+        height: 2,
+        width: 2,
         offset: 0,
         index: 0,
-        size: 4,
+        size: 16,
     }];
     let quad_texture_id = renderer.gen_texture(
         "quad_texture".to_string(),
@@ -155,20 +161,30 @@ fn main() {
         &quad_texture_mips,
         quad_texture_mips.iter().map(|e| e.size).sum(),
     );
-    let quad_texture = renderer
+    let quad_normal_id = renderer.gen_texture(
+        "quad_normal".to_string(),
+        format::Format::R8G8B8A8_UNORM,
+        &quad_texture_mips,
+        quad_texture_mips.iter().map(|e| e.size).sum(),
+    );
+    let quad_albedo = renderer
         .fetch_texture(quad_texture_id)
         .expect("missing texture!");
+    let quad_normal = renderer
+        .fetch_texture(quad_normal_id)
+        .expect("missing texture!");
     unsafe {
-        let pixel = [0xFF00FF00u32];
-        if let Some(b) = &quad_texture.staging {
-            std::ptr::copy_nonoverlapping(
-                pixel.as_ptr() as *const u8,
-                b.addr as *mut u8,
-                size_of::<u32>(),
-            );
+        let pixels = [0xFFFFFFFFu32, 0xFFFFFFFFu32, 0xFFFFFFFFu32, 0xFFFFFFFFu32];
+        if let Some(b) = &quad_albedo.staging {
+            std::ptr::copy_nonoverlapping(pixels.as_ptr(), b.addr as *mut u32, pixels.len());
+        }
+        let normals = [0x0000FF00u32, 0x0000FF00u32, 0x000000FFu32, 0x000000FFu32];
+        if let Some(b) = &quad_normal.staging {
+            std::ptr::copy_nonoverlapping(normals.as_ptr(), b.addr as *mut u32, normals.len());
         }
     }
     renderer.queue_texture_for_uploading(quad_texture_id);
+    renderer.queue_texture_for_uploading(quad_normal_id);
 
     let fullscreen_mesh_id = renderer.gen_mesh(3, 0, 0, 0, 3);
     let quad_mesh_id = gen_quad(&mut renderer);
@@ -194,30 +210,50 @@ fn main() {
             kind: render_task::TaskKind::Fullscreen,
             resources: HashMap::new(),
         });
-        if renderer.is_texture_uploaded(quad_texture_id) {
+        {
+            let world_dir = Vec3::new(1.0, -1.0, 1.0).normalize();
+            let view_dir = view.transform_vector3(world_dir);
+            let mut dir_resources = HashMap::new();
+            dir_resources.insert(
+                ResourceKind::DirLight,
+                MultiResource::DirLight(vec![DirLight {
+                    color: Vec4::new(1.0, 1.0, 1.0, 0.0),
+                    ground_color: Vec4::new(1.0, 0.0, 0.0, 0.0),
+                    sky_color: Vec4::new(0.0, 0.0, 1.0, 0.0),
+                    view_dir: Vec4::new(view_dir.x, view_dir.y, view_dir.z, 0.0),
+                    inv_view_shadow_proj: Mat4::IDENTITY,
+                }]),
+            );
+            renderer.add_task_to_queue(render_task::RenderTask {
+                mesh_buffer_id: fullscreen_mesh_id,
+                instance_count: 1,
+                kind: render_task::TaskKind::LightDir,
+                resources: dir_resources,
+            });
+        }
+        if renderer.is_texture_uploaded(quad_texture_id)
+            && renderer.is_texture_uploaded(quad_normal_id)
+        {
             let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
+            let mvp = proj * view * quad_model;
+            let mv = view * quad_model;
             quad_resources.insert(
                 ResourceKind::Transform,
-                MultiResource::Transform(vec![Transform {
-                    mv: quad_model * view,
-                    mvp: quad_model * view * proj,
-                }]),
+                MultiResource::Transform(vec![Transform { mv, mvp }]),
             );
             quad_resources.insert(
                 ResourceKind::TransformExtra,
-                MultiResource::TransformExtra(vec![TransformExtra {
-                    prev_mvp: quad_model * view * proj,
-                }]),
+                MultiResource::TransformExtra(vec![TransformExtra { prev_mvp: mvp }]),
             );
             quad_resources.insert(
                 ResourceKind::Material,
                 MultiResource::Material(vec![Material {
                     diffuse_handle: quad_texture_id,
-                    normal_handle: quad_texture_id,
+                    normal_handle: quad_normal_id,
                     diffuse_sampler: sampler_id,
                     normal_sampler: sampler_id,
                     scaling: 1.0,
-                    shininess: 127.0,
+                    shininess: 100.0,
                     ..Default::default()
                 }]),
             );
