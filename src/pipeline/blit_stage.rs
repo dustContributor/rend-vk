@@ -31,6 +31,12 @@ impl Stage for BlitStage {
     }
 
     fn work(&mut self, ctx: super::RenderContext) {
+        let rendering_info = vk::RenderingInfo::builder().build();
+        unsafe {
+            ctx.vulkan
+                .device
+                .cmd_begin_rendering(ctx.command_buffer, &rendering_info)
+        };
         if !self.image_barriers.is_empty() {
             let barrier_dep_info = vk::DependencyInfo::builder()
                 .image_memory_barriers(&self.image_barriers)
@@ -53,6 +59,9 @@ impl Stage for BlitStage {
                 self.filter,
             );
         }
+
+        // End drawing this stage
+        unsafe { ctx.vulkan.device.cmd_end_rendering(ctx.command_buffer) }
     }
 
     fn destroy(&self, _device: &ash::Device) {

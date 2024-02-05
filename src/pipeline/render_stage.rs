@@ -38,22 +38,6 @@ pub struct Rendering {
 
 impl Stage for RenderStage {
     fn work(&mut self, ctx: super::RenderContext) {
-        let mut image_barriers = self.image_barriers.clone();
-        if self.is_final {
-            image_barriers.push(Attachment::default_attachment_write_barrier(
-                ctx.default_attachment.image,
-            ));
-        }
-        if !image_barriers.is_empty() {
-            let barrier_dep_info = vk::DependencyInfo::builder()
-                .image_memory_barriers(&image_barriers)
-                .build();
-            unsafe {
-                ctx.vulkan
-                    .device
-                    .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
-            }
-        }
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
             /*
@@ -81,6 +65,27 @@ impl Stage for RenderStage {
             rendering_info_builder = rendering_info_builder.depth_attachment(att);
         }
         let rendering_info = rendering_info_builder.build();
+        unsafe {
+            ctx.vulkan
+                .device
+                .cmd_begin_rendering(ctx.command_buffer, &rendering_info)
+        };
+        let mut image_barriers = self.image_barriers.clone();
+        if self.is_final {
+            image_barriers.push(Attachment::default_attachment_write_barrier(
+                ctx.default_attachment.image,
+            ));
+        }
+        if !image_barriers.is_empty() {
+            let barrier_dep_info = vk::DependencyInfo::builder()
+                .image_memory_barriers(&image_barriers)
+                .build();
+            unsafe {
+                ctx.vulkan
+                    .device
+                    .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
+            }
+        }
         /*
          *  At this point we already waited for the previous stage invocation to finish,
          *  we can free the buffers used back then.
@@ -113,9 +118,6 @@ impl Stage for RenderStage {
                     &desc_buffer_indices,
                     &desc_buffer_offsets,
                 );
-            ctx.vulkan
-                .device
-                .cmd_begin_rendering(ctx.command_buffer, &rendering_info);
             ctx.vulkan.device.cmd_bind_pipeline(
                 ctx.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -184,24 +186,23 @@ impl Stage for RenderStage {
                 }
             }
         }
+        if self.is_final {
+            // Need to transition for presenting
+            let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
+                ctx.default_attachment.image,
+            )];
+            let barrier_dep_info = vk::DependencyInfo::builder()
+                .image_memory_barriers(&present_image_barriers)
+                .build();
+            unsafe {
+                ctx.vulkan
+                    .device
+                    .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
+            }
+        }
+
         // End drawing this stage
         unsafe { ctx.vulkan.device.cmd_end_rendering(ctx.command_buffer) }
-        if !self.is_final {
-            // Nothing else to do
-            return;
-        }
-        // Need to transition for presenting
-        let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
-            ctx.default_attachment.image,
-        )];
-        let barrier_dep_info = vk::DependencyInfo::builder()
-            .image_memory_barriers(&present_image_barriers)
-            .build();
-        unsafe {
-            ctx.vulkan
-                .device
-                .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
-        }
     }
 
     fn name(&self) -> &str {
