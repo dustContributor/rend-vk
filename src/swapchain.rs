@@ -91,6 +91,14 @@ pub fn attachments(
             }
         })
         .collect();
+    images
+        .iter()
+        .zip(image_views.iter())
+        .enumerate()
+        .for_each(|(i, (img, view))| {
+            ctx.try_set_debug_name(&format!("swapchain{i}_image"), img.clone());
+            ctx.try_set_debug_name(&format!("swapchain{i}_view"), view.clone());
+        });
     let attachments: Vec<Attachment> = images
         .into_iter()
         .zip(image_views)
