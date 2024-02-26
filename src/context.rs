@@ -21,6 +21,14 @@ pub struct ExtensionContext {
 }
 
 impl VulkanContext {
+    pub fn try_begin_debug_label(&self, command_buffer: vk::CommandBuffer, name: &str) -> bool {
+        self.extension.try_begin_debug_label(command_buffer, name)
+    }
+
+    pub fn try_end_debug_label(&self, command_buffer: vk::CommandBuffer) -> bool {
+        self.extension.try_end_debug_label(command_buffer)
+    }
+
     pub fn try_set_debug_name<T: 'static>(&self, name: &str, obj: T) -> bool
     where
         T: vk::Handle,
@@ -46,6 +54,34 @@ impl VulkanContext {
 }
 
 impl ExtensionContext {
+    pub fn try_begin_debug_label(&self, command_buffer: vk::CommandBuffer, name: &str) -> bool {
+        if !self.debug_utils.is_some() {
+            // Assume no debug utils means debug isn't enabled
+            return false;
+        }
+        let dbg = self.debug_utils.as_ref().unwrap();
+        let c_name = std::ffi::CString::new(name).unwrap();
+        let label = vk::DebugUtilsLabelEXT::builder()
+            .label_name(&c_name)
+            .build();
+        unsafe {
+            dbg.cmd_begin_debug_utils_label(command_buffer, &label);
+        }
+        true
+    }
+
+    pub fn try_end_debug_label(&self, command_buffer: vk::CommandBuffer) -> bool {
+        if !self.debug_utils.is_some() {
+            // Assume no debug utils means debug isn't enabled
+            return false;
+        }
+        let dbg = self.debug_utils.as_ref().unwrap();
+        unsafe {
+            dbg.cmd_end_debug_utils_label(command_buffer);
+        }
+        true
+    }
+
     pub fn try_set_debug_name<T: 'static>(&self, device: &ash::Device, name: &str, obj: T) -> bool
     where
         T: vk::Handle,

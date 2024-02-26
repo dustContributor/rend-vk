@@ -38,6 +38,9 @@ pub struct Rendering {
 
 impl Stage for RenderStage {
     fn work(&mut self, ctx: super::RenderContext) {
+        ctx.vulkan
+            .try_begin_debug_label(ctx.command_buffer, &self.name);
+
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
             /*
@@ -64,12 +67,6 @@ impl Stage for RenderStage {
         if let Some(att) = &self.rendering.depth_stencil {
             rendering_info_builder = rendering_info_builder.depth_attachment(att);
         }
-        let rendering_info = rendering_info_builder.build();
-        unsafe {
-            ctx.vulkan
-                .device
-                .cmd_begin_rendering(ctx.command_buffer, &rendering_info)
-        };
         let mut image_barriers = self.image_barriers.clone();
         if self.is_final {
             image_barriers.push(Attachment::default_attachment_write_barrier(
@@ -86,6 +83,12 @@ impl Stage for RenderStage {
                     .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
             }
         }
+        let rendering_info = rendering_info_builder.build();
+        unsafe {
+            ctx.vulkan
+                .device
+                .cmd_begin_rendering(ctx.command_buffer, &rendering_info)
+        };
         /*
          *  At this point we already waited for the previous stage invocation to finish,
          *  we can free the buffers used back then.
@@ -186,6 +189,10 @@ impl Stage for RenderStage {
                 }
             }
         }
+
+        // End drawing this stage
+        unsafe { ctx.vulkan.device.cmd_end_rendering(ctx.command_buffer) }
+
         if self.is_final {
             // Need to transition for presenting
             let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
@@ -201,8 +208,7 @@ impl Stage for RenderStage {
             }
         }
 
-        // End drawing this stage
-        unsafe { ctx.vulkan.device.cmd_end_rendering(ctx.command_buffer) }
+        ctx.vulkan.try_end_debug_label(ctx.command_buffer);
     }
 
     fn name(&self) -> &str {
