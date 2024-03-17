@@ -289,22 +289,8 @@ impl Renderer {
         self.shader_resources_by_kind.insert(kind, item);
     }
 
-    fn draw_record_submit_commands<F>(&mut self, recording: F)
-    where
-        F: Fn(&mut Renderer, vk::CommandBuffer),
-    {
-        self.record_submit_commands(
-            self.draw_command_buffer,
-            self.draw_commands_reuse_fence,
-            self.main_queue,
-            &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-            &[self.present_complete_semaphore],
-            &[self.rendering_complete_semaphore],
-            recording,
-        );
-    }
-
     fn acquire_next_swapchain_attachment(&self) -> (u32, Attachment) {
+        log::trace!("signal {:?}!", self.present_complete_semaphore);
         let (present_index, _) = unsafe {
             self.vulkan_context
                 .extension
@@ -495,66 +481,72 @@ impl Renderer {
         );
     }
 
-    fn record_submit_commands<F>(
-        &mut self,
-        command_buffer: vk::CommandBuffer,
-        command_buffer_reuse_fence: vk::Fence,
-        submit_queue: vk::Queue,
-        wait_mask: &[vk::PipelineStageFlags],
-        wait_semaphores: &[vk::Semaphore],
-        signal_semaphores: &[vk::Semaphore],
-        recording: F,
-    ) where
-        F: Fn(&mut Renderer, vk::CommandBuffer),
-    {
+    fn wait_and_reset_fence(&self, fence: vk::Fence) {
+        let fences = [fence];
         unsafe {
             self.vulkan_context
                 .device
-                .wait_for_fences(&[command_buffer_reuse_fence], true, std::u64::MAX)
+                .wait_for_fences(&fences, true, std::u64::MAX)
                 .expect("fence wait failed!");
-
             self.vulkan_context
                 .device
-                .reset_fences(&[command_buffer_reuse_fence])
+                .reset_fences(&fences)
                 .expect("fence reset failed!");
+        }
+    }
 
+    fn draw_record_submit_commands<F>(&mut self, recording: F)
+    where
+        F: Fn(&mut Renderer, vk::CommandBuffer),
+    {
+        self.wait_and_reset_fence(self.draw_commands_reuse_fence);
+
+        unsafe {
             self.vulkan_context
                 .device
                 .reset_command_buffer(
-                    command_buffer,
+                    self.draw_command_buffer,
                     vk::CommandBufferResetFlags::RELEASE_RESOURCES,
                 )
                 .expect("reset command buffer failed!");
 
             let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+                .build();
 
             self.vulkan_context
                 .device
-                .begin_command_buffer(command_buffer, &command_buffer_begin_info)
+                .begin_command_buffer(self.draw_command_buffer, &command_buffer_begin_info)
                 .expect("begin commandbuffer failed!");
 
-            recording(self, command_buffer);
+            recording(self, self.draw_command_buffer);
 
             self.vulkan_context
                 .device
-                .end_command_buffer(command_buffer)
+                .end_command_buffer(self.draw_command_buffer)
                 .expect("end command buffer failed!");
 
-            let command_buffers = vec![command_buffer];
+            let command_buffers = [self.draw_command_buffer];
+
+            let wait_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+            let wait_semaphores = [self.present_complete_semaphore];
+            let signal_semaphores = [self.rendering_complete_semaphore];
 
             let submit_info = vk::SubmitInfo::builder()
-                .wait_semaphores(wait_semaphores)
-                .wait_dst_stage_mask(wait_mask)
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_mask)
                 .command_buffers(&command_buffers)
-                .signal_semaphores(signal_semaphores);
+                .signal_semaphores(&signal_semaphores);
 
+            let submit_infos = [submit_info.build()];
+
+            log::trace!("wait {:?}!", self.present_complete_semaphore);
             self.vulkan_context
                 .device
                 .queue_submit(
-                    submit_queue,
-                    &[submit_info.build()],
-                    command_buffer_reuse_fence,
+                    self.main_queue,
+                    &submit_infos,
+                    self.draw_commands_reuse_fence,
                 )
                 .expect("queue submit failed!");
         }
@@ -640,8 +632,8 @@ where
     };
 
     log::trace!("creating command buffers...");
-    let present_queue = unsafe { ctx.device.get_device_queue(queue_family_index, 0) };
-    ctx.try_set_debug_name("present_queue", present_queue);
+    let main_queue = unsafe { ctx.device.get_device_queue(queue_family_index, 0) };
+    ctx.try_set_debug_name("main_queue", main_queue);
 
     let pool_create_info = vk::CommandPoolCreateInfo::builder()
         .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
@@ -763,7 +755,7 @@ where
         mesh_buffer_ids,
         textures_by_id,
         draw_command_buffer,
-        main_queue: present_queue,
+        main_queue,
         rendering_complete_semaphore,
         pass_timeline_semaphore,
         present_complete_semaphore,
