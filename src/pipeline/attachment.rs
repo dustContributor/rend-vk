@@ -65,7 +65,8 @@ impl Attachment {
         vk::ImageMemoryBarrier2::builder()
             .image(image)
             .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-            .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
+            // None is the expected access mask for presenting
+            .dst_access_mask(vk::AccessFlags2::NONE)
             .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
             .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
             .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
