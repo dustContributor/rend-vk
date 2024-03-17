@@ -234,8 +234,21 @@ impl BarrierGen {
                     .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
                     .old_layout(ev_barrier.old_layout)
                     .new_layout(ev_barrier.new_layout)
-                    .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-                    .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
+                    .src_stage_mask(if input.format.has_depth_or_stencil() {
+                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
+                    } else {
+                        vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
+                    })
+                    .dst_stage_mask(
+                        vk::PipelineStageFlags2::FRAGMENT_SHADER
+                            | if input.format.has_depth_or_stencil() {
+                                vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                                    | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
+                            } else {
+                                vk::PipelineStageFlags2::empty()
+                            },
+                    )
                     .subresource_range(Attachment::default_subresource_range(input.format.aspect()))
                     .build();
                 barriers.push((&input.name, false, barrier));
@@ -275,6 +288,7 @@ impl BarrierGen {
                     .src_stage_mask(vk::PipelineStageFlags2::NONE)
                     .dst_stage_mask(if output.format.has_depth_or_stencil() {
                         vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
                     } else {
                         vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
                     })
