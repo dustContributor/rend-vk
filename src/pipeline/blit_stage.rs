@@ -37,7 +37,6 @@ impl Stage for BlitStage {
         if !self.image_barriers.is_empty() {
             let barrier_dep_info = vk::DependencyInfo::builder()
                 .image_memory_barriers(&self.image_barriers)
-                .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build();
             unsafe {
                 ctx.vulkan

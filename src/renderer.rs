@@ -290,7 +290,6 @@ impl Renderer {
     }
 
     fn acquire_next_swapchain_attachment(&self) -> (u32, Attachment) {
-        log::trace!("signal {:?}!", self.present_complete_semaphore);
         let (present_index, _) = unsafe {
             self.vulkan_context
                 .extension
@@ -540,7 +539,6 @@ impl Renderer {
 
             let submit_infos = [submit_info.build()];
 
-            log::trace!("wait {:?}!", self.present_complete_semaphore);
             self.vulkan_context
                 .device
                 .queue_submit(
