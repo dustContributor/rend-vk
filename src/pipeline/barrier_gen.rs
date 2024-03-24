@@ -52,6 +52,11 @@ impl BarrierEval {
             ..Default::default()
         }
     }
+
+    fn was_blitting(&self) -> bool {
+        self.old_layout == vk::ImageLayout::TRANSFER_SRC_OPTIMAL
+            || self.old_layout == vk::ImageLayout::TRANSFER_DST_OPTIMAL
+    }
 }
 
 impl BarrierGen {
@@ -234,7 +239,9 @@ impl BarrierGen {
                     .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
                     .old_layout(ev_barrier.old_layout)
                     .new_layout(ev_barrier.new_layout)
-                    .src_stage_mask(if input.format.has_depth_or_stencil() {
+                    .src_stage_mask(if ev_barrier.was_blitting() {
+                        vk::PipelineStageFlags2::TRANSFER
+                    } else if input.format.has_depth_or_stencil() {
                         vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
                             | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
                     } else {
@@ -285,7 +292,11 @@ impl BarrierGen {
                     .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
                     .old_layout(ev_barrier.old_layout)
                     .new_layout(ev_barrier.new_layout)
-                    .src_stage_mask(vk::PipelineStageFlags2::NONE)
+                    .src_stage_mask(if ev_barrier.was_blitting() {
+                        vk::PipelineStageFlags2::TRANSFER
+                    } else {
+                        vk::PipelineStageFlags2::empty()
+                    })
                     .dst_stage_mask(if curr_is_blitting {
                         vk::PipelineStageFlags2::TRANSFER
                     } else if output.format.has_depth_or_stencil() {
