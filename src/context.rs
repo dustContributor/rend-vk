@@ -14,7 +14,6 @@ pub struct VulkanContext {
 
 #[derive(Clone)]
 pub struct ExtensionContext {
-    pub descriptor_buffer: ash::extensions::ext::DescriptorBuffer,
     pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
     pub swapchain: ash::extensions::khr::Swapchain,
     pub surface: ash::extensions::khr::Surface,

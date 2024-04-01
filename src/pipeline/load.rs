@@ -7,15 +7,15 @@ use std::{
 
 use super::{
     barrier_gen::BarrierGen,
-    descriptor::DescriptorBuffer,
+    descriptor::DescriptorGroup,
     file::*,
     sampler::{Sampler, SamplerKey},
     stage::Stage,
 };
 use crate::shader;
 use crate::texture::MipMap;
-use crate::{buffer::DeviceAllocator, pipeline::attachment::Attachment, renderer::Renderer};
 use crate::{context::VulkanContext, texture};
+use crate::{pipeline::attachment::Attachment, renderer::Renderer};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -28,7 +28,6 @@ impl Pipeline {
 
     pub fn load(
         ctx: &VulkanContext,
-        descriptor_mem: &mut DeviceAllocator,
         default_attachment: Attachment,
         is_validation_layer_enabled: bool,
         name: Option<&str>,
@@ -99,7 +98,7 @@ impl Pipeline {
                 (
                     &f.name,
                     shader::ShaderProgram::new(
-                        &ctx.device,
+                        &ctx,
                         f.name.clone(),
                         load_shader(&f.vertex),
                         load_shader(&f.fragment),
@@ -129,10 +128,9 @@ impl Pipeline {
                     true,
                     None,
                 );
-
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "image"), texture.image);
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "memory"), texture.memory);
-                ctx.try_set_debug_name(&format!("{}_{}", f.name, "view"), texture.view);
+                ctx.try_set_debug_name(&format!("{}_att_image", f.name), texture.image);
+                ctx.try_set_debug_name(&format!("{}_att_image_memory", f.name), texture.memory);
+                ctx.try_set_debug_name(&format!("{}_att_image_view", f.name), texture.view);
                 return (
                     f.name.clone(),
                     Attachment {
@@ -154,9 +152,12 @@ impl Pipeline {
         attachments_by_name.insert(default_attachment_name, default_attachment);
         // If there are no inputs whatsoever, just use a dummy one sized buffer.
         let enabled_passes: Vec<_> = pip.passes.iter().filter(|e| !e.is_disabled()).collect();
-        let image_descriptors = Self::image_desc_buffer(ctx, descriptor_mem);
+        // Descriptor pool to use across all descriptor sets
+        let descriptor_pool = super::descriptor::make_pool(ctx);
+        ctx.try_set_debug_name("main_descriptor_pool", descriptor_pool);
+        let image_descriptors = Self::image_desc_buffer(ctx, descriptor_pool);
         let mut sampler_descriptors =
-            Self::sampler_desc_buffer(ctx, descriptor_mem, Renderer::MAX_SAMPLERS);
+            Self::sampler_desc_buffer(ctx, descriptor_pool, Renderer::MAX_SAMPLERS);
 
         let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
 
@@ -287,7 +288,7 @@ impl Pipeline {
             let mut attachment_descriptors = (render_pass.inputs.len() > 0).then(|| {
                 Box::new(Self::attachment_image_desc_buffer(
                     ctx,
-                    descriptor_mem,
+                    descriptor_pool,
                     &render_pass.name,
                     render_pass.inputs.len() as u32,
                 ))
@@ -301,12 +302,17 @@ impl Pipeline {
                     .image_view(e.0.view)
                     .sampler(e.1.sampler)
                     .build();
-                let (descriptor_offset, descriptor_index) = attachment_descriptors
+                let descriptor_index = attachment_descriptors
                     .as_mut()
                     .unwrap()
-                    .place_image_sampler(0, desc, &ctx.extension.descriptor_buffer);
+                    .place_image_sampler(
+                        ctx,
+                        e.0.view,
+                        vk::ImageLayout::READ_ONLY_OPTIMAL,
+                        e.1.sampler,
+                    );
                 Attachment {
-                    descriptor_offset,
+                    descriptor_offset: 0,
                     descriptor_index,
                     ..e.0.clone()
                 }
@@ -383,7 +389,6 @@ impl Pipeline {
             }
             .unwrap();
             let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
-                .flags(vk::PipelineCreateFlags::DESCRIPTOR_BUFFER_EXT)
                 .stages(&shader_stages)
                 .vertex_input_state(&vertex_input_state_info)
                 .input_assembly_state(&vertex_input_assembly_state_info)
@@ -407,13 +412,16 @@ impl Pipeline {
             .expect("Unable to create graphics pipeline");
             let graphics_pipeline = graphics_pipelines[0];
 
-            ctx.try_set_debug_name(&render_pass.name, graphics_pipeline);
-            ctx.try_set_debug_name(&render_pass.name, pipeline_layout);
-
-            if let Some(d) = &mut attachment_descriptors {
-                // If there are any input descriptors, write them into device memory
-                d.into_device()
-            }
+            ctx.try_set_debug_name(&format!("{}_pipeline", render_pass.name), graphics_pipeline);
+            ctx.try_set_debug_name(
+                &format!("{}_pipeline_layout", render_pass.name),
+                pipeline_layout,
+            );
+            // TODO: Deferred descriptor writes
+            // if let Some(d) = &mut attachment_descriptors {
+            //     // If there are any input descriptors, write them into device memory
+            //     d.into_device()
+            // }
             stages.push(Box::new(crate::pipeline::render_stage::RenderStage {
                 name: render_pass.name.clone(),
                 is_validation_layer_enabled,
@@ -456,19 +464,15 @@ impl Pipeline {
         let mut positioned_samplers = samplers_by_key.values().collect::<Vec<_>>();
         positioned_samplers.sort_by(|a, b| a.position.cmp(&b.position));
         for sampler in positioned_samplers {
-            sampler_descriptors.place_sampler_at(
-                0,
-                sampler.position as u32,
-                sampler.sampler,
-                &ctx.extension.descriptor_buffer,
-            );
+            sampler_descriptors.place_sampler_at(ctx, sampler.position as u32, sampler.sampler);
         }
-        sampler_descriptors.into_device();
+        // TODO: Deferred descriptor writes
+        // sampler_descriptors.into_device();
         // image_descriptors.into_device();
-
         return crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
+            descriptor_pool,
             image_descriptors,
             sampler_descriptors,
             samplers_by_key,
@@ -514,14 +518,13 @@ impl Pipeline {
         }
     }
 
-    pub fn image_desc_buffer(ctx: &VulkanContext, mem: &mut DeviceAllocator) -> DescriptorBuffer {
-        let desc_buffer = DescriptorBuffer::of(
+    pub fn image_desc_buffer(ctx: &VulkanContext, pool: vk::DescriptorPool) -> DescriptorGroup {
+        let desc_buffer = DescriptorGroup::of(
             ctx,
-            mem,
+            pool,
             "images".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             1024,
-            1,
             true,
         );
         desc_buffer
@@ -529,18 +532,17 @@ impl Pipeline {
 
     pub fn attachment_image_desc_buffer(
         ctx: &VulkanContext,
-        mem: &mut DeviceAllocator,
+        pool: vk::DescriptorPool,
         prefix: &str,
         size: u32,
-    ) -> DescriptorBuffer {
+    ) -> DescriptorGroup {
         let name = format!("{}_attachments", prefix);
-        let desc_buffer = DescriptorBuffer::of(
+        let desc_buffer = DescriptorGroup::of(
             ctx,
-            mem,
+            pool,
             name,
             DescriptorType::COMBINED_IMAGE_SAMPLER,
             size,
-            1,
             false,
         );
         desc_buffer
@@ -548,16 +550,15 @@ impl Pipeline {
 
     pub fn sampler_desc_buffer(
         ctx: &VulkanContext,
-        mem: &mut DeviceAllocator,
+        pool: vk::DescriptorPool,
         size: u32,
-    ) -> DescriptorBuffer {
-        let desc_buffer = DescriptorBuffer::of(
+    ) -> DescriptorGroup {
+        let desc_buffer = DescriptorGroup::of(
             ctx,
-            mem,
+            pool,
             "samplers".to_string(),
             DescriptorType::SAMPLER,
             size,
-            1,
             false,
         );
         desc_buffer

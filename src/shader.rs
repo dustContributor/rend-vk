@@ -2,6 +2,8 @@ use std::ffi::CStr;
 
 use ash::{util::read_spv, vk, Device};
 
+use crate::context::VulkanContext;
+
 pub const ATTRIB_LOC_POSITION: u32 = 0;
 pub const ATTRIB_LOC_NORMAL: u32 = 1;
 pub const ATTRIB_LOC_COLOR: u32 = 2;
@@ -29,7 +31,7 @@ impl ShaderProgram {
             .for_each(|e| unsafe { device.destroy_shader_module(e.info.module, None) });
     }
     pub fn new<R: std::io::Read + std::io::Seek>(
-        device: &Device,
+        ctx: &VulkanContext,
         name: String,
         vertex: Option<(String, R)>,
         fragment: Option<(String, R)>,
@@ -41,17 +43,21 @@ impl ShaderProgram {
             .enumerate()
             .map(|(i, c)| match c {
                 Some(mut name_cursor) => {
-                    let sh_type = match i {
-                        0 => vk::ShaderStageFlags::VERTEX,
-                        1 => vk::ShaderStageFlags::FRAGMENT,
-                        2 => vk::ShaderStageFlags::GEOMETRY,
+                    let (sh_type, sh_type_name) = match i {
+                        0 => (vk::ShaderStageFlags::VERTEX, "vert"),
+                        1 => (vk::ShaderStageFlags::FRAGMENT, "frag"),
+                        2 => (vk::ShaderStageFlags::GEOMETRY, "geom"),
                         _ => panic!("unrecognized shader type {}", i),
                     };
                     let bin = read_spv(&mut name_cursor.1)
                         .expect(&format!("failed to load shader, type: {}", i));
                     let info = vk::ShaderModuleCreateInfo::builder().code(&bin);
-                    let module = unsafe { device.create_shader_module(&info, None) }
+                    let module = unsafe { ctx.device.create_shader_module(&info, None) }
                         .expect(&format!("shader module error, type: {}", i));
+                    ctx.try_set_debug_name(
+                        &format!("{}_shader_module_{}", name, sh_type_name),
+                        module,
+                    );
                     Some(Shader {
                         name: name_cursor.0,
                         info: vk::PipelineShaderStageCreateInfo {

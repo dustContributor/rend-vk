@@ -224,8 +224,9 @@ impl DeviceBuffer {
             device_addr = ctx.device.get_buffer_device_address(&device_addr_info);
         }
 
-        let name = kind.to_string();
-        ctx.try_set_debug_name(&name, buffer);
+        let name = kind.to_string().to_lowercase();
+        ctx.try_set_debug_name(&format!("{}_buffer_memory", name), mem);
+        ctx.try_set_debug_name(&format!("{}_buffer", name), buffer);
 
         return Self {
             type_index: memi,

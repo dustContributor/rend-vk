@@ -31,9 +31,6 @@ impl Stage for BlitStage {
     }
 
     fn work(&mut self, ctx: super::RenderContext) {
-        ctx.vulkan
-            .try_begin_debug_label(ctx.command_buffer, &self.name);
-
         if !self.image_barriers.is_empty() {
             let barrier_dep_info = vk::DependencyInfo::builder()
                 .image_memory_barriers(&self.image_barriers)
@@ -56,8 +53,6 @@ impl Stage for BlitStage {
                 self.filter,
             );
         }
-
-        ctx.vulkan.try_end_debug_label(ctx.command_buffer);
     }
 
     fn destroy(&self, _device: &ash::Device) {

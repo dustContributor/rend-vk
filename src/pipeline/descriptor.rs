@@ -29,6 +29,7 @@ fn next_mul_u64(v: u64, mul: u64) -> u64 {
 impl DescriptorBuffer {
     pub fn of(
         ctx: &VulkanContext,
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
         mem: &mut DeviceAllocator,
         name: String,
         descriptor_type: vk::DescriptorType,
@@ -75,7 +76,10 @@ impl DescriptorBuffer {
          * you can bind another one, multiplied by how many "subsets" will be buffered inside this
          * descriptor buffer.
          */
-        let subset_size = next_mul_u64(Self::layout_size_of(ctx, layout), mem.alignment()) as u32;
+        let subset_size = next_mul_u64(
+            Self::layout_size_of(desc_buffer_instance, layout),
+            mem.alignment(),
+        ) as u32;
         let buffer_size = subset_size as u64 * subsets as u64;
         let host = vec![0u8; subset_size as usize].into_boxed_slice();
         let device = if let Some(buffer) = mem.alloc(buffer_size) {
@@ -91,7 +95,7 @@ impl DescriptorBuffer {
         unsafe { std::ptr::write_bytes(device.addr as *mut u8, 0, device.size as usize) };
         // Every descriptor is initially unoccupied
         let occupancy = BitVec::repeat(false, count as usize);
-        ctx.try_set_debug_name(&name, layout);
+        ctx.try_set_debug_name(&format!("{}_descriptor_buffer_layout", name), layout);
         Self {
             name,
             layout,
@@ -106,13 +110,11 @@ impl DescriptorBuffer {
         }
     }
 
-    fn layout_size_of(vulkan_context: &VulkanContext, layout: vk::DescriptorSetLayout) -> u64 {
-        unsafe {
-            vulkan_context
-                .extension
-                .descriptor_buffer
-                .get_descriptor_set_layout_size(layout)
-        }
+    fn layout_size_of(
+        desc_buffer_instance: &ash::extensions::ext::DescriptorBuffer,
+        layout: vk::DescriptorSetLayout,
+    ) -> u64 {
+        unsafe { desc_buffer_instance.get_descriptor_set_layout_size(layout) }
     }
 
     fn size_of(
@@ -386,5 +388,220 @@ impl DescriptorBuffer {
         unsafe {
             device.destroy_descriptor_set_layout(self.layout, None);
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct DescriptorGroup {
+    pub name: String,
+    pub layout: vk::DescriptorSetLayout,
+    pub set: vk::DescriptorSet,
+    pub descriptor_type: vk::DescriptorType,
+    pub count: u32,
+    pub is_array: bool,
+    occupancy: BitVec,
+}
+
+pub const MAX_DESCRIPTOR_SETS: u32 = 16;
+pub const MAX_DESCRIPTOR_IMAGE: u32 = 2048;
+pub const MAX_DESCRIPTOR_IMAGE_SAMPLER: u32 = 64;
+pub const MAX_DESCRIPTOR_SAMPLER: u32 = 32;
+
+pub fn make_pool(ctx: &VulkanContext) -> vk::DescriptorPool {
+    let image_sampler_size = vk::DescriptorPoolSize {
+        descriptor_count: MAX_DESCRIPTOR_IMAGE_SAMPLER,
+        ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        ..Default::default()
+    };
+    let image_size = vk::DescriptorPoolSize {
+        descriptor_count: MAX_DESCRIPTOR_IMAGE,
+        ty: vk::DescriptorType::SAMPLED_IMAGE,
+        ..Default::default()
+    };
+    let sampler_size = vk::DescriptorPoolSize {
+        descriptor_count: MAX_DESCRIPTOR_SAMPLER,
+        ty: vk::DescriptorType::SAMPLER,
+        ..Default::default()
+    };
+    let pool_sizes = [image_sampler_size, image_size, sampler_size];
+    let info = vk::DescriptorPoolCreateInfo::builder()
+        .max_sets(MAX_DESCRIPTOR_SETS)
+        .pool_sizes(&pool_sizes)
+        .build();
+    let pool = unsafe { ctx.device.create_descriptor_pool(&info, None).unwrap() };
+    return pool;
+}
+
+impl DescriptorGroup {
+    pub fn of(
+        ctx: &VulkanContext,
+        pool: vk::DescriptorPool,
+        name: String,
+        descriptor_type: vk::DescriptorType,
+        count: u32,
+        is_array: bool,
+    ) -> Self {
+        assert!(count > 0, "cant have zero sized descriptor buffers!");
+        let bindings: Vec<_> = if is_array {
+            vec![vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(descriptor_type)
+                .descriptor_count(count)
+                .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
+                .build()]
+        } else {
+            (0..count)
+                .into_iter()
+                .map(|e| {
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(e)
+                        .descriptor_type(descriptor_type)
+                        .descriptor_count(1)
+                        .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
+                        .build()
+                })
+                .collect()
+        };
+        let info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&bindings)
+            .build();
+        let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
+        let set_layouts = [layout];
+        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(pool)
+            .set_layouts(&set_layouts)
+            .build();
+
+        let set = unsafe {
+            ctx.device
+                .allocate_descriptor_sets(&alloc_info)
+                .expect(format!("faled allocating {}!", name).as_str())
+        }
+        .pop()
+        .unwrap();
+        // Every descriptor is initially unoccupied
+        let occupancy = BitVec::repeat(false, count as usize);
+        ctx.try_set_debug_name(&format!("{}_descriptor_set", name), set);
+        ctx.try_set_debug_name(&format!("{}_descriptor_set_layout", name), layout);
+        Self {
+            name,
+            layout,
+            descriptor_type,
+            occupancy,
+            count,
+            is_array,
+            set,
+        }
+    }
+
+    pub fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            // Freed along the pool
+            // device.free_descriptor_sets(pool, descriptor_sets)
+            device.destroy_descriptor_set_layout(self.layout, None);
+        }
+    }
+
+    pub fn next_free(&self) -> usize {
+        self.occupancy.first_zero().unwrap()
+    }
+
+    pub fn remove_at(&mut self, index: u32) {
+        self.occupancy.set(index as usize, false);
+    }
+
+    pub fn place_sampler(&mut self, ctx: &VulkanContext, sampler: vk::Sampler) -> u32 {
+        self.place_sampler_at(ctx, self.next_free() as u32, sampler)
+    }
+
+    pub fn place_sampler_at(
+        &mut self,
+        ctx: &VulkanContext,
+        index: u32,
+        sampler: vk::Sampler,
+    ) -> u32 {
+        self.queue_write(
+            ctx,
+            index,
+            sampler,
+            vk::ImageView::null(),
+            vk::ImageLayout::UNDEFINED,
+        )
+    }
+
+    pub fn place_image(
+        &mut self,
+        ctx: &VulkanContext,
+        view: vk::ImageView,
+        layout: vk::ImageLayout,
+    ) -> u32 {
+        self.place_image_at(ctx, self.next_free() as u32, view, layout)
+    }
+
+    pub fn place_image_at(
+        &mut self,
+        ctx: &VulkanContext,
+        index: u32,
+        view: vk::ImageView,
+        layout: vk::ImageLayout,
+    ) -> u32 {
+        self.queue_write(ctx, index, vk::Sampler::null(), view, layout)
+    }
+
+    pub fn place_image_sampler(
+        &mut self,
+        ctx: &VulkanContext,
+        view: vk::ImageView,
+        layout: vk::ImageLayout,
+        sampler: vk::Sampler,
+    ) -> u32 {
+        self.place_image_sampler_at(ctx, self.next_free() as u32, view, layout, sampler)
+    }
+
+    pub fn place_image_sampler_at(
+        &mut self,
+        ctx: &VulkanContext,
+        index: u32,
+        view: vk::ImageView,
+        layout: vk::ImageLayout,
+        sampler: vk::Sampler,
+    ) -> u32 {
+        self.queue_write(ctx, index, sampler, view, layout)
+    }
+
+    fn queue_write(
+        &mut self,
+        ctx: &VulkanContext,
+        index: u32,
+        sampler: vk::Sampler,
+        image_view: vk::ImageView,
+        image_layout: vk::ImageLayout,
+    ) -> u32 {
+        let info = vk::DescriptorImageInfo {
+            image_view,
+            image_layout,
+            sampler,
+            ..Default::default()
+        };
+        let infos = [info];
+        let (dst_binding, dst_array_element) = if self.is_array {
+            (0, index)
+        } else {
+            (index, 0)
+        };
+        let write = vk::WriteDescriptorSet {
+            descriptor_type: self.descriptor_type,
+            descriptor_count: 1,
+            dst_binding,
+            dst_array_element,
+            dst_set: self.set,
+            p_image_info: infos.as_ptr(),
+            ..Default::default()
+        };
+        let writes = [write];
+        unsafe { ctx.device.update_descriptor_sets(&writes, &[]) };
+        // Mark index slot as occupied
+        self.occupancy.set(index as usize, true);
+        return index;
     }
 }

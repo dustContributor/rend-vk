@@ -12,17 +12,13 @@ pub struct SwapchainContext {
 }
 
 impl SwapchainContext {
-    pub fn make(
-        vulkan_context: &VulkanContext,
-        surface: vk::SurfaceKHR,
-        is_vsync_enabled: bool,
-    ) -> Self {
-        let present_mode = present_mode(&vulkan_context, surface, is_vsync_enabled);
-        let surface_extent = surface_extent(&vulkan_context, surface, 1280, 720);
-        let surface_format = surface_format(&vulkan_context, surface);
-        let swapchain = swapchain(&vulkan_context, surface, surface_extent, present_mode);
-        let swapchain_attachments =
-            attachments(&vulkan_context, surface, swapchain, surface_extent);
+    pub fn make(ctx: &VulkanContext, surface: vk::SurfaceKHR, is_vsync_enabled: bool) -> Self {
+        let present_mode = present_mode(&ctx, surface, is_vsync_enabled);
+        let surface_extent = surface_extent(&ctx, surface, 1280, 720);
+        let surface_format = surface_format(&ctx, surface);
+        let swapchain = swapchain(&ctx, surface, surface_extent, present_mode);
+        let swapchain_attachments = attachments(&ctx, surface, swapchain, surface_extent);
+        ctx.try_set_debug_name("swapchain_main", swapchain);
         Self {
             present_mode,
             surface,
@@ -96,8 +92,8 @@ pub fn attachments(
         .zip(image_views.iter())
         .enumerate()
         .for_each(|(i, (img, view))| {
-            ctx.try_set_debug_name(&format!("swapchain{i}_image"), img.clone());
-            ctx.try_set_debug_name(&format!("swapchain{i}_view"), view.clone());
+            ctx.try_set_debug_name(&format!("swapchain_{}_image", i), img.clone());
+            ctx.try_set_debug_name(&format!("swapchain_{}_image_view", i), view.clone());
         });
     let attachments: Vec<Attachment> = images
         .into_iter()

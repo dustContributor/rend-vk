@@ -8,10 +8,7 @@ use std::{
 };
 
 use ash::{
-    extensions::{
-        ext::{self, DebugUtils},
-        khr,
-    },
+    extensions::{ext::DebugUtils, khr},
     util::Align,
     vk, Entry,
 };
@@ -50,7 +47,6 @@ pub struct Renderer {
     debug_context: Option<Box<debug::DebugContext>>,
     pipeline: Box<Pipeline>,
     general_allocator: Box<DeviceAllocator>,
-    descriptor_allocator: Box<DeviceAllocator>,
     mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
     textures_by_id: HashMap<u32, Texture>,
     shader_resources_by_kind: HashMap<ResourceKind, SingleResource>,
@@ -83,7 +79,7 @@ impl Renderer {
         log::trace!("destroying renderer...");
         unsafe { self.vulkan_context.device.device_wait_idle().unwrap() };
         self.pipeline.destroy(&self.vulkan_context.device);
-        for e in [&self.general_allocator, &self.descriptor_allocator] {
+        for e in [&self.general_allocator] {
             e.destroy(&self.vulkan_context.device);
         }
         unsafe {
@@ -136,13 +132,9 @@ impl Renderer {
         samplers_by_key.insert(key, sampler.clone());
         let sampler_descriptors = &mut self.pipeline.sampler_descriptors;
         // Write its descriptor into the GPU for later shader usage
-        sampler_descriptors.place_sampler_at(
-            id,
-            0,
-            sampler.sampler,
-            &self.vulkan_context.extension.descriptor_buffer,
-        );
-        sampler_descriptors.into_device_single_at(0, id);
+        sampler_descriptors.place_sampler_at(&self.vulkan_context, id, sampler.sampler);
+        // TODO: Deferred descriptor writes
+        // sampler_descriptors.into_device_single_at(0, id);
         // Return the ID for referencing on the client side
         return id as u8;
     }
@@ -257,14 +249,10 @@ impl Renderer {
         );
         // Generate descriptor and place it in the image descriptor array buffer
         self.pipeline.image_descriptors.place_image_at(
+            &self.vulkan_context,
             texture_id,
-            0,
-            vk::DescriptorImageInfo {
-                image_view: texture.view,
-                image_layout: vk::ImageLayout::READ_ONLY_OPTIMAL,
-                ..Default::default()
-            },
-            &self.vulkan_context.extension.descriptor_buffer,
+            texture.view,
+            vk::ImageLayout::READ_ONLY_OPTIMAL,
         );
         self.textures_by_id.insert(texture_id, texture);
         return texture_id;
@@ -439,7 +427,8 @@ impl Renderer {
             });
             if prev_len != self.ongoing_optimal_transitions.len() {
                 // Update the descriptors on the device
-                self.pipeline.image_descriptors.into_device();
+                //TODO: Deferred descriptor writes
+                // self.pipeline.image_descriptors.into_device();
             }
         }
     }
@@ -453,6 +442,8 @@ impl Renderer {
         let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
         let image_descriptors = self.pipeline.image_descriptors.clone();
 
+        self.vulkan_context
+            .try_begin_debug_label(command_buffer, "issue_queued_transitions");
         for texture_id in self.optimal_transition_queue.drain(..) {
             let texture = &self.textures_by_id[&texture_id];
             texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
@@ -461,6 +452,7 @@ impl Renderer {
                 self.pipeline.signal_value_for(current_frame + 1, 0),
             ))
         }
+        self.vulkan_context.try_end_debug_label(command_buffer);
 
         self.pipeline.process_stages(
             self.pass_timeline_semaphore,
@@ -611,7 +603,6 @@ where
     log::trace!("device created!");
 
     let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
-    let descriptor_buffer_ext = ash::extensions::ext::DescriptorBuffer::new(&instance, &device);
 
     let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
@@ -622,12 +613,15 @@ where
         physical_device,
         memory_properties: mem_props,
         extension: ExtensionContext {
-            descriptor_buffer: descriptor_buffer_ext,
             debug_utils: debug_utils_ext,
             swapchain: swapchain_extension,
             surface: surface_extension,
         },
     };
+
+    ctx.try_set_debug_name("main_physical_device", physical_device);
+    ctx.try_set_debug_name("main_device", ctx.device.handle());
+    ctx.try_set_debug_name("main_instance", ctx.instance.handle());
 
     log::trace!("creating command buffers...");
     let main_queue = unsafe { ctx.device.get_device_queue(queue_family_index, 0) };
@@ -637,16 +631,16 @@ where
         .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
         .queue_family_index(queue_family_index);
 
-    let pool = unsafe {
+    let command_pool = unsafe {
         ctx.device
             .create_command_pool(&pool_create_info, None)
             .unwrap()
     };
-    ctx.try_set_debug_name("command_pool", pool);
+    ctx.try_set_debug_name("main_command_pool", command_pool);
 
     let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
         .command_buffer_count(2)
-        .command_pool(pool)
+        .command_pool(command_pool)
         .level(vk::CommandBufferLevel::PRIMARY);
 
     let command_buffers = unsafe {
@@ -707,7 +701,6 @@ where
 
     log::trace!("creating allocators...");
     let mut general_allocator = DeviceAllocator::new_general(&ctx, 64 * 1024 * 1024);
-    let mut descriptor_allocator = DeviceAllocator::new_descriptor(&ctx, 1024 * 1024);
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
@@ -717,7 +710,6 @@ where
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
         &ctx,
-        &mut descriptor_allocator,
         swapchain_context.attachments[0].clone(),
         is_validation_layer_enabled,
         Some("pipeline.json"),
@@ -748,7 +740,6 @@ where
         swapchain_context: Box::new(swapchain_context),
         vulkan_context: Box::new(ctx),
         general_allocator: Box::new(general_allocator),
-        descriptor_allocator: Box::new(descriptor_allocator),
         mesh_buffers_by_id,
         mesh_buffer_ids,
         textures_by_id,
@@ -759,7 +750,7 @@ where
         present_complete_semaphore,
         setup_commands_reuse_fence,
         draw_commands_reuse_fence,
-        pool,
+        pool: command_pool,
         optimal_transition_queue: Vec::new(),
         ongoing_optimal_transitions: Vec::new(),
         shader_resources_by_kind: HashMap::new(),
@@ -801,10 +792,7 @@ pub fn make_device(
     queue_family_index: u32,
     is_debug_enabled: bool,
 ) -> ash::Device {
-    let mut device_extension_names_raw = vec![
-        khr::Swapchain::name().as_ptr(),
-        ext::DescriptorBuffer::name().as_ptr(),
-    ];
+    let mut device_extension_names_raw = vec![khr::Swapchain::name().as_ptr()];
     let non_semantic_info_name =
         CStr::from_bytes_with_nul(b"VK_KHR_shader_non_semantic_info\0").unwrap();
     if is_debug_enabled {
@@ -830,15 +818,10 @@ pub fn make_device(
         synchronization2: 1,
         ..Default::default()
     };
-    let mut descriptor_buffer_feature = vk::PhysicalDeviceDescriptorBufferFeaturesEXT {
-        descriptor_buffer: 1,
-        ..Default::default()
-    };
     let mut features2 = vk::PhysicalDeviceFeatures2::builder()
         .features(features)
         .push_next(&mut features12)
         .push_next(&mut features13)
-        .push_next(&mut descriptor_buffer_feature)
         .build();
 
     let priorities = [1.0];

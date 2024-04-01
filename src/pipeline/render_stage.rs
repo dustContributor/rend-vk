@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
-    pipeline::{attachment::Attachment, descriptor::DescriptorBuffer},
+    pipeline::{attachment::Attachment, descriptor::DescriptorGroup},
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
     updater,
@@ -20,7 +20,7 @@ pub struct RenderStage {
     pub inputs: Vec<Attachment>,
     pub per_instance_updaters: Vec<ResourceKind>,
     pub per_pass_updaters: Vec<ResourceKind>,
-    pub attachment_descriptors: Option<Box<DescriptorBuffer>>,
+    pub attachment_descriptors: Option<Box<DescriptorGroup>>,
     pub task_kind: TaskKind,
     pub index: u32,
     pub is_final: bool,
@@ -38,9 +38,6 @@ pub struct Rendering {
 
 impl Stage for RenderStage {
     fn work(&mut self, ctx: super::RenderContext) {
-        ctx.vulkan
-            .try_begin_debug_label(ctx.command_buffer, &self.name);
-
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
             /*
@@ -94,33 +91,21 @@ impl Stage for RenderStage {
          *  we can free the buffers used back then.
          */
         self.release_reserved_buffers(&ctx.buffer_allocator);
-        let mut desc_buffer_info = vec![
-            ctx.sampler_descriptors.binding_info(),
-            ctx.image_descriptors.binding_info(),
-        ];
-        let mut desc_buffer_indices = vec![0, 1];
-        let mut desc_buffer_offsets = vec![0, 0];
+        // Compose the descriptor set array to bind for this stage
+        let mut descriptor_sets = vec![ctx.sampler_descriptors.set, ctx.image_descriptors.set];
         if let Some(desc) = &self.attachment_descriptors {
-            desc_buffer_info.push(desc.binding_info());
-            desc_buffer_indices.push(2);
-            desc_buffer_offsets.push(0);
+            // Not all stages use attachment inputs for sampling
+            descriptor_sets.push(desc.set)
         }
         unsafe {
-            ctx.vulkan
-                .extension
-                .descriptor_buffer
-                .cmd_bind_descriptor_buffers(ctx.command_buffer, &desc_buffer_info);
-            ctx.vulkan
-                .extension
-                .descriptor_buffer
-                .cmd_set_descriptor_buffer_offsets(
-                    ctx.command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    self.layout,
-                    0,
-                    &desc_buffer_indices,
-                    &desc_buffer_offsets,
-                );
+            ctx.vulkan.device.cmd_bind_descriptor_sets(
+                ctx.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.layout,
+                0,
+                &descriptor_sets,
+                &[],
+            );
             ctx.vulkan.device.cmd_bind_pipeline(
                 ctx.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -207,8 +192,6 @@ impl Stage for RenderStage {
                     .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
             }
         }
-
-        ctx.vulkan.try_end_debug_label(ctx.command_buffer);
     }
 
     fn name(&self) -> &str {

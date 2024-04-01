@@ -280,13 +280,16 @@ pub fn make(
         .format(vk_format)
         .view_type(vk::ImageViewType::TYPE_2D);
 
-    ctx.try_set_debug_name(&name, image);
-
     let view = unsafe {
         ctx.device
             .create_image_view(&image_view_info, None)
             .expect("failed image view")
     };
+
+    ctx.try_set_debug_name(&format!("{name}_tex_image"), image);
+    ctx.try_set_debug_name(&format!("{name}_tex_image_memory"), memory);
+    ctx.try_set_debug_name(&format!("{name}_tex_image_view"), view);
+
     Texture {
         name,
         id,

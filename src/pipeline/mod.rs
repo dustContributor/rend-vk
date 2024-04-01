@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ash::vk;
 
-use self::descriptor::DescriptorBuffer;
+use self::descriptor::DescriptorGroup;
 use self::sampler::SamplerKey;
 
 use crate::buffer::DeviceAllocator;
@@ -32,8 +32,9 @@ pub const DESCRIPTOR_SET_TARGET_IMAGE: u32 = 2;
 pub struct Pipeline {
     pub stages: Vec<Box<dyn stage::Stage>>,
     pub attachments: Vec<Attachment>,
-    pub image_descriptors: DescriptorBuffer,
-    pub sampler_descriptors: DescriptorBuffer,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub image_descriptors: DescriptorGroup,
+    pub sampler_descriptors: DescriptorGroup,
     pub samplers_by_key: HashMap<SamplerKey, Sampler>,
 }
 
@@ -47,8 +48,8 @@ pub struct RenderContext<'a> {
     pub batches_by_task_type: &'a Vec<Vec<RenderTask>>,
     pub mesh_buffers_by_id: &'a HashMap<u32, MeshBuffer>,
     pub shader_resources_by_kind: &'a HashMap<ResourceKind, SingleResource>,
-    pub sampler_descriptors: &'a DescriptorBuffer,
-    pub image_descriptors: &'a DescriptorBuffer,
+    pub sampler_descriptors: &'a DescriptorGroup,
+    pub image_descriptors: &'a DescriptorGroup,
     pub buffer_allocator: &'a DeviceAllocator,
     pub command_buffer: vk::CommandBuffer,
     pub default_attachment: &'a Attachment,
@@ -64,6 +65,7 @@ impl Pipeline {
     ) {
         let total_stages = self.stages.len() as u32;
         for stage in self.stages.iter_mut() {
+            render_context.vulkan.try_begin_debug_label(render_context.command_buffer, stage.name());
             stage.wait_for_previous_frame(
                 &render_context.vulkan.device,
                 current_frame,
@@ -78,6 +80,7 @@ impl Pipeline {
                 pass_semaphore,
                 render_queue,
             );
+            render_context.vulkan.try_end_debug_label(render_context.command_buffer);
         }
     }
 
@@ -136,6 +139,7 @@ impl Pipeline {
             for e in [&self.image_descriptors, &self.sampler_descriptors] {
                 e.destroy(device);
             }
+            device.destroy_descriptor_pool(self.descriptor_pool, None);
             for e in self.samplers_by_key.values() {
                 e.destroy(device);
             }

@@ -21,7 +21,14 @@ pub struct Sampler {
 
 impl Sampler {
     pub fn of_key(ctx: &VulkanContext, name: String, key: SamplerKey, position: u8) -> Self {
-        Self::of(ctx, name, key.filter, key.wrap_mode, key.anisotropy, position)
+        Self::of(
+            ctx,
+            name,
+            key.filter,
+            key.wrap_mode,
+            key.anisotropy,
+            position,
+        )
     }
 
     pub fn of(
@@ -40,7 +47,7 @@ impl Sampler {
         }
         let info = Self::info_of(filter, wrap_mode, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
-        ctx.try_set_debug_name(&name, sampler);
+        ctx.try_set_debug_name(&format!("{}_sampler", name), sampler);
         Self {
             name,
             sampler,
