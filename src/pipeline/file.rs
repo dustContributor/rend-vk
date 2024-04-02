@@ -241,6 +241,11 @@ pub struct WriteDesc {
     pub depth: bool,
     pub stencil: bool,
 }
+impl WriteDesc {
+    pub fn depth_or_stencil(self) -> bool {
+        self.depth || self.stencil
+    }
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
