@@ -345,7 +345,16 @@ impl Pipeline {
                 } else {
                     clear_color_value.unwrap_or_default()
                 },
-                store_op: vk::AttachmentStoreOp::STORE,
+                /*
+                 * When using a COLOR attachment, we're storing unconditionally.
+                 * Same case when using a DEPTH_STENCIL attachment and depth-stencil writing is enabled.
+                 */
+                store_op: if writing.depth_or_stencil() || !e.format.has_depth_or_stencil() {
+                    vk::AttachmentStoreOp::STORE
+                } else {
+                    // Don't store if using a DEPTH_STENCIL attachment with writes disabled
+                    vk::AttachmentStoreOp::NONE
+                },
                 ..Default::default()
             };
 
