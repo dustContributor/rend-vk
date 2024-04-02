@@ -294,8 +294,12 @@ impl BarrierGen {
                     .new_layout(ev_barrier.new_layout)
                     .src_stage_mask(if ev_barrier.was_blitting() {
                         vk::PipelineStageFlags2::TRANSFER
+                    } else if output.format.has_depth_or_stencil() {
+                        vk::PipelineStageFlags2::FRAGMENT_SHADER
+                            | vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
                     } else {
-                        vk::PipelineStageFlags2::empty()
+                        vk::PipelineStageFlags2::FRAGMENT_SHADER
                     })
                     .dst_stage_mask(if curr_is_blitting {
                         vk::PipelineStageFlags2::TRANSFER
