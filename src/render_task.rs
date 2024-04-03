@@ -1,12 +1,13 @@
 use std::{collections::HashMap, hash::Hash};
 
-use crate::shader_resource::{ResourceKind, MultiResource};
+use crate::shader_resource::{MultiResource, ResourceKind};
 use crate::UsedAsIndex;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, serde::Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum TaskKind {
+    Undefined,
     MeshStatic,
     MeshAnimated,
     LightDir,
@@ -32,29 +33,21 @@ const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();
 impl crate::UsedAsIndex<MAX_TASK_KIND> for TaskKind {}
 
 impl TaskKind {
-    pub const fn mask(self) -> u32 {
-        !(u32::MAX << self as u32)
-    }
-
     pub const fn of_u8(v: u8) -> Self {
-        if v > Self::MAX_VALUE {
-            panic!()
-        } else {
-            unsafe { std::mem::transmute(v) }
-        }
+        Self::of_u64(v as u64)
     }
 
     pub const fn of_u32(v: u32) -> Self {
-        if v > (Self::MAX_VALUE as u32) {
-            panic!()
-        } else {
-            unsafe { std::mem::transmute(v as u8) }
-        }
+        Self::of_u64(v as u64)
     }
 
     pub const fn of_usize(v: usize) -> Self {
-        if v > (Self::MAX_VALUE as usize) {
-            panic!()
+        Self::of_u64(v as u64)
+    }
+
+    pub const fn of_u64(v: u64) -> Self {
+        if v < 1 || v > (Self::MAX_VALUE as u64) {
+            panic!("invalid task kind!")
         } else {
             unsafe { std::mem::transmute(v as u8) }
         }
