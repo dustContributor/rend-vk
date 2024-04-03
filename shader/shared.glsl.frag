@@ -536,6 +536,7 @@ float quadraticAttenuation ( vec3 lgtCenter, vec3 viewPos, float invRadius )
 }
 
 /* Debugging helpers */
+#ifdef IS_VULKAN
 #ifdef GL_EXT_debug_printf
 #extension GL_EXT_debug_printf : enable
 
@@ -553,5 +554,6 @@ void print(mat4 v) {
 }
 
 #endif //GL_EXT_debug_printf
+#endif //IS_VULKAN
 
 #endif // SHARED_GLSL
