@@ -26,6 +26,10 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tex
 {
     vec2 items[];
 };
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Colors
+{
+    vec4 items[];
+};
 // Per instance data
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Transforms
 {
@@ -106,6 +110,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tra
 #define USING_ATTR_POSITION_MACRO Positions positions;
 #define USING_ATTR_NORMAL_MACRO Normals normals;
 #define USING_ATTR_TEXCOORD_MACRO TexCoords texCoords;
+#define USING_ATTR_COLOR_MACRO Colors colors;
 // Per-instance data definitions
 #define USING_INST_TRANSFORM_MACRO Transforms transforms;
 #define USING_INST_MATERIAL_MACRO Materials materials;

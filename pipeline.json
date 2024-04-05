@@ -63,6 +63,11 @@
       "name": "copy",
       "vertex": "fullscreen.vert",
       "fragment": "copy.frag"
+    },
+    {
+      "name": "nuklear",
+      "vertex": "nuklear.vert",
+      "fragment": "nuklear.frag"
     }
   ],
   "passes": [
@@ -210,8 +215,8 @@
       "outputRect": {
         "x": 0.0,
         "y": 0.0,
-        "width": 0.25,
-        "height": 0.25
+        "width": 0.1,
+        "height": 0.1
       },
       "filter": "LINEAR",
       "attributes": [
@@ -226,8 +231,8 @@
       "inputRect": {
         "x": 0.0,
         "y": 0.0,
-        "width": 0.25,
-        "height": 0.25
+        "width": 0.1,
+        "height": 0.1
       },
       "output": "lightAcc",
       "outputRect": {
@@ -240,6 +245,41 @@
       "attributes": [
         "COLOR"
       ]
+    },
+    {
+      "name": "nuklear",
+      "type": "render",
+      "program": "nuklear",
+      "batch": "NUKLEAR",
+      "depthStencil": "",
+      "outputs": [
+        "lightAcc"
+      ],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "MATERIAL"
+      ],
+      "perPassUpdaters": [
+        "FRUSTUM"
+      ],
+      "state": {
+        "writing": "COLOR",
+        "depth": "NO",
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": {
+          "frontFace": "CCW",
+          "cullFace": "NONE",
+          "polygonMode": "FILL"
+        },
+        "blending": {
+          "disabled": false,
+          "srcFactor": "SRC_ALPHA",
+          "dstFactor": "ONE_MINUS_SRC_ALPHA"
+        },
+        "clearing": "NO"
+      }
     },
     {
       "isDisabled": false,

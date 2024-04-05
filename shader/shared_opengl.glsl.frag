@@ -153,7 +153,7 @@
 // Input attribute macro expansions.
 #define USING_ATTR_POSITION_MACRO layout ( location = ATTRIB_LOC_POSITION ) in vec3 inPosition;
 #define USING_ATTR_NORMAL_MACRO layout ( location = ATTRIB_LOC_NORMAL ) in vec3 inNormal;
-#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in vec3 inColor;
+#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in vec4 inColor;
 #define USING_ATTR_TEXCOORD_MACRO layout ( location = ATTRIB_LOC_TEXCOORD ) in vec2 inTexCoord;
 #define USING_ATTR_JOINT_WEIGHT_MACRO layout ( location = ATTRIB_LOC_JOINT_WEIGHT ) in uvec3 inJointWeight;
 
