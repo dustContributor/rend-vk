@@ -207,6 +207,7 @@ fn main() {
         renderer.add_task_to_queue(render_task::RenderTask {
             mesh_buffer_id: fullscreen_mesh_id,
             instance_count: 1,
+            indices_offset: 0,
             kind: render_task::TaskKind::Fullscreen,
             resources: HashMap::new(),
         });
@@ -227,6 +228,7 @@ fn main() {
             renderer.add_task_to_queue(render_task::RenderTask {
                 mesh_buffer_id: fullscreen_mesh_id,
                 instance_count: 1,
+                indices_offset: 0,
                 kind: render_task::TaskKind::LightDir,
                 resources: dir_resources,
             });
@@ -260,6 +262,7 @@ fn main() {
             renderer.add_task_to_queue(render_task::RenderTask {
                 mesh_buffer_id: quad_mesh_id,
                 instance_count: 1,
+                indices_offset: 0,
                 kind: render_task::TaskKind::MeshStatic,
                 resources: quad_resources,
             });

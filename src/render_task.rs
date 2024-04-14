@@ -70,5 +70,6 @@ pub struct RenderTask {
     pub kind: TaskKind,
     pub mesh_buffer_id: u32,
     pub instance_count: u32,
+    pub indices_offset: u32,
     pub resources: HashMap<ResourceKind, MultiResource>,
 }
