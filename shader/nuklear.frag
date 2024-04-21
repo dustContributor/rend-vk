@@ -32,9 +32,8 @@ SAMPLING(matDiffuse, SMP_TEX, 2D, 0)
 
 void main() {
 	Material mat = READ(INST, MATERIAL);
-	// Compute flipped Y axis tex coord.
-	vec2 texCoord = passTexCoord; //flipTexCoord(passTexCoord);
+	vec2 texCoord = passTexCoord;
   // Fetch diffuse texel.
 	vec4 txDiffuse = texture(SAMPLER_FOR(matDiffuse, 2D, mat.diffuseId, mat.diffuseSamplerId), texCoord);
-  outFrag = vec4(txDiffuse.rrr, 1.0) * passColor;
+  outFrag = vec4(vec3(1), txDiffuse.r) * passColor;
 }

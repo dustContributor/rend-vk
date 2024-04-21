@@ -6,6 +6,7 @@
 
 //#pragma optionNV(strict on)
 #extension GL_ARB_shading_language_420pack : require
+#extension GL_ARB_shading_language_packing : require
 // Got renamed in Vulkan
 #define gl_VertexIndex gl_VertexID
 
@@ -128,7 +129,7 @@
 // Per-attribute data
 #define READ_ATTR_POSITION_MACRO inPosition
 #define READ_ATTR_NORMAL_MACRO inNormal
-#define READ_ATTR_COLOR_MACRO inColor
+#define READ_ATTR_COLOR_MACRO unpackUnorm4x8(inColor)
 #define READ_ATTR_TEXCOORD_MACRO inTexCoord
 #define READ_ATTR_JOINT_WEIGHT_MACRO inJointWeight
 // Base attribute/instance read macro expansion
@@ -153,7 +154,7 @@
 // Input attribute macro expansions.
 #define USING_ATTR_POSITION_MACRO layout ( location = ATTRIB_LOC_POSITION ) in vec3 inPosition;
 #define USING_ATTR_NORMAL_MACRO layout ( location = ATTRIB_LOC_NORMAL ) in vec3 inNormal;
-#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in vec4 inColor;
+#define USING_ATTR_COLOR_MACRO layout ( location = ATTRIB_LOC_COLOR ) in uint inColor;
 #define USING_ATTR_TEXCOORD_MACRO layout ( location = ATTRIB_LOC_TEXCOORD ) in vec2 inTexCoord;
 #define USING_ATTR_JOINT_WEIGHT_MACRO layout ( location = ATTRIB_LOC_JOINT_WEIGHT ) in uvec3 inJointWeight;
 

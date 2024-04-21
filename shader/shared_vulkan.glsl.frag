@@ -13,44 +13,20 @@
 // #extension GL_EXT_debug_printf : enable
 
 #include "shared.glsl.frag"
+
+#define BUFFER_REF(NAME, TYPE) \
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer NAME { TYPE items[]; };
 // Per vertex data
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Positions
-{
-    vec3 items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Normals
-{
-    vec3 items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer TexCoords
-{
-    vec2 items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Colors
-{
-    vec4 items[];
-};
+BUFFER_REF(Positions, vec3)
+BUFFER_REF(Normals, vec3)
+BUFFER_REF(TexCoords, vec2)
+BUFFER_REF(Colors, uint)
 // Per instance data
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Transforms
-{
-    Transform items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Materials
-{
-    Material items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer DirLights
-{
-    DirLight items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer PointLights
-{
-    PointLight items[];
-};
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer TransformExtras
-{
-    TransformExtra items[];
-};
+BUFFER_REF(Transforms, Transform)
+BUFFER_REF(Materials, Material)
+BUFFER_REF(DirLights, DirLight)
+BUFFER_REF(PointLights, PointLight)
+BUFFER_REF(TransformExtras, TransformExtra)
 // Per pass data
 
 #define DESC_SET_SAMPLER 0
@@ -60,7 +36,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Tra
 // Per vertex attributes
 #define READ_ATTR_POSITION_MACRO registers.positions.items[gl_VertexIndex]
 #define READ_ATTR_NORMAL_MACRO registers.normals.items[gl_VertexIndex]
-#define READ_ATTR_COLOR_MACRO registers.colors.items[gl_VertexIndex]
+#define READ_ATTR_COLOR_MACRO unpackUnorm4x8(registers.colors.items[gl_VertexIndex])
 #define READ_ATTR_TEXCOORD_MACRO registers.texCoords.items[gl_VertexIndex]
 #define READ_ATTR_JOINT_WEIGHT_MACRO registers.joints.items[gl_VertexIndex]
 // Per instance data
