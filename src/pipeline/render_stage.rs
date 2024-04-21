@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::size_of};
 
 use crate::{
     buffer::{DeviceAllocator, DeviceSlice},
@@ -152,12 +152,13 @@ impl Stage for RenderStage {
                     ctx.vulkan.device.cmd_bind_index_buffer(
                         ctx.command_buffer,
                         mesh_buffer.indices.buffer,
-                        mesh_buffer.indices.offset + task.indices_offset as u64,
+                        mesh_buffer.indices.offset
+                            + (task.indices_offset as u64 * size_of::<u32>() as u64),
                         vk::IndexType::UINT32,
                     );
                     ctx.vulkan.device.cmd_draw_indexed(
                         ctx.command_buffer,
-                        mesh_buffer.count,
+                        task.vertex_count,
                         task.instance_count,
                         0,
                         0,
@@ -166,7 +167,7 @@ impl Stage for RenderStage {
                 } else {
                     ctx.vulkan.device.cmd_draw(
                         ctx.command_buffer,
-                        mesh_buffer.count,
+                        task.vertex_count,
                         task.instance_count,
                         0,
                         0,

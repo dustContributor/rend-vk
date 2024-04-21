@@ -442,6 +442,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     kind: u32,
     mesh_id: u32,
     instance_count: u32,
+    vertex_count: u32,
     indices_offset: u32,
     resource_bits: u32,
     resources: u64,
@@ -456,6 +457,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
         kind,
         resources,
         instance_count,
+        vertex_count,
         indices_offset,
         mesh_buffer_id: mesh_id,
     };
