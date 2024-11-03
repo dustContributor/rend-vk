@@ -42,6 +42,7 @@ impl Pipeline {
         let base_path = Self::spirv_path_of("tmp");
         let base_path = std::path::Path::new(&base_path).parent().unwrap();
         std::fs::DirBuilder::new()
+            .recursive(true)
             .create(&base_path)
             .expect(&format!(
                 "failed creating the SPIR-V folder at {}!",
