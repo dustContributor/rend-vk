@@ -26,6 +26,94 @@ impl Pipeline {
             .expect(format!("couldn't parse the pipeline at {}", name).as_str());
     }
 
+    fn spirv_path_of(shader: &str) -> String {
+        format!("shader/{}.spv", shader)
+    }
+
+    fn source_path_of(shader: &str) -> String {
+        format!("shader/{}", shader)
+    }
+
+    fn compile_shader_programs(
+        ctx: &VulkanContext,
+        pip: &Pipeline,
+    ) -> HashMap<String, shader::ShaderProgram> {
+        let shaders = pip
+            .programs
+            .iter()
+            .map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
+            .flatten()
+            .filter(|f| !f.is_empty())
+            // Same shader could be used in multiple programs.
+            .collect::<HashSet<_>>();
+
+        for shader in shaders {
+            let spirv_path = Self::spirv_path_of(shader);
+            let source_path = Self::source_path_of(shader);
+            // Some flags so the various macros work
+            let args = [
+                &source_path,
+                "-V",
+                "-DIS_VULKAN=1",
+                "-DIS_EXTERNAL_COMPILER=1",
+                "--glsl-version",
+                "460",
+                "-o",
+                &spirv_path,
+            ];
+            // TODO: Could launch all of these these concurrently and wait for them all.
+            log::info!("compiling shader {} with args {:?}...", shader, args);
+            let output = Command::new("glslangValidator")
+                .args(args)
+                .output()
+                .expect(format!("failed to start compiler for {}!", &shader).as_str());
+
+            if !output.status.success() {
+                let msg = String::from_utf8_lossy(if output.stdout.len() > 0 {
+                    &output.stdout
+                } else {
+                    &output.stderr
+                });
+                panic!(
+                    "error compiling! shader: {}, status: {}, error: {}",
+                    shader, output.status, msg
+                )
+            }
+            log::info!("shader {} compiled!", shader);
+        }
+
+        let load_spirv = |name: &str| match name.is_empty() {
+            true => None,
+            false => {
+                let path = Self::spirv_path_of(name);
+                let mut file =
+                    std::fs::File::open(&path).expect(&format!("spirv {path} failed to open!"));
+                let bin = ash::util::read_spv(&mut file)
+                    .expect(&format!("spirv {} failed to load!", path));
+                Some((name.to_string(), bin))
+            }
+        };
+
+        let programs_by_name: HashMap<_, _> = pip
+            .programs
+            .iter()
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    shader::ShaderProgram::new(
+                        ctx,
+                        p.name.clone(),
+                        load_spirv(&p.vertex),
+                        load_spirv(&p.fragment),
+                        load_spirv(&p.geometry),
+                    ),
+                )
+            })
+            .collect();
+
+        return programs_by_name;
+    }
+
     pub fn load(
         ctx: &VulkanContext,
         default_attachment: Attachment,
@@ -34,79 +122,8 @@ impl Pipeline {
     ) -> crate::pipeline::Pipeline {
         let pip = Self::read(name);
         let barrier_gen = BarrierGen::new(&pip.passes);
-        let shaders_by_name: HashMap<_, _> = pip
-            .programs
-            .iter()
-            .map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
-            .flatten()
-            .filter(|f| !f.is_empty())
-            // Same shader could be used in multiple programs.
-            .collect::<HashSet<_>>()
-            .iter()
-            .map(|f| (f.clone(), format!("shader/{f}.spv")))
-            .collect();
-        for src_out in &shaders_by_name {
-            let name = src_out.0;
-            // Some flags so the various macros work
-            let args = [
-                &format!("shader/{}", name),
-                "-V",
-                "-DIS_VULKAN=1",
-                "-DIS_EXTERNAL_COMPILER=1",
-                "--glsl-version",
-                "460",
-                "-o",
-                &src_out.1,
-            ];
-            log::info!("compiling shader {} with args {:?}...", name, args);
-            let res = Command::new("glslangValidator")
-                .args(args)
-                .spawn()
-                .expect(format!("Failed to start {}", &name).as_str())
-                // TODO: Could launch all of these these concurrently and wait for them all.
-                .wait();
-            if res.is_err() {
-                panic!(
-                    "Error compiling shader {}, error {}",
-                    name,
-                    res.unwrap_err()
-                )
-            }
-            match res {
-                Err(e) => {
-                    panic!("Error compiling shader {}, error {}", name, e)
-                }
-                Ok(e) if !e.success() => {
-                    panic!("Failed compiling shader {}, error {}", name, e);
-                }
-                _ => {}
-            }
-            log::info!("shader {} compiled!", name);
-        }
-        let load_shader = |name: &String| {
-            shaders_by_name.get(name).map(|v| {
-                (
-                    v.clone(),
-                    std::fs::File::open(v).expect(format!("failed opening {v}").as_str()),
-                )
-            })
-        };
-        let shader_programs_by_name: HashMap<_, _> = pip
-            .programs
-            .iter()
-            .map(|f| {
-                (
-                    &f.name,
-                    shader::ShaderProgram::new(
-                        &ctx,
-                        f.name.clone(),
-                        load_shader(&f.vertex),
-                        load_shader(&f.fragment),
-                        load_shader(&f.geometry),
-                    ),
-                )
-            })
-            .collect();
+        let shader_programs_by_name = Self::compile_shader_programs(ctx, &pip);
+
         let window_width = default_attachment.extent.width;
         let window_height = default_attachment.extent.height;
         let mut attachments_by_name: HashMap<_, _> = pip
