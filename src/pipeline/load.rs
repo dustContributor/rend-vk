@@ -27,7 +27,7 @@ impl Pipeline {
     }
 
     fn spirv_path_of(shader: &str) -> String {
-        format!("shader/{}.spv", shader)
+        format!("shader/vk/{}.spv", shader)
     }
 
     fn source_path_of(shader: &str) -> String {
@@ -38,15 +38,24 @@ impl Pipeline {
         ctx: &VulkanContext,
         pip: &Pipeline,
     ) -> HashMap<String, shader::ShaderProgram> {
+        // Create dest folder for all of the SPIR-V binaries
+        let base_path = Self::spirv_path_of("tmp");
+        let base_path = std::path::Path::new(&base_path).parent().unwrap();
+        std::fs::DirBuilder::new()
+            .create(&base_path)
+            .expect(&format!(
+                "failed creating the SPIR-V folder at {}!",
+                base_path.to_str().unwrap()
+            ));
+        // Same shader could be used in multiple programs, flatten and de-duplicate
         let shaders = pip
             .programs
             .iter()
             .map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
             .flatten()
             .filter(|f| !f.is_empty())
-            // Same shader could be used in multiple programs.
             .collect::<HashSet<_>>();
-
+        // Invoke glslang and compile each shader into SPIR-V
         for shader in shaders {
             let spirv_path = Self::spirv_path_of(shader);
             let source_path = Self::source_path_of(shader);
