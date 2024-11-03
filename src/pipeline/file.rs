@@ -159,6 +159,7 @@ pub enum UpdaterKind {
     Sky = 8,
     StaticShadow = 9,
     TransformExtra = 10,
+    View = 11,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

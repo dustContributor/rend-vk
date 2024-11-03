@@ -5,8 +5,14 @@
 
 #include "shared_wrapper.glsl.frag"
 
+PASS_DATA_BEGIN
+	UNUSED_INPUT(0)
+	UNUSED_INPUT(1)
+	USING(PASS, VIEW)
+PASS_DATA_END
+
 INPUTS_BEGIN
-	UNUSED_INPUT(0) // pass data
+	USING(PASS, DATA)
   USING(ATTR, POSITION)
   USING(ATTR, NORMAL)
   USING(ATTR, TEXCOORD)
@@ -27,15 +33,16 @@ void main() {
   passInstanceId = READ(INST, INSTANCE_ID);
 	PointLight pointLight = READ(INST, POINTLIGHT);
   vec3 inPosition = READ(ATTR, POSITION);
-  Transform trns = READ(INST, TRANSFORM);
-  mat4 mvp = trns.mvp;
-  mat3 mv = mat3(trns.mv); 
+  Transform trn = READ(INST, TRANSFORM);
+  View vw = READ(PASS, VIEW);
+  mat4 mvp = vw.viewProj * trn.model;
+  mat4 mv = vw.view * trn.model;
   // Inverse radius used for each fragment
   passInvRadius = 1.0 / pointLight.radius;
   // Pass color so fragment shader doesn't has toread the point light data
   passLightColor = pointLight.color;
 	// Last column is the translation.
-  passViewPosCenter = trns.mv[3].xyz;
+  passViewPosCenter = mv[3].xyz;
 		// Matrix contains scaling and positioning.
   gl_Position = mvp * vec4(inPosition * pointLight.radius * 2.0, 1.0);
 }

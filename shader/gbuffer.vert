@@ -5,7 +5,12 @@
 
 #include "shared_wrapper.glsl.frag"
 
+PASS_DATA_BEGIN
+	USING(PASS, VIEW)
+PASS_DATA_END
+
 INPUTS_BEGIN
+	USING(PASS, DATA)
     USING(ATTR, POSITION)
     USING(ATTR, NORMAL)
     USING(ATTR, TEXCOORD)
@@ -28,10 +33,12 @@ void main() {
     // Instance index. Mandatory first line of main.
     passInstanceId = READ(INST, INSTANCE_ID);
     vec3 inPosition = READ(ATTR, POSITION);
-    Transform trns = READ(INST, TRANSFORM);
-    mat4 prevMvp = READ(INST, TRANSFORM_EXTRA).prevMvp;
-    mat4 mvp = trns.mvp;
-    mat3 mv = mat3(trns.mv);
+    Transform trn = READ(INST, TRANSFORM);
+    View vw = READ(PASS, VIEW);
+    mat4 prevModel = READ(INST, TRANSFORM_EXTRA).prevModel;
+    mat4 prevMvp = vw.prevViewProj * prevModel;
+    mat4 mvp = vw.viewProj * trn.model;
+    mat3 mv = mat3(vw.view * trn.model);
     // Texcoords.
     passTexCoord = READ(ATTR, TEXCOORD);
     // Normal in view space.

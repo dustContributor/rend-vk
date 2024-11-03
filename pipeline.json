@@ -89,7 +89,9 @@
         "MATERIAL",
         "TRANSFORM_EXTRA"
       ],
-      "perPassUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW"
+      ],
       "state": {
         "writing": "DEFAULT",
         "depth": "DEFAULT",
@@ -187,7 +189,8 @@
       ],
       "perPassUpdaters": [
         "VIEW_RAY",
-        "FRUSTUM"
+        "FRUSTUM",
+        "VIEW"
       ],
       "state": {
         "writing": "COLOR",
@@ -247,11 +250,12 @@
       ]
     },
     {
+      "isDisabled": false,
       "name": "nuklear",
       "type": "render",
       "program": "nuklear",
       "batch": "NUKLEAR",
-      "depthStencil": "",
+      "depthStencil": null,
       "outputs": [
         "lightAcc"
       ],

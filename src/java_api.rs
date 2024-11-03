@@ -429,6 +429,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_placeShaderResource(
         ResourceKind::Sky => unpack_single_resource::<Sky>(data),
         ResourceKind::StaticShadow => unpack_single_resource::<StaticShadow>(data),
         ResourceKind::TransformExtra => unpack_single_resource::<TransformExtra>(data),
+        ResourceKind::View => unpack_single_resource::<View>(data),
     };
     renderer.place_shader_resource(kind, resource);
     Box::leak(renderer);

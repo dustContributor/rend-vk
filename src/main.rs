@@ -14,6 +14,7 @@ use rend_vk::{
     window::WindowContext,
     *,
 };
+use shader_resource::View;
 
 fn main() {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
@@ -204,6 +205,17 @@ fn main() {
             ResourceKind::ViewRay,
             shader_resource::SingleResource::ViewRay(gen_view_ray()),
         );
+        renderer.place_shader_resource(
+            ResourceKind::View,
+            shader_resource::SingleResource::View(View {
+                view,
+                proj,
+                view_proj: proj * view,
+                prev_view: view,
+                prev_proj: proj,
+                prev_view_proj: proj * view,
+            }),
+        );
         renderer.add_task_to_queue(render_task::RenderTask {
             mesh_buffer_id: fullscreen_mesh_id,
             instance_count: 1,
@@ -239,15 +251,15 @@ fn main() {
             && renderer.is_texture_uploaded(quad_normal_id)
         {
             let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
-            let mvp = proj * view * quad_model;
-            let mv = view * quad_model;
             quad_resources.insert(
                 ResourceKind::Transform,
-                MultiResource::Transform(vec![Transform { mv, mvp }]),
+                MultiResource::Transform(vec![Transform { model: quad_model }]),
             );
             quad_resources.insert(
                 ResourceKind::TransformExtra,
-                MultiResource::TransformExtra(vec![TransformExtra { prev_mvp: mvp }]),
+                MultiResource::TransformExtra(vec![TransformExtra {
+                    prev_model: quad_model,
+                }]),
             );
             quad_resources.insert(
                 ResourceKind::Material,

@@ -22,7 +22,11 @@ pub enum ResourceKind {
     Sky = 8,
     StaticShadow = 9,
     TransformExtra = 10,
+    View = 11,
 }
+
+const MAX_RESOURCE_KIND: u8 = ResourceKind::View.to_u8();
+impl UsedAsIndex<MAX_RESOURCE_KIND> for ResourceKind {}
 
 impl ResourceKind {
     pub const fn mask(self) -> u32 {
@@ -78,6 +82,7 @@ impl ResourceKind {
             ResourceKind::Sky => align_of::<Sky>(),
             ResourceKind::StaticShadow => align_of::<StaticShadow>(),
             ResourceKind::TransformExtra => align_of::<TransformExtra>(),
+            ResourceKind::View => align_of::<View>(),
         }
     }
 
@@ -94,23 +99,20 @@ impl ResourceKind {
             ResourceKind::Sky => size_of::<Sky>(),
             ResourceKind::StaticShadow => size_of::<StaticShadow>(),
             ResourceKind::TransformExtra => size_of::<TransformExtra>(),
+            ResourceKind::View => size_of::<View>(),
         }
     }
 }
 
-const MAX_RESOURCE_KIND: u8 = ResourceKind::TransformExtra.to_u8();
-impl UsedAsIndex<MAX_RESOURCE_KIND> for ResourceKind {}
-
 #[derive(Clone)]
 #[repr(C)]
 pub struct Transform {
-    pub mvp: Mat4,
-    pub mv: Mat4,
+    pub model: Mat4,
 }
 #[derive(Clone)]
 #[repr(C)]
 pub struct TransformExtra {
-    pub prev_mvp: Mat4,
+    pub prev_model: Mat4,
 }
 #[derive(Clone, Default)]
 #[repr(C)]
@@ -163,6 +165,16 @@ pub struct Frustum {
 }
 #[derive(Clone)]
 #[repr(C)]
+pub struct View {
+    pub view: Mat4,
+    pub proj: Mat4,
+    pub view_proj: Mat4,
+    pub prev_view: Mat4,
+    pub prev_proj: Mat4,
+    pub prev_view_proj: Mat4,
+}
+#[derive(Clone)]
+#[repr(C)]
 pub struct ViewRay {
     pub bleft: Vec3,
     pub m22: f32,
@@ -195,6 +207,7 @@ pub enum MultiResource {
     Sky(Vec<Sky>),
     StaticShadow(Vec<StaticShadow>),
     TransformExtra(Vec<TransformExtra>),
+    View(Vec<View>),
 }
 
 pub enum SingleResource {
@@ -209,6 +222,7 @@ pub enum SingleResource {
     Sky(Sky),
     StaticShadow(StaticShadow),
     TransformExtra(TransformExtra),
+    View(View),
 }
 
 pub fn resources_by_kind_map() -> HashMap<ResourceKind, MultiResource> {
@@ -254,6 +268,14 @@ impl WrapResource<Frustum> for Frustum {
     }
     fn single_wrapper_for(res: &[Frustum]) -> SingleResource {
         SingleResource::Frustum(res[0].clone())
+    }
+}
+impl WrapResource<View> for View {
+    fn multi_wrapper_for(res: &[View]) -> MultiResource {
+        MultiResource::View(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[View]) -> SingleResource {
+        SingleResource::View(res[0].clone())
     }
 }
 impl WrapResource<ViewRay> for ViewRay {

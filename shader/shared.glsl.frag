@@ -23,6 +23,16 @@ struct Frustum
   float farPlane;
 };
 
+struct View
+{
+  mat4 view;
+  mat4 proj;
+  mat4 viewProj;
+  mat4 prevView;
+  mat4 prevProj;
+  mat4 prevViewProj;
+};
+
 struct ViewRay
 {
   vec3 bleft;
@@ -37,13 +47,12 @@ struct ViewRay
 
 struct Transform
 {
-  mat4 mvp;
-  mat4 mv;
+  mat4 model;
 };
 
 struct TransformExtra
 {
-  mat4 prevMvp;
+  mat4 prevModel;
 };
 
 struct Material

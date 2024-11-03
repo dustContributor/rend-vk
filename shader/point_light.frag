@@ -16,6 +16,7 @@ ATTR_LOC(3) flat in vec3 passLightColor;
 PASS_DATA_BEGIN
 	USING(PASS, VIEWRAY)
 	USING(PASS, FRUSTUM)
+	UNUSED_INPUT(2)
 PASS_DATA_END
 
 INPUTS_BEGIN
@@ -23,7 +24,7 @@ INPUTS_BEGIN
 	UNUSED_INPUT(1)
 	UNUSED_INPUT(2)
 	UNUSED_INPUT(3)
-  USING(INST, TRANSFORM)
+  	USING(INST, TRANSFORM)
 	USING(INST, POINTLIGHT)
 INPUTS_END
 
@@ -50,7 +51,7 @@ void main () {
 	float specIntensity = txAlbedo.w;
 	// Fetch g buffer normal and decode it.
 	vec3 normal = decodeNormal(texture(gbNormal, passTexCoord).xy);
-  // Fetch depth 
+  	// Fetch depth 
 	float depth = texture(gbDepth, passTexCoord).x;
 	// Compute view space position.
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
