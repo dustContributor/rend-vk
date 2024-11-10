@@ -51,6 +51,7 @@ pub fn alloc_and_fill_multi(
         MultiResource::StaticShadow(e) => alloc_and_copy_into(mem, e, instance_count),
         MultiResource::TransformExtra(e) => alloc_and_copy_into(mem, e, instance_count),
         MultiResource::View(e) => alloc_and_copy_into(mem, e, instance_count),
+        MultiResource::Timing(e) => alloc_and_copy_into(mem, e, instance_count),
     }
 }
 
@@ -68,5 +69,6 @@ pub fn fill_single(src: &SingleResource, dst: &DeviceSlice, offset: u64) -> u64 
         SingleResource::StaticShadow(e) => copy_into(e, dst, offset),
         SingleResource::TransformExtra(e) => copy_into(e, dst, offset),
         SingleResource::View(e) => copy_into(e, dst, offset),
+        SingleResource::Timing(e) => copy_into(e, dst, offset),
     }
 }

@@ -76,6 +76,7 @@
 #define BIND_UBO_STATIC_SHADOW 9
 #define BIND_UBO_TRANSFORM_EXTRA 10
 #define BIND_UBO_VIEW 11
+#define BIND_UBO_TIMING 12
 // UBO names
 #define UBO_TRANSFORMS_NAME	TransformBlock
 #define UBO_MATERIAL_NAME	MaterialBlock
@@ -89,10 +90,11 @@
 #define	UBO_STATIC_SHADOW_NAME	StaticShadowBlock
 #define UBO_TRANSFORM_EXTRA_NAME TransformExtraBlock
 #define UBO_VIEW_NAME ViewBlock
+#define UBO_TIMING_NAME TimingBlock
 /*** UBO size limits. ****/
 // 64kB size limit for UBO
 #define UBO_MAX_SIZE 65536
-#define UBO_TRANSFORM_SIZE 64
+#define UBO_TRANSFORM_SIZE 128
 #define UBO_MATERIAL_SIZE 16
 #define UBO_DIRLIGHT_SIZE 128
 #define UBO_FRUSTUM_SIZE 32
@@ -104,6 +106,7 @@
 #define UBO_STATIC_SHADOW_SIZE 64
 #define UBO_TRANSFORM_EXTRA_SIZE 64
 #define UBO_VIEW_SIZE 384
+#define UBO_TIMING_SIZE 16
 
 #define MAX_UBO_TRANSFORMS	UBO_MAX_SIZE / UBO_TRANSFORM_SIZE
 #define MAX_UBO_MATERIALS	UBO_MAX_SIZE / UBO_MATERIAL_SIZE
@@ -130,6 +133,7 @@
 #define READ_PASS_FRUSTUM_MACRO frustum
 #define READ_PASS_VIEWRAY_MACRO viewRay
 #define READ_PASS_VIEW_MACRO view
+#define READ_PASS_TIMING_MACRO timing
 // Per-attribute data
 #define READ_ATTR_POSITION_MACRO inPosition
 #define READ_ATTR_NORMAL_MACRO inNormal
@@ -155,6 +159,7 @@
 #define USING_PASS_FRUSTUM_MACRO layout ( std140, binding = BIND_UBO_FRUSTUM ) uniform UBO_FRUSTUM_NAME {  Frustum frustum; };
 #define USING_PASS_VIEWRAY_MACRO layout ( std140, binding = BIND_UBO_VIEWRAY ) uniform UBO_VIEWRAY_NAME {  ViewRay viewRay; };
 #define USING_PASS_VIEW_MACRO layout ( std140, binding = BIND_UBO_VIEW ) uniform UBO_VIEW_NAME {  View view; };
+#define USING_PASS_TIMING_MACRO layout ( std140, binding = BIND_UBO_TIMING ) uniform UBO_TIMING_NAME {  Timing timing; };
 
 // Input attribute macro expansions.
 #define USING_ATTR_POSITION_MACRO layout ( location = ATTRIB_LOC_POSITION ) in vec3 inPosition;

@@ -86,11 +86,11 @@
       "inputs": [],
       "perInstanceUpdaters": [
         "TRANSFORM",
-        "MATERIAL",
-        "TRANSFORM_EXTRA"
+        "MATERIAL"
       ],
       "perPassUpdaters": [
-        "VIEW"
+        "VIEW",
+        "TIMING"
       ],
       "state": {
         "writing": "DEFAULT",

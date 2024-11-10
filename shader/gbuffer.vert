@@ -7,6 +7,7 @@
 
 PASS_DATA_BEGIN
 	USING(PASS, VIEW)
+	USING(PASS, TIMING)
 PASS_DATA_END
 
 INPUTS_BEGIN
@@ -16,7 +17,6 @@ INPUTS_BEGIN
     USING(ATTR, TEXCOORD)
     USING(INST, TRANSFORM)
     USING(INST, MATERIAL)
-    USING(INST, TRANSFORM_EXTRA)
     // Always last
     USING(INST, INSTANCE_ID)
 INPUTS_END
@@ -32,13 +32,21 @@ ATTR_LOC(5) flat out int passInstanceId;
 void main() {
     // Instance index. Mandatory first line of main.
     passInstanceId = READ(INST, INSTANCE_ID);
+    Timing tm = READ(PASS, TIMING);
     vec3 inPosition = READ(ATTR, POSITION);
     Transform trn = READ(INST, TRANSFORM);
     View vw = READ(PASS, VIEW);
-    mat4 prevModel = READ(INST, TRANSFORM_EXTRA).prevModel;
-    mat4 prevMvp = vw.prevViewProj * prevModel;
-    mat4 mvp = vw.viewProj * trn.model;
-    mat3 mv = mat3(vw.view * trn.model);
+    // Interpolate model translation to get the current position
+    vec3 prevTrans = trn.prevModel[3].xyz;
+    vec3 currTrans = trn.model[3].xyz;
+    // TODO: Interpolate rotation too
+    vec3 translation = mix(prevTrans, currTrans, tm.interpolation);
+    mat4 model = trn.model;
+    model[3] = vec4(translation.xyz, 1.0);
+    // TODO: prevModel doesn't really has the previous transform
+    mat4 prevMvp = vw.prevViewProj * trn.prevModel;
+    mat4 mvp = vw.viewProj * model;
+    mat3 mv = mat3(vw.view * model);
     // Texcoords.
     passTexCoord = READ(ATTR, TEXCOORD);
     // Normal in view space.

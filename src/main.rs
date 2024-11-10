@@ -14,7 +14,7 @@ use rend_vk::{
     window::WindowContext,
     *,
 };
-use shader_resource::View;
+use shader_resource::{Timing, View};
 
 fn main() {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
@@ -206,6 +206,15 @@ fn main() {
             shader_resource::SingleResource::ViewRay(gen_view_ray()),
         );
         renderer.place_shader_resource(
+            ResourceKind::Timing,
+            shader_resource::SingleResource::Timing(Timing {
+                interpolation: 0.5,
+                pad0: 0,
+                pad1: 0,
+                pad2: 0,
+            }),
+        );
+        renderer.place_shader_resource(
             ResourceKind::View,
             shader_resource::SingleResource::View(View {
                 view,
@@ -253,7 +262,10 @@ fn main() {
             let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
             quad_resources.insert(
                 ResourceKind::Transform,
-                MultiResource::Transform(vec![Transform { model: quad_model }]),
+                MultiResource::Transform(vec![Transform {
+                    model: quad_model,
+                    prev_model: quad_model,
+                }]),
             );
             quad_resources.insert(
                 ResourceKind::TransformExtra,

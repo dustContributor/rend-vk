@@ -33,6 +33,15 @@ struct View
   mat4 prevViewProj;
 };
 
+struct Timing
+{
+  float interpolation;
+  // Pad to 16 bytes
+  float pad0;
+  float pad1;
+  float pad2;
+};
+
 struct ViewRay
 {
   vec3 bleft;
@@ -48,6 +57,7 @@ struct ViewRay
 struct Transform
 {
   mat4 model;
+  mat4 prevModel;
 };
 
 struct TransformExtra

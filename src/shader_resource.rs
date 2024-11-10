@@ -23,9 +23,10 @@ pub enum ResourceKind {
     StaticShadow = 9,
     TransformExtra = 10,
     View = 11,
+    Timing = 12,
 }
 
-const MAX_RESOURCE_KIND: u8 = ResourceKind::View.to_u8();
+const MAX_RESOURCE_KIND: u8 = ResourceKind::Timing.to_u8();
 impl UsedAsIndex<MAX_RESOURCE_KIND> for ResourceKind {}
 
 impl ResourceKind {
@@ -83,6 +84,7 @@ impl ResourceKind {
             ResourceKind::StaticShadow => align_of::<StaticShadow>(),
             ResourceKind::TransformExtra => align_of::<TransformExtra>(),
             ResourceKind::View => align_of::<View>(),
+            ResourceKind::Timing => align_of::<Timing>(),
         }
     }
 
@@ -100,6 +102,7 @@ impl ResourceKind {
             ResourceKind::StaticShadow => size_of::<StaticShadow>(),
             ResourceKind::TransformExtra => size_of::<TransformExtra>(),
             ResourceKind::View => size_of::<View>(),
+            ResourceKind::Timing => size_of::<Timing>(),
         }
     }
 }
@@ -108,6 +111,7 @@ impl ResourceKind {
 #[repr(C)]
 pub struct Transform {
     pub model: Mat4,
+    pub prev_model: Mat4,
 }
 #[derive(Clone)]
 #[repr(C)]
@@ -187,6 +191,15 @@ pub struct ViewRay {
 }
 #[derive(Clone)]
 #[repr(C)]
+pub struct Timing {
+    pub interpolation: f32,
+    // Pad to 16 bytes
+    pub pad0: u32,
+    pub pad1: u32,
+    pub pad2: u32,
+}
+#[derive(Clone)]
+#[repr(C)]
 pub struct Joint {}
 #[derive(Clone)]
 #[repr(C)]
@@ -208,6 +221,7 @@ pub enum MultiResource {
     StaticShadow(Vec<StaticShadow>),
     TransformExtra(Vec<TransformExtra>),
     View(Vec<View>),
+    Timing(Vec<Timing>),
 }
 
 pub enum SingleResource {
@@ -223,6 +237,7 @@ pub enum SingleResource {
     StaticShadow(StaticShadow),
     TransformExtra(TransformExtra),
     View(View),
+    Timing(Timing),
 }
 
 pub fn resources_by_kind_map() -> HashMap<ResourceKind, MultiResource> {
@@ -284,6 +299,14 @@ impl WrapResource<ViewRay> for ViewRay {
     }
     fn single_wrapper_for(res: &[ViewRay]) -> SingleResource {
         SingleResource::ViewRay(res[0].clone())
+    }
+}
+impl WrapResource<Timing> for Timing {
+    fn multi_wrapper_for(res: &[Timing]) -> MultiResource {
+        MultiResource::Timing(res.to_vec())
+    }
+    fn single_wrapper_for(res: &[Timing]) -> SingleResource {
+        SingleResource::Timing(res[0].clone())
     }
 }
 impl WrapResource<PointLight> for PointLight {

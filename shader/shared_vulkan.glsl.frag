@@ -65,6 +65,7 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define READ_PASS_STATIC_SHADOW_MACRO registers.pass.staticShadow
 #define READ_PASS_TRANSFORM_EXTRA_MACRO registers.pass.transformExtra
 #define READ_PASS_VIEW_MACRO registers.pass.view
+#define READ_PASS_TIMING_MACRO registers.pass.timing
 // Base attribute/instance read macro expansion
 #define READ(TYPE,NAME) READ_##TYPE##_##NAME##_MACRO
 
@@ -101,6 +102,7 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define USING_PASS_VIEWRAY_MACRO ViewRay viewRay;
 #define USING_PASS_TRANSFORM_EXTRA_MACRO TransformExtra transformExtra;
 #define USING_PASS_VIEW_MACRO View view;
+#define USING_PASS_TIMING_MACRO Timing timing;
 // This struct will hold all the per-pass data together
 #define USING_PASS_DATA_MACRO PassData pass;
 // Using pre-defined gl_InstanceIndex in vulkan
