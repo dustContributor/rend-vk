@@ -15,7 +15,6 @@ pub struct Pipeline {
 #[serde(rename_all = "camelCase")]
 pub struct Target {
     pub name: String,
-    pub group: String,
     pub format: format::Format,
     pub width: U32OrF32,
     pub height: U32OrF32,
@@ -24,7 +23,17 @@ pub struct Target {
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInput {
     pub name: String,
-    pub sampler: Filtering,
+    pub sampler: DescOption<Sampler>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Copy, Clone)]
+pub struct Sampler {
+    pub filter: Filtering,
+    pub wrap_mode: WrapMode,
+    pub compare_func: CompareFunc,
+    #[serde(default)]
+    pub anisotropy: u8,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -356,6 +365,61 @@ impl WrapMode {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, strum_macros::Display)]
+#[repr(u8)]
+pub enum CompareFunc {
+    None,
+    Always,
+    Never,
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+    Equal,
+    NotEqual,
+}
+
+const MAX_COMPARE_FUNC: u8 = CompareFunc::NotEqual.to_u8();
+impl crate::UsedAsIndex<MAX_COMPARE_FUNC> for CompareFunc {}
+
+impl CompareFunc {
+    pub fn to_vk(self) -> vk::CompareOp {
+        match self {
+            CompareFunc::Never => vk::CompareOp::NEVER,
+            CompareFunc::Less => vk::CompareOp::LESS,
+            CompareFunc::Equal => vk::CompareOp::EQUAL,
+            CompareFunc::LessOrEqual => vk::CompareOp::LESS_OR_EQUAL,
+            CompareFunc::Greater => vk::CompareOp::GREATER,
+            CompareFunc::NotEqual => vk::CompareOp::NOT_EQUAL,
+            CompareFunc::GreaterOrEqual => vk::CompareOp::GREATER_OR_EQUAL,
+            CompareFunc::Always => vk::CompareOp::ALWAYS,
+            CompareFunc::None => panic!("'none' is a marker unsupported compare func!"),
+        }
+    }
+
+    pub const fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v) }
+        }
+    }
+
+    pub const fn of_u32(v: u32) -> Self {
+        if v > (Self::MAX_VALUE as u32) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute(v as u8) }
+        }
+    }
+
+    pub const fn to_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(untagged)]
 #[derive(Copy, Clone)]
 pub enum U32OrF32 {
@@ -379,6 +443,17 @@ const DEFAULT_COLOR_CLEAR_VALUE: u32 = 0;
 impl UpdaterKind {
     pub const fn to_resource_kind(self) -> ResourceKind {
         ResourceKind::of_u32(self as u32)
+    }
+}
+
+impl Predefined<Sampler> for Sampler {
+    fn def() -> Sampler {
+        Self {
+            anisotropy: 1,
+            compare_func: CompareFunc::None,
+            filter: Filtering::Linear,
+            wrap_mode: WrapMode::ClampToEdge,
+        }
     }
 }
 
@@ -568,6 +643,10 @@ where
         };
         return desc;
     }
+}
+
+impl DescHandler<Sampler> for Pipeline {
+    // Empty.
 }
 
 impl DescHandler<StencilDesc> for Pipeline {

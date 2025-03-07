@@ -10,7 +10,7 @@ use bitvec::view::BitView;
 use crate::{
     format::Format,
     pipeline::{
-        file::{Filtering, WrapMode},
+        file::{CompareFunc, Filtering, WrapMode},
         sampler::SamplerKey,
     },
     pos_mul,
@@ -217,12 +217,14 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
     renderer: u64,
     filter: u8,
     wrap_mode: u8,
+    compare_func: u8,
     anisotropy: u8,
 ) -> u8 {
     let renderer = to_renderer(renderer);
     let sampler = renderer.try_get_sampler(SamplerKey {
         filter: Filtering::of_u8(filter),
         wrap_mode: WrapMode::of_u8(wrap_mode),
+        compare_func: CompareFunc::of_u8(compare_func),
         anisotropy,
     });
     Box::leak(renderer);
@@ -239,12 +241,14 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
     renderer: u64,
     filter: u8,
     wrap_mode: u8,
+    compare_func: u8,
     anisotropy: u8,
 ) -> u8 {
     let mut renderer = to_renderer(renderer);
     let sampler = renderer.get_sampler(SamplerKey {
         filter: Filtering::of_u8(filter),
         wrap_mode: WrapMode::of_u8(wrap_mode),
+        compare_func: CompareFunc::of_u8(compare_func),
         anisotropy,
     });
     Box::leak(renderer);

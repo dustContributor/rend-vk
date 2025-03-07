@@ -194,6 +194,7 @@ fn main() {
         anisotropy: 1,
         filter: pipeline::file::Filtering::Linear,
         wrap_mode: pipeline::file::WrapMode::ClampToEdge,
+        compare_func: pipeline::file::CompareFunc::None,
     });
 
     window_context.event_loop(|| {

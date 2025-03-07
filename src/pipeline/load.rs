@@ -258,10 +258,12 @@ impl Pipeline {
                 .inputs
                 .iter()
                 .map(|i| {
+                    let sampler = Self::handle_option(i.sampler.clone());
                     let key = SamplerKey {
-                        filter: i.sampler,
-                        wrap_mode: WrapMode::ClampToEdge,
-                        anisotropy: 1u8,
+                        filter: sampler.filter,
+                        wrap_mode: sampler.wrap_mode,
+                        compare_func: sampler.compare_func,
+                        anisotropy: sampler.anisotropy,
                     };
                     match samplers_by_key.get(&key) {
                         Some(s) => s.clone(),

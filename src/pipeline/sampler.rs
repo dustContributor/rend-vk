@@ -2,12 +2,13 @@ use ash::vk::{self};
 
 use crate::context::VulkanContext;
 
-use super::file::{Filtering, WrapMode};
+use super::file::{CompareFunc, Filtering, WrapMode};
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct SamplerKey {
     pub filter: Filtering,
     pub wrap_mode: WrapMode,
+    pub compare_func: CompareFunc,
     pub anisotropy: u8,
 }
 
@@ -26,6 +27,7 @@ impl Sampler {
             name,
             key.filter,
             key.wrap_mode,
+            key.compare_func,
             key.anisotropy,
             position,
         )
@@ -36,6 +38,7 @@ impl Sampler {
         name: String,
         filter: Filtering,
         wrap_mode: WrapMode,
+        compare_func: CompareFunc,
         anisotropy: u8,
         position: u8,
     ) -> Self {
@@ -45,7 +48,7 @@ impl Sampler {
                 crate::renderer::Renderer::MAX_SAMPLERS
             );
         }
-        let info = Self::info_of(filter, wrap_mode, anisotropy);
+        let info = Self::info_of(filter, wrap_mode, compare_func, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
         ctx.try_set_debug_name(&format!("{}_sampler", name), sampler);
         Self {
@@ -56,13 +59,25 @@ impl Sampler {
         }
     }
 
-    fn info_of(filter: Filtering, wrap_mode: WrapMode, anisotropy: u8) -> vk::SamplerCreateInfo {
+    fn info_of(
+        filter: Filtering,
+        wrap_mode: WrapMode,
+        compare_func: CompareFunc,
+        anisotropy: u8,
+    ) -> vk::SamplerCreateInfo {
         vk::SamplerCreateInfo::builder()
             .address_mode_u(wrap_mode.to_vk())
             .address_mode_v(wrap_mode.to_vk())
             .address_mode_w(wrap_mode.to_vk())
             .anisotropy_enable(if anisotropy > 1 { true } else { false })
-            .compare_enable(false)
+            .compare_enable(match compare_func {
+                CompareFunc::None => false,
+                _ => true,
+            })
+            .compare_op(match compare_func {
+                CompareFunc::None => vk::CompareOp::ALWAYS,
+                _ => compare_func.to_vk(),
+            })
             .mipmap_mode(filter.to_vk_mip_map())
             .min_filter(filter.to_vk())
             .mag_filter(filter.to_vk())

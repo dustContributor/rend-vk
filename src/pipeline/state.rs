@@ -30,20 +30,6 @@ pub enum WindingOrder {
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[derive(Copy, Clone)]
-pub enum CompareFunc {
-    Never,
-    Less,
-    Equal,
-    LessOrEqual,
-    Greater,
-    NotEqual,
-    GreaterOrEqual,
-    Always,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone)]
 pub enum StencilFunc {
     Keep,
     Zero,
@@ -102,21 +88,6 @@ impl BlendFactor {
             BlendFactor::OneMinusSrc1Color => vk::BlendFactor::ONE_MINUS_SRC1_COLOR,
             BlendFactor::Src1Alpha => vk::BlendFactor::SRC1_ALPHA,
             BlendFactor::OneMinusSrc1Alpha => vk::BlendFactor::ONE_MINUS_SRC1_ALPHA,
-        }
-    }
-}
-
-impl CompareFunc {
-    pub fn to_vk(self) -> vk::CompareOp {
-        match self {
-            CompareFunc::Never => vk::CompareOp::NEVER,
-            CompareFunc::Less => vk::CompareOp::LESS,
-            CompareFunc::Equal => vk::CompareOp::EQUAL,
-            CompareFunc::LessOrEqual => vk::CompareOp::LESS_OR_EQUAL,
-            CompareFunc::Greater => vk::CompareOp::GREATER,
-            CompareFunc::NotEqual => vk::CompareOp::NOT_EQUAL,
-            CompareFunc::GreaterOrEqual => vk::CompareOp::GREATER_OR_EQUAL,
-            CompareFunc::Always => vk::CompareOp::ALWAYS,
         }
     }
 }
