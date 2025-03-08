@@ -228,14 +228,17 @@ fn main() {
                 prev_inv_view: view.inverse(),
             }),
         );
-        renderer.add_task_to_queue(render_task::RenderTask {
-            mesh_buffer_id: fullscreen_mesh_id,
-            instance_count: 1,
-            vertex_count: 3,
-            indices_offset: 0,
-            kind: render_task::TaskKind::Fullscreen,
-            resources: HashMap::new(),
-        });
+        renderer.add_task_to_queue(
+            render_task::RenderTask {
+                mesh_buffer_id: fullscreen_mesh_id,
+                instance_count: 1,
+                vertex_count: 3,
+                indices_offset: 0,
+                kind: render_task::TaskKind::Fullscreen,
+                resources: HashMap::new(),
+            },
+            0,
+        );
         {
             let world_dir = Vec3::new(1.0, -1.0, 1.0).normalize();
             let view_dir = view.transform_vector3(world_dir);
@@ -256,14 +259,17 @@ fn main() {
                     cascade_splits: Vec4::ZERO,
                 }]),
             );
-            renderer.add_task_to_queue(render_task::RenderTask {
-                mesh_buffer_id: fullscreen_mesh_id,
-                instance_count: 1,
-                vertex_count: 3,
-                indices_offset: 0,
-                kind: render_task::TaskKind::LightDir,
-                resources: dir_resources,
-            });
+            renderer.add_task_to_queue(
+                render_task::RenderTask {
+                    mesh_buffer_id: fullscreen_mesh_id,
+                    instance_count: 1,
+                    vertex_count: 3,
+                    indices_offset: 0,
+                    kind: render_task::TaskKind::LightDir,
+                    resources: dir_resources,
+                },
+                0,
+            );
         }
         if renderer.is_texture_uploaded(quad_texture_id)
             && renderer.is_texture_uploaded(quad_normal_id)
@@ -294,14 +300,17 @@ fn main() {
                     ..Default::default()
                 }]),
             );
-            renderer.add_task_to_queue(render_task::RenderTask {
-                mesh_buffer_id: quad_mesh_id,
-                instance_count: 1,
-                vertex_count: 6,
-                indices_offset: 0,
-                kind: render_task::TaskKind::MeshStatic,
-                resources: quad_resources,
-            });
+            renderer.add_task_to_queue(
+                render_task::RenderTask {
+                    mesh_buffer_id: quad_mesh_id,
+                    instance_count: 1,
+                    vertex_count: 6,
+                    indices_offset: 0,
+                    kind: render_task::TaskKind::MeshStatic,
+                    resources: quad_resources,
+                },
+                0,
+            );
         }
         renderer.render();
     });

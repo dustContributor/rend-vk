@@ -447,6 +447,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     renderer: u64,
     kind: u32,
     mesh_id: u32,
+    parent_id: u32,
     instance_count: u32,
     vertex_count: u32,
     indices_offset: u32,
@@ -467,7 +468,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
         indices_offset,
         mesh_buffer_id: mesh_id,
     };
-    renderer.add_task_to_queue(task);
+    renderer.add_task_to_queue(task, parent_id);
     Box::leak(renderer);
 }
 

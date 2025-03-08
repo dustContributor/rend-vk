@@ -105,11 +105,7 @@ impl Renderer {
         log::trace!("renderer destroyed!");
     }
 
-    pub fn add_task_to_queue(&mut self, task: RenderTask) {
-        self.add_task_to_parented_queue(task, 0)
-    }
-
-    pub fn add_task_to_parented_queue(&mut self, task: RenderTask, parent_id: u32) {
+    pub fn add_task_to_queue(&mut self, task: RenderTask, parent_id: u32) {
         let key = task.kind.to_key(parent_id);
         let tasks = self.batches_by_task_type.entry(key).or_default();
         tasks.push(task);
