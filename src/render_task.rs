@@ -59,6 +59,10 @@ impl TaskKind {
     pub const fn to_usize(self) -> usize {
         self as usize
     }
+
+    pub const fn to_key(self, parent_id: u32) -> u64 {
+        (self.to_u32() as u64) << 32 | parent_id as u64
+    }
 }
 
 pub struct RenderTask {

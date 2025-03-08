@@ -50,7 +50,7 @@ pub struct Renderer {
     mesh_buffers_by_id: HashMap<u32, MeshBuffer>,
     textures_by_id: HashMap<u32, Texture>,
     shader_resources_by_kind: HashMap<ResourceKind, SingleResource>,
-    batches_by_task_type: Vec<Vec<RenderTask>>,
+    batches_by_task_type: HashMap<u64, Vec<RenderTask>>,
     mesh_buffer_ids: BitVec,
 
     optimal_transition_queue: Vec<u32>,
@@ -106,9 +106,16 @@ impl Renderer {
     }
 
     pub fn add_task_to_queue(&mut self, task: RenderTask) {
-        if let Some(batch) = self.batches_by_task_type.get_mut(task.kind as usize) {
-            batch.push(task)
-        }
+        self.add_task_to_parented_queue(task, 0)
+    }
+
+    pub fn add_task_to_parented_queue(&mut self, task: RenderTask, parent_id: u32) {
+        let key = task.kind.to_key(parent_id);
+        let tasks = match self.batches_by_task_type.entry(key) {
+            std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
+            std::collections::hash_map::Entry::Vacant(v) => v.insert(Vec::new()),
+        };
+        tasks.push(task);
     }
 
     pub fn try_get_sampler(&self, key: SamplerKey) -> Option<u8> {
@@ -323,7 +330,7 @@ impl Renderer {
         self.present(attachment_index);
 
         // Clear batch queues for next frame
-        for batch in &mut self.batches_by_task_type {
+        for batch in &mut self.batches_by_task_type.values_mut() {
             batch.clear();
         }
         // Increment ID for next frame
@@ -727,10 +734,7 @@ where
     let textures_by_id = HashMap::new();
 
     log::trace!("test triangle created!");
-    let mut batches_by_task_type = Vec::with_capacity(TaskKind::MAX_SIZE + 1);
-    (0..TaskKind::MAX_LEN).for_each(|_| {
-        batches_by_task_type.push(Vec::new());
-    });
+    let batches_by_task_type = HashMap::with_capacity(TaskKind::MAX_SIZE * 2);
 
     log::trace!("finishing renderer...");
     let mut renderer = Renderer {

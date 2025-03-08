@@ -131,6 +131,7 @@ pub struct Material {
     pub glow_sampler: u8,
     pub padding: u8,
 }
+const MAX_DIR_LIGHT_CASCADES: usize = 4;
 #[derive(Clone)]
 #[repr(C)]
 pub struct DirLight {
@@ -138,7 +139,8 @@ pub struct DirLight {
     pub color: Vec4,
     pub sky_color: Vec4,
     pub ground_color: Vec4,
-    pub inv_view_shadow_proj: Mat4,
+    pub cascade_projs: [Mat4; MAX_DIR_LIGHT_CASCADES],
+    pub cascade_splits: Vec4,
 }
 #[derive(Clone)]
 #[repr(C)]
@@ -171,9 +173,11 @@ pub struct Frustum {
 #[repr(C)]
 pub struct View {
     pub view: Mat4,
+    pub inv_view: Mat4,
     pub proj: Mat4,
     pub view_proj: Mat4,
     pub prev_view: Mat4,
+    pub prev_inv_view: Mat4,
     pub prev_proj: Mat4,
     pub prev_view_proj: Mat4,
 }
@@ -203,7 +207,13 @@ pub struct Timing {
 pub struct Joint {}
 #[derive(Clone)]
 #[repr(C)]
-pub struct StaticShadow {}
+pub struct StaticShadow {
+    pub cascade_id: u32,
+    // Pad to 16 bytes
+    pub pad0: u32,
+    pub pad1: u32,
+    pub pad2: u32,
+}
 #[derive(Clone)]
 #[repr(C)]
 pub struct Sky {}

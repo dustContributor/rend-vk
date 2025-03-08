@@ -22,6 +22,7 @@ pub struct RenderStage {
     pub per_pass_updaters: Vec<ResourceKind>,
     pub attachment_descriptors: Option<Box<DescriptorGroup>>,
     pub task_kind: TaskKind,
+    pub batch_parent_id: u32,
     pub index: u32,
     pub is_final: bool,
     pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
@@ -112,14 +113,16 @@ impl Stage for RenderStage {
                 self.pipeline,
             );
         }
-        let tasks = &ctx.batches_by_task_type[self.task_kind.to_usize()];
-        let per_pass_buffers = if tasks.is_empty() {
+        let tasks = &ctx
+            .batches_by_task_type
+            .get(&self.task_kind.to_key(self.batch_parent_id));
+        let per_pass_buffers = if tasks.is_none_or(|x| x.is_empty()) {
             // Nothing to draw, nothing to reserve
             Vec::new()
         } else {
             self.reserve_pass_buffers(&ctx.buffer_allocator, ctx.shader_resources_by_kind)
         };
-        for task in tasks {
+        for task in tasks.unwrap_or(&Vec::new()) {
             let mesh_buffer = ctx.mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
             let is_indexed = !mesh_buffer.indices.is_empty();
             // Most of the time it's nowehere near going to be close to 32 addresses

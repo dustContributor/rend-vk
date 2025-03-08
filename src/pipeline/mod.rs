@@ -45,7 +45,7 @@ pub fn signal_value_for(current_frame: u64, total_stages: u32, stage_index: u32)
 #[derive(Clone)]
 pub struct RenderContext<'a> {
     pub vulkan: &'a crate::context::VulkanContext,
-    pub batches_by_task_type: &'a Vec<Vec<RenderTask>>,
+    pub batches_by_task_type: &'a HashMap<u64, Vec<RenderTask>>,
     pub mesh_buffers_by_id: &'a HashMap<u32, MeshBuffer>,
     pub shader_resources_by_kind: &'a HashMap<ResourceKind, SingleResource>,
     pub sampler_descriptors: &'a DescriptorGroup,

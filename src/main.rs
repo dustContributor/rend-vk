@@ -224,6 +224,8 @@ fn main() {
                 prev_view: view,
                 prev_proj: proj,
                 prev_view_proj: proj * view,
+                inv_view: view.inverse(),
+                prev_inv_view: view.inverse(),
             }),
         );
         renderer.add_task_to_queue(render_task::RenderTask {
@@ -245,7 +247,13 @@ fn main() {
                     ground_color: Vec4::new(1.0, 0.0, 0.0, 0.0),
                     sky_color: Vec4::new(0.0, 0.0, 1.0, 0.0),
                     view_dir: Vec4::new(view_dir.x, view_dir.y, view_dir.z, 0.0),
-                    inv_view_shadow_proj: Mat4::IDENTITY,
+                    cascade_projs: [
+                        Mat4::IDENTITY,
+                        Mat4::IDENTITY,
+                        Mat4::IDENTITY,
+                        Mat4::IDENTITY,
+                    ],
+                    cascade_splits: Vec4::ZERO,
                 }]),
             );
             renderer.add_task_to_queue(render_task::RenderTask {

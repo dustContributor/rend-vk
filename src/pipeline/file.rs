@@ -40,6 +40,8 @@ pub struct Sampler {
 pub struct RenderPass {
     pub name: String,
     pub program: String,
+    #[serde(default)]
+    pub batch_parent_id: u32,
     pub depth_stencil: Option<String>,
     pub batch: crate::render_task::TaskKind,
     pub outputs: Vec<String>,
@@ -211,7 +213,9 @@ pub struct StencilDesc {
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
 pub struct ScissorDesc {
+    #[serde(default = "U32OrF32::zero")]
     pub x: U32OrF32,
+    #[serde(default = "U32OrF32::zero")]
     pub y: U32OrF32,
     pub width: U32OrF32,
     pub height: U32OrF32,
@@ -220,7 +224,9 @@ pub struct ScissorDesc {
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
 pub struct ViewportDesc {
+    #[serde(default = "U32OrF32::zero")]
     pub x: U32OrF32,
+    #[serde(default = "U32OrF32::zero")]
     pub y: U32OrF32,
     pub width: U32OrF32,
     pub height: U32OrF32,
@@ -419,9 +425,8 @@ impl CompareFunc {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Copy, Clone, Deserialize)]
 #[serde(untagged)]
-#[derive(Copy, Clone)]
 pub enum U32OrF32 {
     U32(u32),
     F32(f32),
@@ -433,6 +438,10 @@ impl U32OrF32 {
             U32OrF32::U32(v) => v as f32,
             U32OrF32::F32(v) => size * v,
         }
+    }
+
+    fn zero() -> Self {
+        U32OrF32::U32(0)
     }
 }
 
