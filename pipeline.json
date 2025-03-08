@@ -2,52 +2,80 @@
   "targets": [
     {
       "name": "albedo",
-      "group": "gbuffer",
       "format": "R8G8B8A8_SRGB",
       "width": 1.0,
       "height": 1.0
     },
     {
       "name": "normal",
-      "group": "gbuffer",
       "format": "R16G16_SFLOAT",
       "width": 1.0,
       "height": 1.0
     },
     {
       "name": "velocity",
-      "group": "gbuffer",
       "format": "R16G16_SFLOAT",
       "width": 1.0,
       "height": 1.0
     },
     {
       "name": "misc",
-      "group": "gbuffer",
       "format": "B10G11R11_UFLOAT_PACK32",
       "width": 1.0,
       "height": 1.0
     },
     {
       "name": "lightAcc",
-      "group": "gbuffer",
       "format": "B10G11R11_UFLOAT_PACK32",
       "width": 1.0,
       "height": 1.0
     },
     {
       "name": "depth",
-      "group": "gbuffer",
       "format": "D32_SFLOAT",
       "width": 1.0,
       "height": 1.0
+    },
+    {
+      "name": "cascade0",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade1",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade2",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade3",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
     }
   ],
   "programs": [
     {
-      "name": "dirlight",
+      "name": "dirLight",
       "vertex": "fullscreen.vert",
       "fragment": "dir_light.frag"
+    },
+    {
+      "name": "dirLightShadow",
+      "vertex": "fullscreen.vert",
+      "fragment": "dir_shadow.frag"
+    },
+    {
+      "name": "dirLightShadowMap",
+      "vertex": "dir_shadowmap.vert",
+      "fragment": "empty.frag"
     },
     {
       "name": "pointLight",
@@ -105,9 +133,148 @@
     },
     {
       "isDisabled": false,
-      "name": "dirlight",
+      "name": "dirLightCascade0",
       "type": "render",
-      "program": "dirlight",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 0,
+      "depthStencil": "cascade0",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "DEFAULT",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade1",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 1,
+      "depthStencil": "cascade1",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "DEFAULT",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade2",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 2,
+      "depthStencil": "cascade2",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "DEFAULT",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade3",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 3,
+      "depthStencil": "cascade3",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "DEFAULT",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "name": "dirLightShadow",
+      "type": "render",
+      "program": "dirLightShadow",
       "batch": "LIGHT_DIR",
       "depthStencil": "depth",
       "outputs": [
@@ -116,25 +283,58 @@
       "inputs": [
         {
           "name": "albedo",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "normal",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "misc",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "depth",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "cascade0",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade1",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade2",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade3",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
         }
       ],
       "perInstanceUpdaters": [
         "DIR_LIGHT"
       ],
       "perPassUpdaters": [
+        "VIEW",
         "VIEW_RAY",
         "FRUSTUM"
       ],
@@ -168,19 +368,19 @@
       "inputs": [
         {
           "name": "albedo",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "normal",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "misc",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "depth",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         }
       ],
       "perInstanceUpdaters": [
@@ -204,7 +404,7 @@
       }
     },
     {
-      "isDisabled": false,
+      "isDisabled": true,
       "type": "blit",
       "name": "resize",
       "input": "lightAcc",
@@ -227,7 +427,7 @@
       ]
     },
     {
-      "isDisabled": false,
+      "isDisabled": true,
       "type": "blit",
       "name": "resize2",
       "input": "misc",
@@ -297,19 +497,27 @@
       "inputs": [
         {
           "name": "lightAcc",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "normal",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "albedo",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
         },
         {
           "name": "misc",
-          "sampler": "LINEAR"
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "cascade0",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "cascade1",
+          "sampler": "DEFAULT"
         }
       ],
       "perInstanceUpdaters": [],

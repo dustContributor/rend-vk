@@ -11,7 +11,10 @@
 #define NUM_INV_PI 0.31830987
 #define NUM_INV_TAU 0.15915494
 #define NUM_SQRT2 1.4142135
-/* Various struct definitions. */
+
+#define DIR_LIGHT_CASCADES 4u
+
+#define MAX_DIR_LIGHT_CASCADES 4u
 
 struct Frustum
 {
@@ -26,9 +29,11 @@ struct Frustum
 struct View
 {
   mat4 view;
+  mat4 invView;
   mat4 proj;
   mat4 viewProj;
   mat4 prevView;
+  mat4 prevInvView;
   mat4 prevProj;
   mat4 prevViewProj;
 };
@@ -89,15 +94,23 @@ struct DirLight
   vec4 skyColor;
   vec4 groundColor;
   // For shadows.
-  mat4 invViewShadowProj;
-  // float cameraHeight;
-  // float innerRadius;
-  // float outerRadius;
+  mat4 cascadeViewProjs[MAX_DIR_LIGHT_CASCADES];
+  vec4 cascadeSplits;
 };
 
 struct StaticShadow
 {
-  mat4 mvp;
+#ifdef IS_VULKAN
+  uint32_t cascadeId;
+  uint32_t padding0;
+  uint32_t padding1;
+  uint32_t padding2; // pad to 16 bytes
+#else
+  uint cascadeId;
+  uint padding0;
+  uint padding1;
+  uint padding2; // pad to 16 bytes
+#endif
 };
 
 struct PointLight

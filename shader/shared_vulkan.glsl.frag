@@ -26,6 +26,7 @@ BUFFER_REF(Transforms, Transform)
 BUFFER_REF(Materials, Material)
 BUFFER_REF(DirLights, DirLight)
 BUFFER_REF(PointLights, PointLight)
+BUFFER_REF(StaticShadows, StaticShadow)
 BUFFER_REF(TransformExtras, TransformExtra)
 // Per pass data
 
@@ -94,10 +95,12 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define USING_INST_MATERIAL_MACRO Materials materials;
 #define USING_INST_DIRLIGHT_MACRO DirLights dirLights;
 #define USING_INST_POINTLIGHT_MACRO PointLights pointLights;
+#define USING_INST_STATIC_SHADOW_MACRO StaticShadows staticShadows;
 #define USING_INST_TRANSFORM_EXTRA_MACRO TransformExtras transformExtras;
 // Per-pass data definitions
 #define USING_PASS_TRANSFORM_MACRO Transform transform;
 #define USING_PASS_MATERIAL_MACRO Material material;
+#define USING_PASS_DIRLIGHT_MACRO DirLight dirLight;
 #define USING_PASS_FRUSTUM_MACRO Frustum frustum;
 #define USING_PASS_VIEWRAY_MACRO ViewRay viewRay;
 #define USING_PASS_TRANSFORM_EXTRA_MACRO TransformExtra transformExtra;

@@ -12,6 +12,7 @@ ATTR_LOC(0) in vec2 passTexCoord;
 ATTR_LOC(1) flat in int passInstanceId;
 
 PASS_DATA_BEGIN
+	USING(PASS, VIEW)
 	USING(PASS, VIEWRAY)
 	USING(PASS, FRUSTUM)
 PASS_DATA_END
@@ -27,16 +28,23 @@ INPUTS_END
 // Output parameters.
 WRITING(outLightAcc, vec3, 0);
 
-// Textures
 DESCRIPTOR(SAMPLER, DEFAULT, 0)
+// Textures
 SAMPLING(gbAlbedo, SMP_RT, 2D, 0)
 SAMPLING(gbNormal, SMP_RT, 2D, 1)
 SAMPLING(gbMisc, SMP_RT, 2D, 2)
 SAMPLING(gbDepth, SMP_RT, 2D, 3)
+SAMPLING(gbCascade0, SMP_RT, 2DShadow, 4)
+SAMPLING(gbCascade1, SMP_RT, 2DShadow, 5)
+SAMPLING(gbCascade2, SMP_RT, 2DShadow, 6)
+SAMPLING(gbCascade3, SMP_RT, 2DShadow, 7)
+
+const float DEPTH_BIAS = 0.005;
 
 void main() {
 	Frustum frustum = READ(PASS, FRUSTUM);
 	ViewRay viewRay = READ(PASS, VIEWRAY);
+	View view = READ(PASS, VIEW);
 	// Fetch shininess value.
 	float shininess = texture(gbMisc, passTexCoord).x;
 	// Fetch albedo texel.
@@ -55,6 +63,32 @@ void main() {
 	// Light color
 	vec3 lightColor = dirLight.color.xyz;
 
+	uint cascadeIndex = 0u;
+    for (uint i = 0u; i < (DIR_LIGHT_CASCADES - 1u); ++i) {
+        if (viewPos.z < dirLight.cascadeSplits[i]) {
+            cascadeIndex = i + 1u;
+        }
+    }
+
+	// Compute position in light space.
+	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadeIndex] * view.invView * vec4(viewPos, 1.0);
+
+	vec3 lightSpacePos = tmpLightSpacePos.xyz / tmpLightSpacePos.w;
+	vec2 shadowmapCoords = lightSpacePos.xy * 0.5 + 0.5;
+	// Depth bias applied here, if applied on the shadow sampler results aren't good.
+	float lightSpaceDepth = lightSpacePos.z * 0.5 + 0.5 - DEPTH_BIAS;
+
+	vec3 inShadow;
+	if (cascadeIndex == 3u) {
+        inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(1, 0, 0);
+    } else if (cascadeIndex == 2u) {
+        inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 1, 0);
+    } else if (cascadeIndex == 1u) {
+        inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 0, 1);
+    } else {
+        inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 1, 1);
+    }
+
 	// Cos angle incidence of light.
 	float cosAngle = dot( normal, lightDir );
 	// Influence factor to lerp for hemispheric ambient.
@@ -66,5 +100,5 @@ void main() {
 	// Hemisperic ambient term.
 	vec3 ambient = mix( dirLight.groundColor.xyz, dirLight.skyColor.xyz, influence ) * lightColor;
 
-	outLightAcc = txAlbedo.xyz * diffuse + ambient + specular;
+	outLightAcc = (txAlbedo.xyz * diffuse + specular * cosAngle) * inShadow + ambient;
 }
