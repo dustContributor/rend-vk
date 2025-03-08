@@ -317,8 +317,8 @@ impl BarrierGen {
                 break;
             }
         }
-        if log::log_enabled!(log::Level::Debug) {
-            // Log the generated barriers if we're in debug logging level
+        if log::log_enabled!(log::Level::Trace) {
+            // Log the generated barriers if we're in TRACE logging level
             log::debug!(
                 "emitted {} barriers for pass {} at index {}",
                 barriers.len(),
