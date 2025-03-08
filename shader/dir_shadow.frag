@@ -64,11 +64,11 @@ void main() {
 	vec3 lightColor = dirLight.color.xyz;
 
 	uint cascadeIndex = 0u;
-    for (uint i = 0u; i < (DIR_LIGHT_CASCADES - 1u); ++i) {
-        if (viewPos.z < dirLight.cascadeSplits[i]) {
-            cascadeIndex = i + 1u;
-        }
-    }
+	for (uint i = 0u; i < (DIR_LIGHT_CASCADES - 1u); ++i) {
+		if (viewPos.z < dirLight.cascadeSplits[i]) {
+			cascadeIndex = i + 1u;
+		}
+	}
 
 	// Compute position in light space.
 	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadeIndex] * view.invView * vec4(viewPos, 1.0);
@@ -80,14 +80,14 @@ void main() {
 
 	vec3 inShadow;
 	if (cascadeIndex == 3u) {
-        inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(1, 0, 0);
-    } else if (cascadeIndex == 2u) {
-        inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 1, 0);
-    } else if (cascadeIndex == 1u) {
-        inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 0, 1);
-    } else {
-        inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth)).xxx;// * vec3(0, 1, 1);
-    }
+		inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+	} else if (cascadeIndex == 2u) {
+		inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+	} else if (cascadeIndex == 1u) {
+		inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+	} else {
+		inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+	}
 
 	// Cos angle incidence of light.
 	float cosAngle = dot( normal, lightDir );
