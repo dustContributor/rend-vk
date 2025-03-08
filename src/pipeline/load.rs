@@ -469,6 +469,7 @@ impl Pipeline {
                     default_attachment_index,
                 },
                 batch_parent_id: render_pass.batch_parent_id,
+                render_area: scissors[0],
                 task_kind: render_pass.batch,
                 pipeline: graphics_pipeline,
                 layout: pipeline_layout,

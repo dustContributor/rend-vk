@@ -16,6 +16,7 @@ pub struct RenderStage {
     pub rendering: Rendering,
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
+    pub render_area: vk::Rect2D,
     pub outputs: Vec<Attachment>,
     pub inputs: Vec<Attachment>,
     pub per_instance_updaters: Vec<ResourceKind>,
@@ -56,11 +57,7 @@ impl Stage for RenderStage {
          */
         let mut rendering_info_builder = vk::RenderingInfo::builder()
             .color_attachments(&rendering_attachments)
-            .render_area(if let Some(att) = self.outputs.first() {
-                att.render_area_no_offset()
-            } else {
-                ctx.default_attachment.render_area_no_offset()
-            })
+            .render_area(self.render_area)
             .layer_count(1);
         if let Some(att) = &self.rendering.depth_stencil {
             rendering_info_builder = rendering_info_builder.depth_attachment(att);
