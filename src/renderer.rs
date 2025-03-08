@@ -111,10 +111,7 @@ impl Renderer {
 
     pub fn add_task_to_parented_queue(&mut self, task: RenderTask, parent_id: u32) {
         let key = task.kind.to_key(parent_id);
-        let tasks = match self.batches_by_task_type.entry(key) {
-            std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
-            std::collections::hash_map::Entry::Vacant(v) => v.insert(Vec::new()),
-        };
+        let tasks = self.batches_by_task_type.entry(key).or_default();
         tasks.push(task);
     }
 
