@@ -495,7 +495,9 @@ fn unpack_render_task_resources(
             // ResourceKind::SpotLight => unpack_multi_resources::<SpotLight>(start, end, data),
             // ResourceKind::Joint => unpack_multi_resources::<Joint>(start, end, data),
             // ResourceKind::Sky => unpack_multi_resources::<Sky>(start, end, data),
-            // ResourceKind::StaticShadow => unpack_multi_resources::<StaticShadow>(start, end, data),
+            ResourceKind::StaticShadow => {
+                unpack_multi_resource::<StaticShadow>(offset, instances, data)
+            }
             ResourceKind::TransformExtra => {
                 unpack_multi_resource::<TransformExtra>(offset, instances, data)
             }

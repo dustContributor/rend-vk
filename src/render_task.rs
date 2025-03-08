@@ -7,21 +7,20 @@ use crate::UsedAsIndex;
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum TaskKind {
-    Undefined,
-    MeshStatic,
-    MeshAnimated,
-    LightDir,
-    LightPoint,
-    LightSpot,
-    MeshStaticShadowDir,
-    MeshAnimatedShadowDir,
-    MeshStaticShadowPoint,
-    MeshAnimatedShadowPoint,
-    WireframeStatic,
-    Skybox,
-    Sky,
-    Fullscreen,
-    Nuklear,
+    Undefined = 0,
+    MeshStatic = 1,
+    MeshAnimated = 2,
+    LightDir = 3,
+    LightPoint = 4,
+    LightSpot = 5,
+    MeshStaticShadowDir = 6,
+    MeshStaticShadowPoint = 7,
+    MeshStaticShadowSpot = 8,
+    WireframeStatic = 9,
+    Skybox = 10,
+    Sky = 11,
+    Fullscreen = 12,
+    Nuklear = 13,
 }
 
 const MAX_TASK_KIND: u8 = TaskKind::Nuklear.to_u8();

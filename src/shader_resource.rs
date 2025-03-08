@@ -129,7 +129,8 @@ pub struct Material {
     pub diffuse_sampler: u8,
     pub normal_sampler: u8,
     pub glow_sampler: u8,
-    pub padding: u8,
+    // Pad to 24 bytes
+    pub pad0: u8,
 }
 const MAX_DIR_LIGHT_CASCADES: usize = 4;
 #[derive(Clone)]
@@ -168,6 +169,9 @@ pub struct Frustum {
     pub inv_height: f32,
     pub near_plane: f32,
     pub far_plane: f32,
+    // Pad to 32 bytes
+    pub pad0: u32,
+    pub pad1: u32,
 }
 #[derive(Clone)]
 #[repr(C)]
