@@ -1,9 +1,11 @@
 use std::{collections::HashMap, hash::Hash};
 
+use serde::{Deserialize, Serialize};
+
 use crate::shader_resource::{MultiResource, ResourceKind};
 use crate::UsedAsIndex;
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum TaskKind {
@@ -64,6 +66,7 @@ impl TaskKind {
     }
 }
 
+#[derive(Serialize)]
 pub struct RenderTask {
     pub kind: TaskKind,
     pub mesh_buffer_id: u32,

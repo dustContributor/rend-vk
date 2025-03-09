@@ -5,10 +5,11 @@ use std::{
 };
 
 use glam::{Mat4, Vec3, Vec4};
+use serde::Serialize;
 
 use crate::UsedAsIndex;
 
-#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display, Hash, Serialize)]
 #[repr(u8)]
 pub enum ResourceKind {
     Transform = 0,
@@ -107,18 +108,18 @@ impl ResourceKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct Transform {
     pub model: Mat4,
     pub prev_model: Mat4,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct TransformExtra {
     pub prev_model: Mat4,
 }
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize)]
 #[repr(C)]
 pub struct Material {
     pub shininess: f32,
@@ -133,7 +134,7 @@ pub struct Material {
     pub pad0: u8,
 }
 const MAX_DIR_LIGHT_CASCADES: usize = 4;
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct DirLight {
     pub view_dir: Vec4,
@@ -143,13 +144,13 @@ pub struct DirLight {
     pub cascade_projs: [Mat4; MAX_DIR_LIGHT_CASCADES],
     pub cascade_splits: Vec4,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct PointLight {
     pub color: Vec3,
     pub radius: f32,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct SpotLight {
     pub cos_cutoff_rad: f32,
@@ -160,7 +161,7 @@ pub struct SpotLight {
     pub color: Vec3,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct Frustum {
     pub width: f32,
@@ -173,7 +174,7 @@ pub struct Frustum {
     pub pad0: u32,
     pub pad1: u32,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct View {
     pub view: Mat4,
@@ -185,7 +186,7 @@ pub struct View {
     pub prev_proj: Mat4,
     pub prev_view_proj: Mat4,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct ViewRay {
     pub bleft: Vec3,
@@ -197,7 +198,7 @@ pub struct ViewRay {
     pub tleft: Vec3,
     pub m33: f32,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct Timing {
     pub interpolation: f32,
@@ -206,10 +207,10 @@ pub struct Timing {
     pub pad1: u32,
     pub pad2: u32,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct Joint {}
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct StaticShadow {
     pub cascade_id: u32,
@@ -218,10 +219,11 @@ pub struct StaticShadow {
     pub pad1: u32,
     pub pad2: u32,
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct Sky {}
 
+#[derive(Clone, Serialize)]
 pub enum MultiResource {
     Transform(Vec<Transform>),
     Material(Vec<Material>),
@@ -238,6 +240,7 @@ pub enum MultiResource {
     Timing(Vec<Timing>),
 }
 
+#[derive(Clone, Serialize)]
 pub enum SingleResource {
     Transform(Transform),
     Material(Material),

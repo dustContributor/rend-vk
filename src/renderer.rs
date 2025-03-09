@@ -3,6 +3,8 @@ use std::{
     alloc::Layout,
     collections::HashMap,
     ffi::CStr,
+    fs::File,
+    io::{BufWriter, Write},
     mem::align_of,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -312,6 +314,25 @@ impl Renderer {
     }
 
     pub fn render(&mut self) {
+        // TODO: Trace feature to write RenderTask to files
+        // if log::log_enabled!(log::Level::Trace) {
+        //     let base_path = std::path::Path::new("log");
+        //     std::fs::DirBuilder::new()
+        //         .recursive(true)
+        //         .create(&base_path)
+        //         .expect(&format!(
+        //             "failed creating the log folder at {}!",
+        //             base_path.to_str().unwrap()
+        //         ));
+        //     let dst_path = base_path.join(format!(
+        //         "rendvk_renderer_rendertasks_{:?}.json",
+        //         self.current_frame
+        //     ));
+        //     let dst_file = File::create(dst_path).unwrap();
+        //     let mut writer = BufWriter::new(dst_file);
+        //     serde_json::to_writer_pretty(&mut writer, &self.batches_by_task_type).unwrap();
+        //     writer.flush().unwrap();
+        // }
         let (attachment_index, default_attachment) = self.acquire_next_swapchain_attachment();
 
         self.setup_frame();

@@ -6,9 +6,9 @@ use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use rend_vk::{
     pipeline::sampler::SamplerKey,
+    render_task::TaskKind,
     shader_resource::{
-        DirLight, Frustum, Material, MultiResource, ResourceKind, Transform, TransformExtra,
-        ViewRay,
+        DirLight, Frustum, Material, MultiResource, ResourceKind, StaticShadow, Transform, ViewRay,
     },
     texture::MipMap,
     window::WindowContext,
@@ -64,16 +64,18 @@ fn main() {
     let proj = Mat4::perspective_rh(fov_y_radians, aspect_ratio, near_plane, far_plane);
     let inv_proj = proj.inverse();
 
-    let quad_model = Mat4::from_scale_rotation_translation(
-        Vec3::new(10.0, 10.0, 10.0),
-        Quat::from_euler(
-            glam::EulerRot::XYZ,
-            -90.0f32.to_radians(),
-            0.0,
-            45.0f32.to_radians(),
-        ),
-        Vec3::new(0.0, -1.0, 0.0),
-    );
+    let make_model_matrix = |pos: Vec3| {
+        Mat4::from_scale_rotation_translation(
+            Vec3::new(10.0, 10.0, 10.0),
+            Quat::from_euler(
+                glam::EulerRot::XYZ,
+                -90.0f32.to_radians(),
+                0.0,
+                45.0f32.to_radians(),
+            ),
+            pos,
+        )
+    };
 
     let gen_quad = |renderer: &mut renderer::Renderer| {
         let xs = 0.5f32;
@@ -125,7 +127,7 @@ fn main() {
         inv_height: 1.0 / window_height,
         inv_width: 1.0 / window_width,
         pad0: 0,
-        pad1: 0
+        pad1: 0,
     };
 
     let gen_view_ray = || {
@@ -199,6 +201,13 @@ fn main() {
         compare_func: pipeline::file::CompareFunc::None,
     });
 
+    while !renderer.is_texture_uploaded(quad_texture_id)
+        || !renderer.is_texture_uploaded(quad_normal_id)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        renderer.render();
+    }
+
     window_context.event_loop(|| {
         renderer.place_shader_resource(
             ResourceKind::Frustum,
@@ -230,6 +239,25 @@ fn main() {
                 prev_inv_view: view.inverse(),
             }),
         );
+        let world_dir = Vec3::new(1.0, -1.0, 1.0).normalize();
+        let view_dir = view.transform_vector3(world_dir);
+        let dir_light = DirLight {
+            color: Vec4::new(1.0, 1.0, 1.0, 0.0),
+            ground_color: Vec4::new(1.0, 0.0, 0.0, 0.0),
+            sky_color: Vec4::new(0.0, 0.0, 1.0, 0.0),
+            view_dir: Vec4::new(view_dir.x, view_dir.y, view_dir.z, 0.0),
+            cascade_projs: [
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+            ],
+            cascade_splits: Vec4::ZERO,
+        };
+        renderer.place_shader_resource(
+            ResourceKind::DirLight,
+            rend_vk::shader_resource::SingleResource::DirLight(dir_light.clone()),
+        );
         renderer.add_task_to_queue(
             render_task::RenderTask {
                 mesh_buffer_id: fullscreen_mesh_id,
@@ -241,79 +269,73 @@ fn main() {
             },
             0,
         );
-        {
-            let world_dir = Vec3::new(1.0, -1.0, 1.0).normalize();
-            let view_dir = view.transform_vector3(world_dir);
-            let mut dir_resources = HashMap::new();
-            dir_resources.insert(
-                ResourceKind::DirLight,
-                MultiResource::DirLight(vec![DirLight {
-                    color: Vec4::new(1.0, 1.0, 1.0, 0.0),
-                    ground_color: Vec4::new(1.0, 0.0, 0.0, 0.0),
-                    sky_color: Vec4::new(0.0, 0.0, 1.0, 0.0),
-                    view_dir: Vec4::new(view_dir.x, view_dir.y, view_dir.z, 0.0),
-                    cascade_projs: [
-                        Mat4::IDENTITY,
-                        Mat4::IDENTITY,
-                        Mat4::IDENTITY,
-                        Mat4::IDENTITY,
-                    ],
-                    cascade_splits: Vec4::ZERO,
-                }]),
-            );
-            renderer.add_task_to_queue(
-                render_task::RenderTask {
-                    mesh_buffer_id: fullscreen_mesh_id,
-                    instance_count: 1,
-                    vertex_count: 3,
-                    indices_offset: 0,
-                    kind: render_task::TaskKind::LightDir,
-                    resources: dir_resources,
-                },
-                0,
-            );
+
+        let mut dir_light_res = HashMap::new();
+        dir_light_res.insert(
+            ResourceKind::DirLight,
+            MultiResource::DirLight(vec![dir_light]),
+        );
+        renderer.add_task_to_queue(
+            render_task::RenderTask {
+                mesh_buffer_id: fullscreen_mesh_id,
+                instance_count: 1,
+                vertex_count: 3,
+                indices_offset: 0,
+                kind: render_task::TaskKind::LightDir,
+                resources: dir_light_res,
+            },
+            0,
+        );
+
+        let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
+        let quad1_model = make_model_matrix(Vec3::new(0.0, -1.0, 0.0));
+        let quad2_model = make_model_matrix(Vec3::new(-2.0, -0.5, 0.0));
+
+        quad_resources.insert(
+            ResourceKind::StaticShadow,
+            MultiResource::StaticShadow(vec![StaticShadow {
+                cascade_id: 1,
+                pad0: 0,
+                pad1: 0,
+                pad2: 0,
+            }]),
+        );
+        quad_resources.insert(
+            ResourceKind::Material,
+            MultiResource::Material(vec![Material {
+                diffuse_handle: quad_texture_id,
+                normal_handle: quad_normal_id,
+                diffuse_sampler: sampler_id,
+                normal_sampler: sampler_id,
+                scaling: 1.0,
+                shininess: 100.0,
+                ..Default::default()
+            }]),
+        );
+        for kind in [TaskKind::MeshStatic, TaskKind::MeshStaticShadowDir] {
+            for model_mat in [quad1_model, quad2_model] {
+                let mut task_res = quad_resources.clone();
+                task_res.insert(
+                    ResourceKind::Transform,
+                    MultiResource::Transform(vec![Transform {
+                        model: model_mat,
+                        prev_model: model_mat,
+                    }]),
+                );
+                renderer.add_task_to_queue(
+                    render_task::RenderTask {
+                        mesh_buffer_id: quad_mesh_id,
+                        instance_count: 1,
+                        vertex_count: 6,
+                        indices_offset: 0,
+                        kind: kind,
+                        resources: task_res,
+                    },
+                    0,
+                );
+            }
         }
-        if renderer.is_texture_uploaded(quad_texture_id)
-            && renderer.is_texture_uploaded(quad_normal_id)
-        {
-            let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
-            quad_resources.insert(
-                ResourceKind::Transform,
-                MultiResource::Transform(vec![Transform {
-                    model: quad_model,
-                    prev_model: quad_model,
-                }]),
-            );
-            quad_resources.insert(
-                ResourceKind::TransformExtra,
-                MultiResource::TransformExtra(vec![TransformExtra {
-                    prev_model: quad_model,
-                }]),
-            );
-            quad_resources.insert(
-                ResourceKind::Material,
-                MultiResource::Material(vec![Material {
-                    diffuse_handle: quad_texture_id,
-                    normal_handle: quad_normal_id,
-                    diffuse_sampler: sampler_id,
-                    normal_sampler: sampler_id,
-                    scaling: 1.0,
-                    shininess: 100.0,
-                    ..Default::default()
-                }]),
-            );
-            renderer.add_task_to_queue(
-                render_task::RenderTask {
-                    mesh_buffer_id: quad_mesh_id,
-                    instance_count: 1,
-                    vertex_count: 6,
-                    indices_offset: 0,
-                    kind: render_task::TaskKind::MeshStatic,
-                    resources: quad_resources,
-                },
-                0,
-            );
-        }
+
         renderer.render();
     });
     let mut renderer = renderer;
