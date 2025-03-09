@@ -13,6 +13,8 @@ PASS_DATA_END
 INPUTS_BEGIN
 	USING(PASS, DATA)
     USING(ATTR, POSITION)
+    USING(ATTR, NORMAL)
+    USING(ATTR, TEXCOORD)
     USING(INST, TRANSFORM)
     USING(INST, STATIC_SHADOW)
     // Always last
@@ -29,7 +31,6 @@ void main() {
     Transform trn = READ(INST, TRANSFORM);
     StaticShadow ss = READ(INST, STATIC_SHADOW);
     DirLight dl = READ(PASS, DIRLIGHT);
-    
     // Interpolate model translation to get the current position
     vec3 prevTrans = trn.prevModel[3].xyz;
     vec3 currTrans = trn.model[3].xyz;
