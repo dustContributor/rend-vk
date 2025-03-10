@@ -325,11 +325,6 @@ impl Pipeline {
             let clear_color_value = clearing.to_vk_color();
             let clear_depth_stencil_value = clearing.to_vk_depth_stencil();
             let make_attachment_descriptor = |e: (&Attachment, &Sampler)| -> Attachment {
-                let desc = vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::READ_ONLY_OPTIMAL)
-                    .image_view(e.0.view)
-                    .sampler(e.1.sampler)
-                    .build();
                 let descriptor_index = attachment_descriptors
                     .as_mut()
                     .unwrap()
