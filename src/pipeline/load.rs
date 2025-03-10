@@ -268,8 +268,7 @@ impl Pipeline {
                     match samplers_by_key.get(&key) {
                         Some(s) => s.clone(),
                         None => {
-                            let name = format!("sampler_{}", i.name);
-                            let smp = Sampler::of_key(ctx, name, key, samplers_by_key.len() as u8);
+                            let smp = Sampler::of_key(ctx, key, samplers_by_key.len() as u8);
                             samplers_by_key.insert(key, smp.clone());
                             smp
                         }

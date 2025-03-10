@@ -599,7 +599,8 @@ impl DescriptorGroup {
             ..Default::default()
         };
         let writes = [write];
-        unsafe { ctx.device.update_descriptor_sets(&writes, &[]) };
+        let copies = [];
+        unsafe { ctx.device.update_descriptor_sets(&writes, &copies) };
         // Mark index slot as occupied
         self.occupancy.set(index as usize, true);
         return index;

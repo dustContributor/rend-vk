@@ -12,6 +12,16 @@ pub struct SamplerKey {
     pub anisotropy: u8,
 }
 
+impl SamplerKey {
+    pub fn to_u32(self) -> u32 {
+        // 8 bits each
+        self.filter as u32
+            | (self.wrap_mode as u32) << 8
+            | (self.compare_func as u32) << 16
+            | (self.anisotropy as u32) << 24
+    }
+}
+
 #[derive(Clone)]
 pub struct Sampler {
     pub name: String,
@@ -21,19 +31,29 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub fn of_key(ctx: &VulkanContext, name: String, key: SamplerKey, position: u8) -> Self {
+    pub fn of_key(ctx: &VulkanContext, key: SamplerKey, position: u8) -> Self {
         Self::of(
             ctx,
-            name,
+            format!("sampler_{:#x}", key.to_u32()),
             key.filter,
             key.wrap_mode,
             key.compare_func,
-            key.anisotropy,
+            Self::validate_anisotropy(key.anisotropy),
             position,
         )
     }
 
-    pub fn of(
+    fn validate_anisotropy(v: u8) -> u8 {
+        match v {
+            1 => 1,
+            4 => 4,
+            8 => 8,
+            16 => 16,
+            _ => panic!("unsupported anisotropy level {}", v),
+        }
+    }
+
+    fn of(
         ctx: &VulkanContext,
         name: String,
         filter: Filtering,
@@ -50,7 +70,7 @@ impl Sampler {
         }
         let info = Self::info_of(filter, wrap_mode, compare_func, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
-        ctx.try_set_debug_name(&format!("{}_sampler", name), sampler);
+        ctx.try_set_debug_name(&name, sampler);
         Self {
             name,
             sampler,
@@ -70,10 +90,7 @@ impl Sampler {
             .address_mode_v(wrap_mode.to_vk())
             .address_mode_w(wrap_mode.to_vk())
             .anisotropy_enable(if anisotropy > 1 { true } else { false })
-            .compare_enable(match compare_func {
-                CompareFunc::None => false,
-                _ => true,
-            })
+            .compare_enable(compare_func != CompareFunc::None)
             .compare_op(match compare_func {
                 CompareFunc::None => vk::CompareOp::ALWAYS,
                 _ => compare_func.to_vk(),

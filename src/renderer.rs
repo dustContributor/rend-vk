@@ -127,8 +127,7 @@ impl Renderer {
         }
         //  Sampler for this key not found, generate one
         let id = self.pipeline.samplers_by_key.len() as u32;
-        let name = format!("{}", id);
-        let sampler = Sampler::of_key(&self.vulkan_context, name, key, id as u8);
+        let sampler = Sampler::of_key(&self.vulkan_context, key, id as u8);
         let samplers_by_key = &mut self.pipeline.samplers_by_key;
         //  store it for later querying
         samplers_by_key.insert(key, sampler.clone());

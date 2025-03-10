@@ -32,8 +32,13 @@ pub struct Sampler {
     pub filter: Filtering,
     pub wrap_mode: WrapMode,
     pub compare_func: CompareFunc,
-    #[serde(default)]
+    #[serde(default = "Sampler::default_anisotropy")]
     pub anisotropy: u8,
+}
+impl Sampler {
+    fn default_anisotropy() -> u8 {
+        1
+    }
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
