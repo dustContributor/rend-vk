@@ -39,7 +39,8 @@ SAMPLING(gbCascade1, SMP_RT, 2DShadow, 5)
 SAMPLING(gbCascade2, SMP_RT, 2DShadow, 6)
 SAMPLING(gbCascade3, SMP_RT, 2DShadow, 7)
 
-const float DEPTH_BIAS = 0.005;
+const float DEPTH_BIAS = 0.01;
+const float MIN_SHADOW_DIFFUSE = 0.15;
 
 float mapLightSpaceDepth(float v) {
 	#if IS_VULKAN
@@ -81,18 +82,17 @@ void main() {
 	// Compute position in light space.
 	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadeIndex] * view.invView * vec4(viewPos, 1.0);
 	vec3 lightSpacePos = tmpLightSpacePos.xyz / tmpLightSpacePos.w;
-	vec2 shadowmapCoords = lightSpacePos.xy * 0.5 + 0.5;
-	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z);
+	vec3 shadowmapCoords = vec3(lightSpacePos.xy * 0.5 + 0.5, mapLightSpaceDepth(lightSpacePos.z));
 
 	float inShadow;
 	if (cascadeIndex == 3u) {
-		inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth));
+		inShadow = texture(gbCascade3, shadowmapCoords);
 	} else if (cascadeIndex == 2u) {
-		inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth));
+		inShadow = texture(gbCascade2, shadowmapCoords);
 	} else if (cascadeIndex == 1u) {
-		inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth));
+		inShadow = texture(gbCascade1, shadowmapCoords);
 	} else {
-		inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth));
+		inShadow = texture(gbCascade0, shadowmapCoords);
 	}
 
 	// Cos angle incidence of light.
@@ -106,5 +106,8 @@ void main() {
 	// Hemisperic ambient term.
 	vec3 ambient = mix( dirLight.groundColor.xyz, dirLight.skyColor.xyz, influence ) * lightColor;
 
-	outLightAcc = (txAlbedo.xyz * diffuse + specular * cosAngle) * inShadow + ambient;
+	float inShadowSpecular = inShadow;
+	float inShadowDiffuse = max(inShadow, MIN_SHADOW_DIFFUSE);
+
+	outLightAcc = (txAlbedo.xyz * diffuse * cosAngle) * inShadowDiffuse + ambient + specular * inShadowSpecular;
 }
