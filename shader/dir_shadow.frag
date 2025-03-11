@@ -41,6 +41,14 @@ SAMPLING(gbCascade3, SMP_RT, 2DShadow, 7)
 
 const float DEPTH_BIAS = 0.005;
 
+float mapLightSpaceDepth(float v) {
+	#if IS_VULKAN
+	return max(0.0, v - DEPTH_BIAS);
+	#else 
+	return max(0.0, v * 0.5 + 0.5 - DEPTH_BIAS);
+	#endif
+}
+
 void main() {
 	Frustum frustum = READ(PASS, FRUSTUM);
 	ViewRay viewRay = READ(PASS, VIEWRAY);
@@ -72,21 +80,19 @@ void main() {
 
 	// Compute position in light space.
 	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadeIndex] * view.invView * vec4(viewPos, 1.0);
-
 	vec3 lightSpacePos = tmpLightSpacePos.xyz / tmpLightSpacePos.w;
 	vec2 shadowmapCoords = lightSpacePos.xy * 0.5 + 0.5;
-	// Depth bias applied here, if applied on the shadow sampler results aren't good.
-	float lightSpaceDepth = lightSpacePos.z * 0.5 + 0.5 - DEPTH_BIAS;
+	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z);
 
-	vec3 inShadow;
+	float inShadow;
 	if (cascadeIndex == 3u) {
-		inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+		inShadow = texture(gbCascade3, vec3(shadowmapCoords, lightSpaceDepth));
 	} else if (cascadeIndex == 2u) {
-		inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+		inShadow = texture(gbCascade2, vec3(shadowmapCoords, lightSpaceDepth));
 	} else if (cascadeIndex == 1u) {
-		inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+		inShadow = texture(gbCascade1, vec3(shadowmapCoords, lightSpaceDepth));
 	} else {
-		inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth)).xxx;
+		inShadow = texture(gbCascade0, vec3(shadowmapCoords, lightSpaceDepth));
 	}
 
 	// Cos angle incidence of light.
