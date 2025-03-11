@@ -530,11 +530,8 @@ impl Predefined<DepthDesc> for DepthDesc {
 
     fn no() -> DepthDesc {
         Self {
-            func: CompareFunc::LessOrEqual,
-            range_start: 0.0,
-            range_end: 1.0,
             testing: false,
-            clamping: false,
+            ..Self::def()
         }
     }
 }
@@ -698,7 +695,15 @@ impl DescHandler<BlendDesc> for Pipeline {
 }
 
 impl DescHandler<DepthDesc> for Pipeline {
-    // Empty.
+    fn handle_specific(desc: &String) -> DepthDesc {
+        match desc.as_str() {
+            "CLAMP" => DepthDesc {
+                clamping: true,
+                ..DepthDesc::def()
+            },
+            _ => panic!("invalid {desc}"),
+        }
+    }
 }
 
 impl DescHandler<ScissorDesc> for Pipeline {
@@ -875,12 +880,13 @@ impl ClearDesc {
 }
 
 impl TriangleDesc {
-    pub fn to_vk(&self) -> vk::PipelineRasterizationStateCreateInfo {
+    pub fn to_vk(&self, depth_desc: DepthDesc) -> vk::PipelineRasterizationStateCreateInfo {
         vk::PipelineRasterizationStateCreateInfo {
             front_face: self.front_face.to_vk(),
             cull_mode: self.cull_face.to_vk(),
             polygon_mode: self.polygon_mode.to_vk(),
             line_width: 1.0,
+            depth_clamp_enable: if depth_desc.clamping { 1 } else { 0 },
             ..Default::default()
         }
     }

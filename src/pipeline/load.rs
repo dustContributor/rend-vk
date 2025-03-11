@@ -223,7 +223,7 @@ impl Pipeline {
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
                 .scissors(&scissors)
                 .viewports(&viewports);
-            let rasterization_state = triangle.to_vk();
+            let rasterization_state = triangle.to_vk(depth);
             let depth_stencil_attachment = match &render_pass.depth_stencil {
                 Some(name) => Some(attachments_by_name.get(&name.to_string()).expect(&format!(
                     "depth stencil attachment {} missing for pass {}!",
