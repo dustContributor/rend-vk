@@ -96,21 +96,15 @@ struct DirLight
   // For shadows.
   mat4 cascadeViewProjs[MAX_DIR_LIGHT_CASCADES];
   vec4 cascadeSplits;
+  vec4 cascadeBiases;
 };
 
 struct StaticShadow
 {
-#ifdef IS_VULKAN
-  uint32_t cascadeId;
-  uint32_t padding0;
-  uint32_t padding1;
-  uint32_t padding2; // pad to 16 bytes
-#else
   uint cascadeId;
   uint padding0;
   uint padding1;
   uint padding2; // pad to 16 bytes
-#endif
 };
 
 struct PointLight

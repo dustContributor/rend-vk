@@ -143,6 +143,7 @@ pub struct DirLight {
     pub ground_color: Vec4,
     pub cascade_projs: [Mat4; MAX_DIR_LIGHT_CASCADES],
     pub cascade_splits: Vec4,
+    pub cascade_biases: Vec4,
 }
 #[derive(Clone, Serialize)]
 #[repr(C)]

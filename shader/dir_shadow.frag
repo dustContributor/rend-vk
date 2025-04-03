@@ -39,14 +39,13 @@ SAMPLING(gbCascade1, SMP_RT, 2DShadow, 5)
 SAMPLING(gbCascade2, SMP_RT, 2DShadow, 6)
 SAMPLING(gbCascade3, SMP_RT, 2DShadow, 7)
 
-const float DEPTH_BIAS = 0.01;
 const float MIN_SHADOW_DIFFUSE = 0.15;
 
-float mapLightSpaceDepth(float v) {
+float mapLightSpaceDepth(float v, float depthBias) {
 	#if IS_VULKAN
-	return max(0.0, v - DEPTH_BIAS);
+	return max(0.0, v - depthBias);
 	#else 
-	return max(0.0, v * 0.5 + 0.5 - DEPTH_BIAS);
+	return max(0.0, v * 0.5 + 0.5 - depthBias);
 	#endif
 }
 
@@ -72,24 +71,25 @@ void main() {
 	// Light color
 	vec3 lightColor = dirLight.color.xyz;
 
-	uint cascadeIndex = 0u;
+	uint cascadei = 0u;
 	for (uint i = 0u; i < (DIR_LIGHT_CASCADES - 1u); ++i) {
 		if (viewPos.z < dirLight.cascadeSplits[i]) {
-			cascadeIndex = i + 1u;
+			cascadei = i + 1u;
 		}
 	}
 
 	// Compute position in light space.
-	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadeIndex] * view.invView * vec4(viewPos, 1.0);
+	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadei] * view.invView * vec4(viewPos, 1.0);
 	vec3 lightSpacePos = tmpLightSpacePos.xyz / tmpLightSpacePos.w;
-	vec3 shadowmapCoords = vec3(lightSpacePos.xy * 0.5 + 0.5, mapLightSpaceDepth(lightSpacePos.z));
+	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z, dirLight.cascadeBiases[cascadei]);
+	vec3 shadowmapCoords = vec3(lightSpacePos.xy * 0.5 + 0.5, lightSpaceDepth);
 
 	float inShadow;
-	if (cascadeIndex == 3u) {
+	if (cascadei == 3u) {
 		inShadow = texture(gbCascade3, shadowmapCoords);
-	} else if (cascadeIndex == 2u) {
+	} else if (cascadei == 2u) {
 		inShadow = texture(gbCascade2, shadowmapCoords);
-	} else if (cascadeIndex == 1u) {
+	} else if (cascadei == 1u) {
 		inShadow = texture(gbCascade1, shadowmapCoords);
 	} else {
 		inShadow = texture(gbCascade0, shadowmapCoords);

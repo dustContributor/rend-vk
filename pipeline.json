@@ -151,7 +151,7 @@
       ],
       "state": {
         "writing": "DEPTH",
-        "depth": "DEFAULT",
+        "depth": "CLAMP",
         "scissor": {
           "width": 2048,
           "height": 2048
@@ -186,7 +186,7 @@
       ],
       "state": {
         "writing": "DEPTH",
-        "depth": "DEFAULT",
+        "depth": "CLAMP",
         "scissor": {
           "width": 2048,
           "height": 2048
@@ -221,7 +221,7 @@
       ],
       "state": {
         "writing": "DEPTH",
-        "depth": "DEFAULT",
+        "depth": "CLAMP",
         "scissor": {
           "width": 2048,
           "height": 2048
@@ -256,7 +256,7 @@
       ],
       "state": {
         "writing": "DEPTH",
-        "depth": "DEFAULT",
+        "depth": "CLAMP",
         "scissor": {
           "width": 2048,
           "height": 2048

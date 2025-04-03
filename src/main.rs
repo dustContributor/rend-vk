@@ -253,6 +253,7 @@ fn main() {
                 Mat4::IDENTITY,
             ],
             cascade_splits: Vec4::ZERO,
+            cascade_biases: Vec4::ZERO,
         };
         renderer.place_shader_resource(
             ResourceKind::DirLight,
