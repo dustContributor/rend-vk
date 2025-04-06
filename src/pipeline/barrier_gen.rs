@@ -97,6 +97,7 @@ impl BarrierGen {
                     inputs: [p.input.clone()].into(),
                     outputs: [p.output.clone()].into(),
                 },
+                _ => panic!("unsupported pipeline step!"),
             })
             .collect();
         BarrierGen { passes: tmp }

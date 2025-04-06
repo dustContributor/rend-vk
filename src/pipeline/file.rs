@@ -40,6 +40,40 @@ impl Sampler {
         1
     }
 }
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum PipelineStep {
+    Render(RenderPass),
+    Blit(BlitPass),
+    Include(IncludePass),
+}
+
+impl PipelineStep {
+    pub fn is_disabled(&self) -> bool {
+        match self {
+            PipelineStep::Render(p) => p.is_disabled,
+            PipelineStep::Blit(p) => p.is_disabled,
+            PipelineStep::Include(p) => p.is_disabled,
+        }
+    }
+    pub fn name(&self) -> &str {
+        match self {
+            PipelineStep::Render(p) => &p.name,
+            PipelineStep::Blit(p) => &p.name,
+            PipelineStep::Include(p) => &p.name,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncludePass {
+    pub name: String,
+    #[serde(default)]
+    pub is_disabled: bool,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderPass {
@@ -134,28 +168,6 @@ impl BlitPass {
             src_subresource: layer,
             src_offsets: self.input_rect.to_vk(window_width, window_height),
             dst_offsets: self.output_rect.to_vk(window_width, window_height),
-        }
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum PipelineStep {
-    Render(RenderPass),
-    Blit(BlitPass),
-}
-
-impl PipelineStep {
-    pub fn is_disabled(&self) -> bool {
-        match self {
-            PipelineStep::Render(p) => p.is_disabled,
-            PipelineStep::Blit(p) => p.is_disabled,
-        }
-    }
-    pub fn name(&self) -> &str {
-        match self {
-            PipelineStep::Render(p) => &p.name,
-            PipelineStep::Blit(p) => &p.name,
         }
     }
 }

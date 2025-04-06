@@ -22,8 +22,31 @@ impl Pipeline {
         let name = name.unwrap_or("pipeline.json");
         let file = std::fs::File::open(name)
             .expect(format!("failed opening the pipeline at {}", name).as_str());
-        return serde_json::from_reader(file)
+        let pipeline: Pipeline = serde_json::from_reader(file)
             .expect(format!("couldn't parse the pipeline at {}", name).as_str());
+        let mut passes = Vec::new();
+        let mut programs = pipeline.programs;
+        let mut targets = pipeline.targets;
+        for p in pipeline.passes {
+            match p {
+                PipelineStep::Include(pass) => {
+                    let mut pip = Self::read(Some(&pass.name));
+                    programs.append(&mut pip.programs);
+                    targets.append(&mut pip.targets);
+                    if !pass.is_disabled {
+                        passes.append(&mut pip.passes)
+                    }
+                }
+                _ => {
+                    passes.push(p);
+                }
+            };
+        }
+        return Pipeline {
+            passes,
+            programs,
+            targets,
+        };
     }
 
     fn spirv_path_of(shader: &str) -> String {
@@ -209,6 +232,7 @@ impl Pipeline {
                 }
                 // Render pass requires the longer setup below
                 PipelineStep::Render(render) => render,
+                _ => panic!("unsupported pipeline step!"),
             };
             let writing = Self::handle_option(render_pass.state.writing.clone());
             let depth = Self::handle_option(render_pass.state.depth.clone());

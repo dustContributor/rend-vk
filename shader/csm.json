@@ -1,0 +1,266 @@
+{
+  "targets": [
+    {
+      "name": "cascade0",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade1",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade2",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "cascade3",
+      "format": "D16_UNORM",
+      "width": 2048,
+      "height": 2048
+    }
+  ],
+  "programs": [
+    {
+      "name": "dirLightShadow",
+      "vertex": "fullscreen.vert",
+      "fragment": "dir_shadow.frag"
+    },
+    {
+      "name": "dirLightShadowMap",
+      "vertex": "dir_shadowmap.vert",
+      "fragment": "empty.frag"
+    }
+  ],
+  "passes": [
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade0",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 0,
+      "depthStencil": "cascade0",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "CLAMP",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade1",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 1,
+      "depthStencil": "cascade1",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "CLAMP",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade2",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 2,
+      "depthStencil": "cascade2",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "CLAMP",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "dirLightCascade3",
+      "type": "render",
+      "program": "dirLightShadowMap",
+      "batch": "MESH_STATIC_SHADOW_DIR",
+      "batchParentId": 3,
+      "depthStencil": "cascade3",
+      "outputs": [],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "TRANSFORM",
+        "STATIC_SHADOW"
+      ],
+      "perPassUpdaters": [
+        "DIR_LIGHT",
+        "TIMING"
+      ],
+      "state": {
+        "writing": "DEPTH",
+        "depth": "CLAMP",
+        "scissor": {
+          "width": 2048,
+          "height": 2048
+        },
+        "viewport": {
+          "width": 2048,
+          "height": 2048
+        },
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "name": "dirLightShadow",
+      "type": "render",
+      "program": "dirLightShadow",
+      "batch": "LIGHT_DIR",
+      "depthStencil": "depth",
+      "outputs": [
+        "lightAcc"
+      ],
+      "inputs": [
+        {
+          "name": "albedo",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "normal",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "misc",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "depth",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "cascade0",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade1",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade2",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        },
+        {
+          "name": "cascade3",
+          "sampler": {
+            "filter": "LINEAR",
+            "wrapMode": "CLAMP_TO_EDGE",
+            "compareFunc": "LESS_OR_EQUAL"
+          }
+        }
+      ],
+      "perInstanceUpdaters": [
+        "DIR_LIGHT"
+      ],
+      "perPassUpdaters": [
+        "VIEW",
+        "VIEW_RAY",
+        "FRUSTUM"
+      ],
+      "state": {
+        "writing": "COLOR",
+        "depth": {
+          "func": "GREATER",
+          "rangeStart": 1.0,
+          "rangeEnd": 1.0,
+          "testing": true,
+          "clamping": false
+        },
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "COLOR"
+      }
+    }
+  ]
+}
