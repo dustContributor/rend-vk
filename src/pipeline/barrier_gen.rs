@@ -60,11 +60,9 @@ impl BarrierEval {
 }
 
 impl BarrierGen {
-    pub fn new(passes: &Vec<PipelineStep>) -> Self {
+    pub fn new(passes: &[PipelineStep]) -> Self {
         let tmp = passes
             .iter()
-            // Filter out disabled passes and only keep the inputs/outputs around
-            .filter(|p| !p.is_disabled())
             .map(|p| match p {
                 PipelineStep::Render(p) => {
                     let mut outputs = p.outputs.clone();

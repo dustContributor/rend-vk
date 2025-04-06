@@ -36,7 +36,7 @@ impl Pipeline {
 
     fn compile_shader_programs(
         ctx: &VulkanContext,
-        pip: &Pipeline,
+        programs: &[Program],
     ) -> HashMap<String, shader::ShaderProgram> {
         // Create dest folder for all of the SPIR-V binaries
         let base_path = Self::spirv_path_of("tmp");
@@ -49,8 +49,7 @@ impl Pipeline {
                 base_path.to_str().unwrap()
             ));
         // Same shader could be used in multiple programs, flatten and de-duplicate
-        let shaders = pip
-            .programs
+        let shaders = programs
             .iter()
             .map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
             .flatten()
@@ -104,8 +103,7 @@ impl Pipeline {
             }
         };
 
-        let programs_by_name: HashMap<_, _> = pip
-            .programs
+        let programs_by_name: HashMap<_, _> = programs
             .iter()
             .map(|p| {
                 (
@@ -131,8 +129,14 @@ impl Pipeline {
         name: Option<&str>,
     ) -> crate::pipeline::Pipeline {
         let pip = Self::read(name);
-        let barrier_gen = BarrierGen::new(&pip.passes);
-        let shader_programs_by_name = Self::compile_shader_programs(ctx, &pip);
+        let shader_programs_by_name = Self::compile_shader_programs(ctx, &pip.programs);
+        // Filter out disabled passes
+        let enabled_passes: Vec<_> = pip
+            .passes
+            .into_iter()
+            .filter(|e| !e.is_disabled())
+            .collect();
+        let barrier_gen = BarrierGen::new(&enabled_passes);
 
         let window_width = default_attachment.extent.width;
         let window_height = default_attachment.extent.height;
@@ -177,8 +181,6 @@ impl Pipeline {
         let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(default_attachment_name, default_attachment);
-        // If there are no inputs whatsoever, just use a dummy one sized buffer.
-        let enabled_passes: Vec<_> = pip.passes.iter().filter(|e| !e.is_disabled()).collect();
         // Descriptor pool to use across all descriptor sets
         let descriptor_pool = super::descriptor::make_pool(ctx);
         ctx.try_set_debug_name("main_descriptor_pool", descriptor_pool);
