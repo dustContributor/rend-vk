@@ -200,6 +200,18 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceSizeOf(
 }
 
 #[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_getCurrentFrame(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+) -> u64 {
+    let renderer = to_renderer(renderer);
+    let v = renderer.get_current_frame();
+    Box::leak(renderer);
+    return v;
+}
+
+#[no_mangle]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     _unused_jnienv: usize,
     _unused_jclazz: usize,

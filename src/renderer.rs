@@ -3,8 +3,6 @@ use std::{
     alloc::Layout,
     collections::HashMap,
     ffi::CStr,
-    fs::File,
-    io::{BufWriter, Write},
     mem::align_of,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -411,7 +409,7 @@ impl Renderer {
         self.current_frame.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn get_current_frame(&self) -> u64 {
+    pub fn get_current_frame(&self) -> u64 {
         self.current_frame.load(Ordering::Relaxed)
     }
 
@@ -817,6 +815,7 @@ pub fn make_device(
     }
     let features = vk::PhysicalDeviceFeatures {
         shader_clip_distance: 1,
+        depth_clamp: 1,
         ..Default::default()
     };
     let mut features12 = vk::PhysicalDeviceVulkan12Features {
