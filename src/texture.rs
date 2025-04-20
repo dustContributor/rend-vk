@@ -22,6 +22,7 @@ pub struct MipMap {
     pub size: u32,
     pub offset: u32,
 }
+
 impl MipMap {
     pub fn extent(&self) -> vk::Extent2D {
         vk::Extent2D {
@@ -184,43 +185,48 @@ impl Texture {
     }
 }
 
+/// Mipmap formula is max(1, floor(v / 2^i)) where i is the level and v the width or height of the whole texture
+pub fn mip_dimensions_of(index: usize, value: u32) -> u32 {
+    (value as f32 / 2.0f32.powi(index as i32)).floor().max(1.0) as u32
+}
+
+fn usage_flags_for(format: crate::format::Format, is_attachment: bool) -> vk::ImageUsageFlags {
+    if !is_attachment {
+        return vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED;
+    }
+    let depth_or_color = if format.has_depth() {
+        vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+    } else {
+        vk::ImageUsageFlags::COLOR_ATTACHMENT
+    };
+    return depth_or_color
+    // for attachment sampling
+    | vk::ImageUsageFlags::SAMPLED
+    // transfer flags for blits
+    | vk::ImageUsageFlags::TRANSFER_DST
+    | vk::ImageUsageFlags::TRANSFER_SRC;
+}
+
 pub fn make(
     ctx: &VulkanContext,
-    id: u32,
     name: String,
-    mip_maps: &[MipMap],
+    width: u32,
+    height: u32,
+    levels: u8,
     format: crate::format::Format,
     is_attachment: bool,
-    staging: Option<Box<DeviceSlice>>,
 ) -> Texture {
-    assert!(!mip_maps.is_empty(), "mip_maps can't be empty!");
+    assert!(levels > 0, "levels can't be 0!");
     let vk_format = format.to_vk();
     let create_info = vk::ImageCreateInfo {
         image_type: vk::ImageType::TYPE_2D,
         format: vk_format,
-        extent: vk::Extent2D {
-            width: mip_maps[0].width,
-            height: mip_maps[0].height,
-        }
-        .into(),
-        mip_levels: mip_maps.len() as u32,
+        extent: vk::Extent2D { width, height }.into(),
+        mip_levels: levels as u32,
         array_layers: 1,
         samples: vk::SampleCountFlags::TYPE_1,
         tiling: vk::ImageTiling::OPTIMAL,
-        usage: if is_attachment {
-            (if format.has_depth() {
-                vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
-            } else {
-                vk::ImageUsageFlags::COLOR_ATTACHMENT
-            }) 
-            // for attachment sampling
-            | vk::ImageUsageFlags::SAMPLED
-            // transfer flags for blits
-            | vk::ImageUsageFlags::TRANSFER_DST
-            | vk::ImageUsageFlags::TRANSFER_SRC 
-        } else {
-            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED
-        },
+        usage: usage_flags_for(format, is_attachment),
         sharing_mode: vk::SharingMode::EXCLUSIVE,
         ..Default::default()
     };
@@ -272,7 +278,7 @@ pub fn make(
         .subresource_range(
             vk::ImageSubresourceRange::builder()
                 .aspect_mask(format.aspect())
-                .level_count(mip_maps.len() as u32)
+                .level_count(levels as u32)
                 .layer_count(1)
                 .build(),
         )
@@ -283,7 +289,7 @@ pub fn make(
     let view = unsafe {
         ctx.device
             .create_image_view(&image_view_info, None)
-            .expect("failed image view")
+            .expect("failed creating image view")
     };
 
     ctx.try_set_debug_name(&format!("{name}_tex_image"), image);
@@ -291,13 +297,13 @@ pub fn make(
     ctx.try_set_debug_name(&format!("{name}_tex_image_view"), view);
 
     Texture {
+        id: 0,
+        mip_maps: Vec::new(),
         name,
-        id,
-        mip_maps: mip_maps.to_vec(),
         memory,
         format,
         image,
         view,
-        staging,
+        staging: None,
     }
 }

@@ -65,7 +65,9 @@ impl Pipeline {
     ) {
         let total_stages = self.stages.len() as u32;
         for stage in self.stages.iter_mut() {
-            render_context.vulkan.try_begin_debug_label(render_context.command_buffer, stage.name());
+            render_context
+                .vulkan
+                .try_begin_debug_label(render_context.command_buffer, stage.name());
             stage.wait_for_previous_frame(
                 &render_context.vulkan.device,
                 current_frame,
@@ -80,7 +82,9 @@ impl Pipeline {
                 pass_semaphore,
                 render_queue,
             );
-            render_context.vulkan.try_end_debug_label(render_context.command_buffer);
+            render_context
+                .vulkan
+                .try_end_debug_label(render_context.command_buffer);
         }
     }
 
@@ -153,6 +157,9 @@ impl Pipeline {
                 }
                 device.free_memory(attachment.memory, None);
                 device.destroy_image_view(attachment.view, None);
+                for view in &attachment.per_level_views {
+                    device.destroy_image_view(view.clone(), None);
+                }
                 device.destroy_image(attachment.image, None);
             }
         }

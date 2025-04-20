@@ -1,5 +1,7 @@
 use ash::vk;
 
+use crate::{context::VulkanContext, format::Format};
+
 #[derive(Clone)]
 pub struct Attachment {
     pub name: String,
@@ -9,14 +11,53 @@ pub struct Attachment {
     pub vk_format: vk::Format,
     pub image: vk::Image,
     pub view: vk::ImageView,
+    pub per_level_views: Vec<vk::ImageView>,
+    pub level_usage: u8,
     pub extent: vk::Extent2D,
-    pub descriptor_offset: usize,
     pub descriptor_index: u32,
 }
 
 impl Attachment {
     pub const DEFAULT_NAME: &'static str = "default";
     pub const DEPTH_NAME: &'static str = "depth";
+
+    pub fn per_level_view(&self, level: u8) -> vk::ImageView {
+        match self.per_level_views.get(level as usize) {
+            Some(vw) => vw.clone(),
+            None => panic!("attachment {} doesn't has mip level {}", self.name, level),
+        }
+    }
+
+    pub fn per_level_views_of(
+        ctx: &VulkanContext,
+        image: vk::Image,
+        format: Format,
+        levels: u8,
+    ) -> Vec<vk::ImageView> {
+        let vk_format = format.to_vk();
+        let infos = (0..levels).map(|l| {
+            vk::ImageViewCreateInfo::builder()
+                .subresource_range(
+                    vk::ImageSubresourceRange::builder()
+                        .aspect_mask(format.aspect())
+                        .base_mip_level(l as u32)
+                        .level_count(1)
+                        .layer_count(1)
+                        .build(),
+                )
+                .image(image)
+                .format(vk_format)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .build()
+        });
+        infos
+            .map(|info| unsafe {
+                ctx.device
+                    .create_image_view(&info, None)
+                    .expect("failed creating image view")
+            })
+            .collect()
+    }
 
     pub fn default_attachment_of(
         vk_format: vk::Format,
@@ -31,8 +72,9 @@ impl Attachment {
             memory: vk::DeviceMemory::null(),
             name: Attachment::DEFAULT_NAME.to_string(),
             view: image_view,
+            per_level_views: [].into(),
+            level_usage: 0,
             extent,
-            descriptor_offset: 0,
             descriptor_index: 0,
         }
     }
@@ -92,10 +134,18 @@ impl Attachment {
     }
 
     pub fn default_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+        Self::subresource_range_wlevels(aspect, 0, vk::REMAINING_MIP_LEVELS)
+    }
+
+    pub fn subresource_range_wlevels(
+        aspect: vk::ImageAspectFlags,
+        base: u32,
+        count: u32,
+    ) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange::builder()
             .aspect_mask(aspect)
-            .base_mip_level(0)
-            .level_count(1)
+            .base_mip_level(base)
+            .level_count(count)
             .base_array_layer(0)
             .layer_count(1)
             .build()

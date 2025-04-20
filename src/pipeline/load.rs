@@ -13,7 +13,6 @@ use super::{
     stage::Stage,
 };
 use crate::shader;
-use crate::texture::MipMap;
 use crate::{context::VulkanContext, texture};
 use crate::{pipeline::attachment::Attachment, renderer::Renderer};
 
@@ -27,14 +26,16 @@ impl Pipeline {
         let mut passes = Vec::new();
         let mut programs = pipeline.programs;
         let mut targets = pipeline.targets;
+        let mut shared_state = pipeline.shared_state;
         for p in pipeline.passes {
             match p {
                 PipelineStep::Include(pass) => {
-                    let mut pip = Self::read(Some(&pass.name));
-                    programs.append(&mut pip.programs);
-                    targets.append(&mut pip.targets);
+                    let pip = Self::read(Some(&pass.name));
+                    programs.extend(pip.programs);
+                    targets.extend(pip.targets);
+                    shared_state.extend(pip.shared_state);
                     if !pass.is_disabled {
-                        passes.append(&mut pip.passes)
+                        passes.extend(pip.passes)
                     }
                 }
                 _ => {
@@ -46,6 +47,7 @@ impl Pipeline {
             passes,
             programs,
             targets,
+            shared_state,
         };
     }
 
@@ -159,7 +161,18 @@ impl Pipeline {
             .into_iter()
             .filter(|e| !e.is_disabled())
             .collect();
-        let barrier_gen = BarrierGen::new(&enabled_passes);
+        let shared_state = pip.shared_state;
+        let resolve_state = |e: &BaseState| match e {
+            BaseState::State(s) => s.clone(),
+            BaseState::Reference(r) => {
+                let tmp = shared_state
+                    .get(&r.name)
+                    .expect(&format!("missing state with name {}", &r.name));
+                tmp.clone()
+            }
+        };
+
+        let barrier_gen = BarrierGen::new(&enabled_passes, &resolve_state);
 
         let window_width = default_attachment.extent.width;
         let window_height = default_attachment.extent.height;
@@ -171,20 +184,21 @@ impl Pipeline {
                     Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
                 let texture = texture::make(
                     &ctx,
-                    0,
                     f.name.clone(),
-                    &[MipMap {
-                        width: extent.width,
-                        height: extent.height,
-                        ..Default::default()
-                    }],
+                    extent.width,
+                    extent.height,
+                    f.level,
                     f.format,
                     true,
-                    None,
                 );
+                let per_level_views =
+                    Attachment::per_level_views_of(ctx, texture.image, f.format, f.level);
                 ctx.try_set_debug_name(&format!("{}_att_image", f.name), texture.image);
                 ctx.try_set_debug_name(&format!("{}_att_image_memory", f.name), texture.memory);
                 ctx.try_set_debug_name(&format!("{}_att_image_view", f.name), texture.view);
+                for (i, view) in per_level_views.iter().enumerate() {
+                    ctx.try_set_debug_name(&format!("{}_att_image_view{}", f.name, i), *view);
+                }
                 return (
                     f.name.clone(),
                     Attachment {
@@ -195,7 +209,8 @@ impl Pipeline {
                         memory: texture.memory,
                         view: texture.view,
                         extent,
-                        descriptor_offset: 0,
+                        per_level_views,
+                        level_usage: 0,
                         descriptor_index: 0,
                     },
                 );
@@ -234,14 +249,15 @@ impl Pipeline {
                 PipelineStep::Render(render) => render,
                 _ => panic!("unsupported pipeline step!"),
             };
-            let writing = Self::handle_option(render_pass.state.writing.clone());
-            let depth = Self::handle_option(render_pass.state.depth.clone());
-            let blending = Self::handle_option(render_pass.state.blending.clone());
-            let stencil = Self::handle_option(render_pass.state.stencil.clone());
-            let viewport = Self::handle_option(render_pass.state.viewport.clone());
-            let scissor = Self::handle_option(render_pass.state.scissor.clone());
-            let triangle = Self::handle_option(render_pass.state.triangle.clone());
-            let clearing = Self::handle_option(render_pass.state.clearing.clone());
+            let render_pass_state = resolve_state(&render_pass.state);
+            let writing = Self::handle_option(render_pass_state.writing.clone());
+            let depth = Self::handle_option(render_pass_state.depth.clone());
+            let blending = Self::handle_option(render_pass_state.blending.clone());
+            let stencil = Self::handle_option(render_pass_state.stencil.clone());
+            let viewport = Self::handle_option(render_pass_state.viewport.clone());
+            let scissor = Self::handle_option(render_pass_state.scissor.clone());
+            let triangle = Self::handle_option(render_pass_state.triangle.clone());
+            let clearing = Self::handle_option(render_pass_state.clearing.clone());
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
             let viewports = [viewport.to_vk(&depth, window_width as f32, window_height as f32)];
@@ -270,16 +286,16 @@ impl Pipeline {
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
             // TODO: Check why if depth output isn't placed last, VVL errors get reported
-            let attachment_outputs =
-                Self::find_attachments(&render_pass.outputs, &attachments_by_name);
-            let attachment_inputs = Self::find_attachments(
+            let attachment_outputs = Self::find_attachments(
                 &render_pass
-                    .inputs
+                    .outputs
                     .iter()
-                    .map(|e| e.name.clone())
+                    .map(|e| e.get())
                     .collect::<Vec<_>>(),
                 &attachments_by_name,
             );
+            let attachment_inputs =
+                Self::find_attachments(&render_pass.inputs, &attachments_by_name);
             let attachment_samplers: Vec<_> = render_pass
                 .inputs
                 .iter()
@@ -361,7 +377,6 @@ impl Pipeline {
                         e.1.sampler,
                     );
                 Attachment {
-                    descriptor_offset: 0,
                     descriptor_index,
                     ..e.0.clone()
                 }
@@ -370,7 +385,7 @@ impl Pipeline {
             let default_attachment_index = render_pass
                 .outputs
                 .iter()
-                .position(|e| Attachment::DEFAULT_NAME == e);
+                .position(|e| Attachment::DEFAULT_NAME == e.get().name);
 
             // Generate attachment structs with the proper descriptor index/offset
             let inputs: Vec<_> = attachment_inputs
@@ -540,16 +555,20 @@ impl Pipeline {
     }
 
     fn find_attachments(
-        names: &[String],
+        attachments: &[impl AttachmentFile],
         attachments_by_name: &HashMap<String, Attachment>,
     ) -> Vec<Attachment> {
-        names
+        attachments
             .iter()
             .map(|e| {
-                attachments_by_name
-                    .get(e)
-                    .expect(&format!("attachment {e} missing!"))
-                    .clone()
+                let att = attachments_by_name
+                    .get(e.name())
+                    .expect(&format!("attachment {} missing!", e.name()))
+                    .clone();
+                Attachment {
+                    level_usage: e.level().get(),
+                    ..att
+                }
             })
             .collect()
     }
@@ -563,8 +582,8 @@ impl Pipeline {
         window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
     ) -> crate::pipeline::blit_stage::BlitStage {
-        let mut outputs = Self::find_attachments(&[blit.output.clone()], &attachments_by_name);
-        let mut inputs = Self::find_attachments(&[blit.input.clone()], &attachments_by_name);
+        let mut outputs = Self::find_attachments(&[blit.output.get()], &attachments_by_name);
+        let mut inputs = Self::find_attachments(&[blit.input.get()], &attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
         crate::pipeline::blit_stage::BlitStage {
             name: blit.name.clone(),

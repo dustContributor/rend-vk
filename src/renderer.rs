@@ -237,15 +237,20 @@ impl Renderer {
         } else {
             None
         };
-        let texture = crate::texture::make(
-            &self.vulkan_context,
-            texture_id,
-            name,
-            mip_maps,
-            format,
-            false,
-            staging,
-        );
+        let texture = Texture {
+            id: texture_id,
+            mip_maps: mip_maps.into(),
+            staging: staging,
+            ..crate::texture::make(
+                &self.vulkan_context,
+                name,
+                mip_maps[0].width,
+                mip_maps[0].height,
+                mip_maps.len() as u8,
+                format,
+                false,
+            )
+        };
         // Generate descriptor and place it in the image descriptor array buffer
         self.pipeline.image_descriptors.place_image_at(
             &self.vulkan_context,

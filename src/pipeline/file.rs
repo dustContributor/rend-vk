@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ash::vk;
 use serde::Deserialize;
 
@@ -10,7 +12,9 @@ pub struct Pipeline {
     pub targets: Vec<Target>,
     pub programs: Vec<Program>,
     pub passes: Vec<PipelineStep>,
+    pub shared_state: HashMap<String, State>,
 }
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Target {
@@ -18,13 +22,114 @@ pub struct Target {
     pub format: format::Format,
     pub width: U32OrF32,
     pub height: U32OrF32,
+    #[serde(default = "Target::default_level")]
+    pub level: u8,
 }
-#[derive(Deserialize)]
+
+impl Target {
+    pub const fn default_level() -> u8 {
+        1
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(untagged)]
+pub enum StrOrObj<T> {
+    Obj(T),
+    Str(String),
+}
+
+pub trait AttachmentFile {
+    fn name(&self) -> &str;
+    fn level(&self) -> StrOrObj<u8>;
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentOutput {
+    pub name: String,
+    #[serde(default = "AttachmentOutput::default_level")]
+    pub level: StrOrObj<u8>,
+}
+
+impl AttachmentOutput {
+    pub const fn default_level() -> StrOrObj<u8> {
+        StrOrObj::Obj(0)
+    }
+}
+
+impl AttachmentFile for AttachmentOutput {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn level(&self) -> StrOrObj<u8> {
+        self.level.clone()
+    }
+}
+
+impl StrOrObj<AttachmentOutput> {
+    pub fn get(&self) -> AttachmentOutput {
+        match self {
+            StrOrObj::Str(s) => AttachmentOutput {
+                name: s.to_string(),
+                level: AttachmentOutput::default_level(),
+            },
+            StrOrObj::Obj(s) => s.clone(),
+        }
+    }
+}
+
+impl StrOrObj<u8> {
+    pub fn get(&self) -> u8 {
+        match self {
+            StrOrObj::Str(s) => match "ALL" == s {
+                true => u8::MAX,
+                false => panic!("{} is an invalid mip map level!", s),
+            },
+            StrOrObj::Obj(s) => *s,
+        }
+    }
+}
+
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInput {
     pub name: String,
     pub sampler: DescOption<Sampler>,
+    #[serde(default = "AttachmentInput::default_level")]
+    pub level: StrOrObj<u8>,
 }
+
+impl AttachmentInput {
+    pub fn default_level() -> StrOrObj<u8> {
+        StrOrObj::Str("ALL".to_string())
+    }
+}
+
+impl AttachmentFile for AttachmentInput {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn level(&self) -> StrOrObj<u8> {
+        self.level.clone()
+    }
+}
+
+impl StrOrObj<AttachmentInput> {
+    pub fn get(&self) -> AttachmentInput {
+        match self {
+            StrOrObj::Str(s) => AttachmentInput {
+                name: s.to_string(),
+                level: AttachmentInput::default_level(),
+                sampler: DescOption::Predefined(OptionPredefined::Default),
+            },
+            StrOrObj::Obj(s) => s.clone(),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Copy, Clone)]
@@ -35,6 +140,7 @@ pub struct Sampler {
     #[serde(default = "Sampler::default_anisotropy")]
     pub anisotropy: u8,
 }
+
 impl Sampler {
     fn default_anisotropy() -> u8 {
         1
@@ -83,11 +189,11 @@ pub struct RenderPass {
     pub batch_parent_id: u32,
     pub depth_stencil: Option<String>,
     pub batch: crate::render_task::TaskKind,
-    pub outputs: Vec<String>,
+    pub outputs: Vec<StrOrObj<AttachmentOutput>>,
     pub inputs: Vec<AttachmentInput>,
     pub per_pass_updaters: Vec<UpdaterKind>,
     pub per_instance_updaters: Vec<UpdaterKind>,
-    pub state: State,
+    pub state: BaseState,
     #[serde(default)]
     pub is_disabled: bool,
 }
@@ -135,9 +241,9 @@ pub enum BlitAttribute {
 #[serde(rename_all = "camelCase")]
 pub struct BlitPass {
     pub name: String,
-    pub input: String,
+    pub input: StrOrObj<AttachmentOutput>,
     pub input_rect: BlitRect,
-    pub output: String,
+    pub output: StrOrObj<AttachmentOutput>,
     pub output_rect: BlitRect,
     pub filter: Filtering,
     pub attributes: Vec<BlitAttribute>,
@@ -190,7 +296,21 @@ pub enum UpdaterKind {
     View = 11,
     Timing = 12,
 }
+
 #[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum BaseState {
+    State(State),
+    Reference(ReferenceState),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceState {
+    pub name: String,
+}
+
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct State {
     pub writing: DescOption<WriteDesc>,
@@ -625,18 +745,16 @@ pub trait Predefined<T> {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(untagged)]
-#[derive(Clone)]
 pub enum DescOption<T> {
     Predefined(OptionPredefined),
     Specific(String),
     Configured(T),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Copy, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[derive(Copy, Clone)]
 pub enum OptionPredefined {
     Default,
     No,

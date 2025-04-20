@@ -2,13 +2,27 @@ use ash::vk;
 
 use super::{
     attachment::Attachment,
-    file::{DescHandler, Pipeline, PipelineStep},
+    file::{BaseState, DescHandler, Pipeline, PipelineStep, State},
 };
+
+struct Image {
+    name: String,
+    level: u8,
+}
+
+impl Image {
+    pub fn of_attachment(f: &impl super::file::AttachmentFile) -> Self {
+        Self {
+            level: f.level().get(),
+            name: f.name().to_string(),
+        }
+    }
+}
 
 struct Pass {
     name: String,
-    inputs: Vec<String>,
-    outputs: Vec<String>,
+    inputs: Vec<Image>,
+    outputs: Vec<Image>,
     is_blitting: bool,
 }
 
@@ -16,13 +30,26 @@ pub struct BarrierGen {
     passes: Vec<Pass>,
 }
 
-#[derive(Default)]
 struct BarrierEval {
+    src_access: vk::AccessFlags2,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
-    src_access: vk::AccessFlags2,
+    level: u8,
     already_issued: bool,
     keep_searching: bool,
+}
+
+impl Default for BarrierEval {
+    fn default() -> Self {
+        Self {
+            old_layout: Default::default(),
+            new_layout: Default::default(),
+            src_access: Default::default(),
+            already_issued: Default::default(),
+            keep_searching: Default::default(),
+            level: 0,
+        }
+    }
 }
 
 impl BarrierEval {
@@ -60,26 +87,37 @@ impl BarrierEval {
 }
 
 impl BarrierGen {
-    pub fn new(passes: &[PipelineStep]) -> Self {
+    pub fn new(passes: &[PipelineStep], resolve_state: &dyn Fn(&BaseState) -> State) -> Self {
         let tmp = passes
             .iter()
             .map(|p| match p {
                 PipelineStep::Render(p) => {
-                    let mut outputs = p.outputs.clone();
-                    let mut inputs: Vec<_> = p.inputs.iter().map(|i| i.name.clone()).collect();
+                    let mut outputs: Vec<_> = p
+                        .outputs
+                        .iter()
+                        .map(|e| e.get())
+                        .map(|i| Image::of_attachment(&i))
+                        .collect();
+                    let mut inputs: Vec<_> =
+                        p.inputs.iter().map(|i| Image::of_attachment(i)).collect();
                     // Depth stencil attachment requires some special checks
                     if let Some(d) = &p.depth_stencil {
-                        let writing = Pipeline::handle_option(p.state.writing.clone());
+                        let state = resolve_state(&p.state);
+                        let writing = Pipeline::handle_option(state.writing);
+                        let depth_img = Image {
+                            name: d.clone(),
+                            level: 0,
+                        };
                         if writing.depth {
                             // Writes depth, interpret it as an output from the pass
-                            outputs.push(d.clone());
+                            outputs.push(depth_img);
                         } else {
                             /*
                              * Assume it's only depth testing, interpret it as an input,
                              * checking if it isn't already being sampled in the same pass.
                              */
-                            if !inputs.contains(d) {
-                                inputs.push(d.clone());
+                            if !inputs.iter().any(|e| d == &e.name) {
+                                inputs.push(depth_img);
                             }
                         }
                     }
@@ -94,8 +132,8 @@ impl BarrierGen {
                 PipelineStep::Blit(p) => Pass {
                     name: p.name.clone(),
                     is_blitting: true,
-                    inputs: [p.input.clone()].into(),
-                    outputs: [p.output.clone()].into(),
+                    inputs: [Image::of_attachment(&p.input.get())].into(),
+                    outputs: [Image::of_attachment(&p.output.get())].into(),
                 },
                 _ => panic!("unsupported pipeline step!"),
             })
@@ -140,7 +178,7 @@ impl BarrierGen {
                 vk::ImageLayout::READ_ONLY_OPTIMAL
             }
         };
-        if prev_pass.inputs.iter().any(|e| e.eq(&attachment.name)) {
+        if prev_pass.inputs.iter().any(|e| e.name.eq(&attachment.name)) {
             // Previous pass had this attachment as an input
             if !is_output {
                 // Only check for same barriers if it's evaluating an input against inputs
@@ -166,13 +204,11 @@ impl BarrierGen {
                 new_layout,
             );
         }
-        if prev_pass.outputs.contains(&attachment.name) {
+        if prev_pass.outputs.iter().any(|e| e.name == attachment.name) {
             // Previous pass had this attachment as an output
             if is_output {
                 // Only check for same barriers if it's evaluating an output against outputs
-                if (prev_pass.is_blitting && current_is_blitting)
-                    || (!prev_pass.is_blitting && !current_is_blitting)
-                {
+                if prev_pass.is_blitting == current_is_blitting {
                     // Already issued this same barrier before
                     return BarrierEval::already_issued();
                 }

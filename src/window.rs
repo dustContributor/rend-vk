@@ -3,9 +3,9 @@ use std::cell::RefCell;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    platform::run_return::EventLoopExtRunReturn, window::WindowBuilder,
+    platform::run_return::EventLoopExtRunReturn,
+    window::WindowBuilder,
 };
-
 
 pub struct WindowContext {
     pub window: winit::window::Window,
@@ -26,10 +26,10 @@ impl WindowContext {
             .unwrap();
         WindowContext {
             window,
-            event_loop: RefCell::new(event_loop)
+            event_loop: RefCell::new(event_loop),
         }
     }
-    pub fn event_loop<F: FnMut()>(&self, mut on_event: F) {
+    pub fn event_loop<F: FnMut() -> bool>(&self, mut on_event: F) {
         self.event_loop
             .borrow_mut()
             .run_return(|event, _, control_flow| {
@@ -49,7 +49,10 @@ impl WindowContext {
                             },
                         ..
                     } => *control_flow = ControlFlow::Exit,
-                    Event::MainEventsCleared => on_event(),
+                    Event::MainEventsCleared => match on_event() {
+                        true => (),
+                        false => *control_flow = ControlFlow::Exit,
+                    },
                     _ => (),
                 }
             });

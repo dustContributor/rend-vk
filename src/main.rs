@@ -338,6 +338,8 @@ fn main() {
         }
 
         renderer.render();
+
+        true
     });
     let mut renderer = renderer;
     renderer.destroy();
