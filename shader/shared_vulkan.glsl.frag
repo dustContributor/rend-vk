@@ -53,6 +53,8 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define READ_INST_SKY_MACRO registers.skies.items[passInstanceId]
 #define READ_INST_STATIC_SHADOW_MACRO registers.staticShadows.items[passInstanceId]
 #define READ_INST_TRANSFORM_EXTRA_MACRO registers.transformExtras.items[passInstanceId]
+// Per pass constant data
+#define READ_CONST(name) registers.pass. name
 // Per pass data
 #define READ_PASS_TRANSFORM_MACRO registers.pass.transform
 #define READ_PASS_MATERIAL_MACRO registers.pass.material

@@ -99,7 +99,7 @@
 #define UBO_MAX_SIZE 65536
 #define UBO_TRANSFORM_SIZE 128
 #define UBO_MATERIAL_SIZE 16
-#define UBO_DIRLIGHT_SIZE 336
+#define UBO_DIRLIGHT_SIZE 352
 #define UBO_FRUSTUM_SIZE 32
 #define UBO_VIEWRAY_SIZE 64
 #define UBO_POINTLIGHT_SIZE 16
@@ -129,6 +129,11 @@
 #define READ_INST_JOINT_MACRO joints[passInstanceId]
 #define READ_INST_STATIC_SHADOW_MACRO staticShadows[passInstanceId]
 #define READ_INST_TRANSFORM_EXTRA_MACRO transformExtras[passInstanceId]
+
+
+// Per pass constant data
+#define READ_CONST(NAME) NAME
+
 // Per pass data
 #define READ_PASS_DIRLIGHT_MACRO dirLight
 #define READ_PASS_FRUSTUM_MACRO frustum
