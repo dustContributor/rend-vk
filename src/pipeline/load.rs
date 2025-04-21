@@ -172,7 +172,7 @@ impl Pipeline {
             }
         };
 
-        let barrier_gen = BarrierGen::new(&enabled_passes, &resolve_state);
+        let barrier_gen = BarrierGen::new(&pip.targets, &enabled_passes, &resolve_state);
 
         let window_width = default_attachment.extent.width;
         let window_height = default_attachment.extent.height;
@@ -216,9 +216,8 @@ impl Pipeline {
                 );
             })
             .collect();
-        let default_attachment_name = Attachment::DEFAULT_NAME.to_string();
         // Default attachment is provided by the caller since it depends on the swapchain.
-        attachments_by_name.insert(default_attachment_name, default_attachment);
+        attachments_by_name.insert(default_attachment.name.clone(), default_attachment);
         // Descriptor pool to use across all descriptor sets
         let descriptor_pool = super::descriptor::make_pool(ctx);
         ctx.try_set_debug_name("main_descriptor_pool", descriptor_pool);

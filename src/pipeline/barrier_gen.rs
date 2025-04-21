@@ -1,20 +1,24 @@
+use std::collections::HashMap;
+
 use ash::vk;
 
 use super::{
     attachment::Attachment,
-    file::{BaseState, DescHandler, Pipeline, PipelineStep, State},
+    file::{BaseState, DescHandler, Pipeline, PipelineStep, State, Target},
 };
 
 struct Image {
     name: String,
     level: u8,
+    owner_levels: u8,
 }
 
 impl Image {
-    pub fn of_attachment(f: &impl super::file::AttachmentFile) -> Self {
+    pub fn of_attachment(f: &impl super::file::AttachmentFile, owner_levels: u8) -> Self {
         Self {
             level: f.level().get(),
             name: f.name().to_string(),
+            owner_levels,
         }
     }
 }
@@ -87,7 +91,19 @@ impl BarrierEval {
 }
 
 impl BarrierGen {
-    pub fn new(passes: &[PipelineStep], resolve_state: &dyn Fn(&BaseState) -> State) -> Self {
+    pub fn new(
+        targets: &[Target],
+        passes: &[PipelineStep],
+        resolve_state: &dyn Fn(&BaseState) -> State,
+    ) -> Self {
+        let levels_by_name = targets
+            .iter()
+            .map(|t| (t.name.clone(), t.level))
+            .collect::<HashMap<_, _>>();
+        let levels_for = |name: &str| match levels_by_name.get(name) {
+            Some(r) => *r,
+            None => panic!("attachment '{}' not found!", name),
+        };
         let tmp = passes
             .iter()
             .map(|p| match p {
@@ -96,10 +112,13 @@ impl BarrierGen {
                         .outputs
                         .iter()
                         .map(|e| e.get())
-                        .map(|i| Image::of_attachment(&i))
+                        .map(|i| Image::of_attachment(&i, levels_for(&i.name)))
                         .collect();
-                    let mut inputs: Vec<_> =
-                        p.inputs.iter().map(|i| Image::of_attachment(i)).collect();
+                    let mut inputs: Vec<_> = p
+                        .inputs
+                        .iter()
+                        .map(|i| Image::of_attachment(i, levels_for(&i.name)))
+                        .collect();
                     // Depth stencil attachment requires some special checks
                     if let Some(d) = &p.depth_stencil {
                         let state = resolve_state(&p.state);
@@ -107,6 +126,7 @@ impl BarrierGen {
                         let depth_img = Image {
                             name: d.clone(),
                             level: 0,
+                            owner_levels: 0,
                         };
                         if writing.depth {
                             // Writes depth, interpret it as an output from the pass
@@ -132,8 +152,16 @@ impl BarrierGen {
                 PipelineStep::Blit(p) => Pass {
                     name: p.name.clone(),
                     is_blitting: true,
-                    inputs: [Image::of_attachment(&p.input.get())].into(),
-                    outputs: [Image::of_attachment(&p.output.get())].into(),
+                    inputs: [Image::of_attachment(
+                        &p.input.get(),
+                        levels_for(&p.input.get().name),
+                    )]
+                    .into(),
+                    outputs: [Image::of_attachment(
+                        &p.output.get(),
+                        levels_for(&p.output.get().name),
+                    )]
+                    .into(),
                 },
                 _ => panic!("unsupported pipeline step!"),
             })
@@ -248,7 +276,7 @@ impl BarrierGen {
             }
         }
         for input in inputs {
-            if Attachment::DEFAULT_NAME == input.name {
+            if input.is_default() {
                 panic!("Can't read from the default attachment!")
             }
             // Search back starting from current passs
@@ -298,7 +326,7 @@ impl BarrierGen {
             }
         }
         for output in outputs {
-            if Attachment::DEFAULT_NAME == output.name {
+            if output.is_default() {
                 /*
                  * Handled in the rendering loop, since the swapchain
                  * changes which image this barrier refers to.

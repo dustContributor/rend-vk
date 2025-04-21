@@ -4,7 +4,7 @@ use ash::vk;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::{format, shader_resource::ResourceKind, UsedAsIndex};
+use crate::{format, shader_resource::ResourceKind, texture::MipMap, UsedAsIndex};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,12 +49,12 @@ pub trait AttachmentFile {
 pub struct AttachmentOutput {
     pub name: String,
     #[serde(default = "AttachmentOutput::default_level")]
-    pub level: StrOrObj<u8>,
+    pub level: u8,
 }
 
 impl AttachmentOutput {
-    pub const fn default_level() -> StrOrObj<u8> {
-        StrOrObj::Obj(0)
+    pub const fn default_level() -> u8 {
+        0
     }
 }
 
@@ -64,7 +64,7 @@ impl AttachmentFile for AttachmentOutput {
     }
 
     fn level(&self) -> StrOrObj<u8> {
-        self.level.clone()
+        StrOrObj::Obj(self.level)
     }
 }
 
@@ -83,8 +83,8 @@ impl StrOrObj<AttachmentOutput> {
 impl StrOrObj<u8> {
     pub fn get(&self) -> u8 {
         match self {
-            StrOrObj::Str(s) => match "ALL" == s {
-                true => u8::MAX,
+            StrOrObj::Str(s) => match MipMap::is_all_levels_name(s) {
+                true => MipMap::ALL_LEVELS_VALUE,
                 false => panic!("{} is an invalid mip map level!", s),
             },
             StrOrObj::Obj(s) => *s,
@@ -103,7 +103,7 @@ pub struct AttachmentInput {
 
 impl AttachmentInput {
     pub fn default_level() -> StrOrObj<u8> {
-        StrOrObj::Str("ALL".to_string())
+        StrOrObj::Str(MipMap::ALL_LEVELS_NAME.to_string())
     }
 }
 

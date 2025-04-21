@@ -19,7 +19,6 @@ pub struct Attachment {
 
 impl Attachment {
     pub const DEFAULT_NAME: &'static str = "default";
-    pub const DEPTH_NAME: &'static str = "depth";
 
     pub fn per_level_view(&self, level: u8) -> vk::ImageView {
         match self.per_level_views.get(level as usize) {
