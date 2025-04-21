@@ -20,10 +20,43 @@ pub struct Attachment {
 impl Attachment {
     pub const DEFAULT_NAME: &'static str = "default";
 
+    pub fn levels(&self) -> u8 {
+        1.max(self.per_level_views.len()) as u8
+    }
+
     pub fn per_level_view(&self, level: u8) -> vk::ImageView {
         match self.per_level_views.get(level as usize) {
             Some(vw) => vw.clone(),
             None => panic!("attachment {} doesn't has mip level {}", self.name, level),
+        }
+    }
+
+    pub fn usage_view(&self) -> vk::ImageView {
+        match crate::texture::MipMap::is_all_levels_value(self.level_usage) {
+            true => self.view,                              // all levels view
+            false => self.per_level_view(self.level_usage), // specific level view
+        }
+    }
+
+    pub fn destroy(&self, device: &ash::Device) {
+        if self.is_default() {
+            // Default attachments are owned by the swapchain
+            return;
+        }
+        unsafe {
+            device.free_memory(self.memory, None);
+            device.destroy_image_view(self.view, None);
+            for view in &self.per_level_views {
+                let view = view.clone();
+                /*
+                 * paranoid check, if the main view matches only one level,
+                 * it may be present here too
+                 */
+                if self.view != view {
+                    device.destroy_image_view(view, None);
+                }
+            }
+            device.destroy_image(self.image, None);
         }
     }
 
@@ -71,7 +104,7 @@ impl Attachment {
             memory: vk::DeviceMemory::null(),
             name: Attachment::DEFAULT_NAME.to_string(),
             view: image_view,
-            per_level_views: [].into(),
+            per_level_views: [image_view].into(),
             level_usage: 0,
             extent,
             descriptor_index: 0,

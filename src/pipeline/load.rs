@@ -371,7 +371,7 @@ impl Pipeline {
                     .unwrap()
                     .place_image_sampler(
                         ctx,
-                        e.0.view,
+                        e.0.usage_view(),
                         vk::ImageLayout::READ_ONLY_OPTIMAL,
                         e.1.sampler,
                     );
@@ -394,7 +394,7 @@ impl Pipeline {
                 .collect();
 
             let make_rendering_attachment_info = |e: &Attachment| vk::RenderingAttachmentInfo {
-                image_view: e.view,
+                image_view: e.usage_view(),
                 image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
                 load_op: if e.format.has_depth_or_stencil() {
                     clear_depth_stencil_value

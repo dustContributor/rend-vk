@@ -47,7 +47,7 @@ impl Stage for RenderStage {
              * the view with the current swapchain target
              */
             rendering_attachments[dai] = vk::RenderingAttachmentInfo {
-                image_view: ctx.default_attachment.view,
+                image_view: ctx.default_attachment.usage_view(),
                 ..rendering_attachments[dai]
             };
         };

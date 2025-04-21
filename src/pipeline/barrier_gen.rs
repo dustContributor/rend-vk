@@ -1,24 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 
 use ash::vk;
 
+use crate::texture::MipMap;
+
 use super::{
     attachment::Attachment,
-    file::{BaseState, DescHandler, Pipeline, PipelineStep, State, Target},
+    file::{AttachmentFile, BaseState, DescHandler, Pipeline, PipelineStep, State, Target},
 };
 
 struct Image {
     name: String,
     level: u8,
-    owner_levels: u8,
 }
 
 impl Image {
-    pub fn of_attachment(f: &impl super::file::AttachmentFile, owner_levels: u8) -> Self {
+    pub fn of_attachment(f: &impl super::file::AttachmentFile) -> Self {
         Self {
             level: f.level().get(),
             name: f.name().to_string(),
-            owner_levels,
         }
     }
 }
@@ -32,13 +32,13 @@ struct Pass {
 
 pub struct BarrierGen {
     passes: Vec<Pass>,
+    levels_by_owner: HashMap<String, u8>,
 }
 
 struct BarrierEval {
     src_access: vk::AccessFlags2,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
-    level: u8,
     already_issued: bool,
     keep_searching: bool,
 }
@@ -51,7 +51,6 @@ impl Default for BarrierEval {
             src_access: Default::default(),
             already_issued: Default::default(),
             keep_searching: Default::default(),
-            level: 0,
         }
     }
 }
@@ -96,14 +95,10 @@ impl BarrierGen {
         passes: &[PipelineStep],
         resolve_state: &dyn Fn(&BaseState) -> State,
     ) -> Self {
-        let levels_by_name = targets
+        let levels_by_owner = targets
             .iter()
             .map(|t| (t.name.clone(), t.level))
             .collect::<HashMap<_, _>>();
-        let levels_for = |name: &str| match levels_by_name.get(name) {
-            Some(r) => *r,
-            None => panic!("attachment '{}' not found!", name),
-        };
         let tmp = passes
             .iter()
             .map(|p| match p {
@@ -112,13 +107,19 @@ impl BarrierGen {
                         .outputs
                         .iter()
                         .map(|e| e.get())
-                        .map(|i| Image::of_attachment(&i, levels_for(&i.name)))
+                        .map(|i| Image::of_attachment(&i))
                         .collect();
-                    let mut inputs: Vec<_> = p
-                        .inputs
-                        .iter()
-                        .map(|i| Image::of_attachment(i, levels_for(&i.name)))
-                        .collect();
+                    let mut inputs = Vec::with_capacity(p.inputs.len());
+                    for input in p.inputs.iter() {
+                        for lvl in
+                            Self::level_range_for(&input.name, input.level.get(), &levels_by_owner)
+                        {
+                            inputs.push(Image {
+                                level: lvl,
+                                name: input.name().to_string(),
+                            });
+                        }
+                    }
                     // Depth stencil attachment requires some special checks
                     if let Some(d) = &p.depth_stencil {
                         let state = resolve_state(&p.state);
@@ -126,7 +127,6 @@ impl BarrierGen {
                         let depth_img = Image {
                             name: d.clone(),
                             level: 0,
-                            owner_levels: 0,
                         };
                         if writing.depth {
                             // Writes depth, interpret it as an output from the pass
@@ -152,42 +152,39 @@ impl BarrierGen {
                 PipelineStep::Blit(p) => Pass {
                     name: p.name.clone(),
                     is_blitting: true,
-                    inputs: [Image::of_attachment(
-                        &p.input.get(),
-                        levels_for(&p.input.get().name),
-                    )]
-                    .into(),
-                    outputs: [Image::of_attachment(
-                        &p.output.get(),
-                        levels_for(&p.output.get().name),
-                    )]
-                    .into(),
+                    inputs: [Image::of_attachment(&p.input.get())].into(),
+                    outputs: [Image::of_attachment(&p.output.get())].into(),
                 },
                 _ => panic!("unsupported pipeline step!"),
             })
             .collect();
-        BarrierGen { passes: tmp }
+        BarrierGen {
+            passes: tmp,
+            levels_by_owner,
+        }
     }
 
-    fn output_barrier_for(
-        prev_pass: &Pass,
-        attachment: &Attachment,
-        current_is_blitting: bool,
-    ) -> BarrierEval {
-        Self::eval_barrier_for(prev_pass, attachment, current_is_blitting, true)
-    }
-
-    fn input_barrier_for(
-        prev_pass: &Pass,
-        attachment: &Attachment,
-        current_is_blitting: bool,
-    ) -> BarrierEval {
-        Self::eval_barrier_for(prev_pass, attachment, current_is_blitting, false)
+    fn level_range_for(
+        name: &str,
+        level_usage: u8,
+        levels_by_owner: &HashMap<String, u8>,
+    ) -> Range<u8> {
+        let owner_levels = match levels_by_owner.get(name) {
+            Some(r) => *r,
+            None => panic!("levels for attachment '{}' not found!", name),
+        };
+        let level_range = if MipMap::is_all_levels_value(level_usage) {
+            0..owner_levels
+        } else {
+            level_usage..level_usage + 1
+        };
+        return level_range;
     }
 
     fn eval_barrier_for(
         prev_pass: &Pass,
-        attachment: &Attachment,
+        name: &str,
+        level: u8,
         current_is_blitting: bool,
         is_output: bool,
     ) -> BarrierEval {
@@ -206,13 +203,15 @@ impl BarrierGen {
                 vk::ImageLayout::READ_ONLY_OPTIMAL
             }
         };
-        if prev_pass.inputs.iter().any(|e| e.name.eq(&attachment.name)) {
+        if prev_pass
+            .inputs
+            .iter()
+            .any(|e| e.name.eq(name) && e.level == level)
+        {
             // Previous pass had this attachment as an input
             if !is_output {
                 // Only check for same barriers if it's evaluating an input against inputs
-                if (prev_pass.is_blitting && current_is_blitting)
-                    || (!prev_pass.is_blitting && !current_is_blitting)
-                {
+                if prev_pass.is_blitting == current_is_blitting {
                     // Already issued this same barrier before
                     return BarrierEval::already_issued();
                 }
@@ -232,7 +231,7 @@ impl BarrierGen {
                 new_layout,
             );
         }
-        if prev_pass.outputs.iter().any(|e| e.name == attachment.name) {
+        if prev_pass.outputs.iter().any(|e| e.name == name) {
             // Previous pass had this attachment as an output
             if is_output {
                 // Only check for same barriers if it's evaluating an output against outputs
@@ -279,50 +278,65 @@ impl BarrierGen {
             if input.is_default() {
                 panic!("Can't read from the default attachment!")
             }
-            // Search back starting from current passs
-            let mut i = currenti;
-            loop {
-                i = wrap_around(i, self.passes.len());
-                if i == currenti {
-                    // Looped back to current pass, nothing to check
+            let level_range =
+                Self::level_range_for(&input.name, input.level_usage, &self.levels_by_owner);
+            // We may need to emit one barrier per mip map level if the input reads several of them
+            for level_usage in level_range {
+                // Search back starting from current passs
+                let mut i = currenti;
+                loop {
+                    i = wrap_around(i, self.passes.len());
+                    if i == currenti {
+                        // Looped back to current pass, nothing to check
+                        break;
+                    }
+                    let prev = &self.passes[i];
+                    let ev_barrier = Self::eval_barrier_for(
+                        prev,
+                        &input.name,
+                        level_usage,
+                        curr_is_blitting,
+                        false,
+                    );
+                    if ev_barrier.already_issued {
+                        break;
+                    }
+                    if ev_barrier.keep_searching {
+                        continue;
+                    }
+                    // Image was written to before, barrier for reading
+                    let barrier = vk::ImageMemoryBarrier2::builder()
+                        .image(input.image)
+                        .src_access_mask(ev_barrier.src_access)
+                        .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
+                        .old_layout(ev_barrier.old_layout)
+                        .new_layout(ev_barrier.new_layout)
+                        .src_stage_mask(if ev_barrier.was_blitting() {
+                            vk::PipelineStageFlags2::TRANSFER
+                        } else if input.format.has_depth_or_stencil() {
+                            vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                                | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
+                        } else {
+                            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
+                        })
+                        .dst_stage_mask(if curr_is_blitting {
+                            vk::PipelineStageFlags2::TRANSFER
+                        } else if input.format.has_depth_or_stencil() {
+                            vk::PipelineStageFlags2::FRAGMENT_SHADER
+                                | vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                                | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
+                        } else {
+                            vk::PipelineStageFlags2::FRAGMENT_SHADER
+                        })
+                        .subresource_range(Attachment::subresource_range_wlevels(
+                            input.format.aspect(),
+                            level_usage as u32,
+                            1,
+                        ))
+                        .build();
+                    barriers.push((&input.name, false, barrier));
                     break;
                 }
-                let prev = &self.passes[i];
-                let ev_barrier = Self::input_barrier_for(prev, input, curr_is_blitting);
-                if ev_barrier.already_issued {
-                    break;
-                }
-                if ev_barrier.keep_searching {
-                    continue;
-                }
-                // Image was written to before, barrier for reading
-                let barrier = vk::ImageMemoryBarrier2::builder()
-                    .image(input.image)
-                    .src_access_mask(ev_barrier.src_access)
-                    .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
-                    .old_layout(ev_barrier.old_layout)
-                    .new_layout(ev_barrier.new_layout)
-                    .src_stage_mask(if ev_barrier.was_blitting() {
-                        vk::PipelineStageFlags2::TRANSFER
-                    } else if input.format.has_depth_or_stencil() {
-                        vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
-                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
-                    } else {
-                        vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
-                    })
-                    .dst_stage_mask(if curr_is_blitting {
-                        vk::PipelineStageFlags2::TRANSFER
-                    } else if input.format.has_depth_or_stencil() {
-                        vk::PipelineStageFlags2::FRAGMENT_SHADER
-                            | vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
-                            | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
-                    } else {
-                        vk::PipelineStageFlags2::FRAGMENT_SHADER
-                    })
-                    .subresource_range(Attachment::default_subresource_range(input.format.aspect()))
-                    .build();
-                barriers.push((&input.name, false, barrier));
-                break;
             }
         }
         for output in outputs {
@@ -342,7 +356,13 @@ impl BarrierGen {
                     break;
                 }
                 let prev = &self.passes[i];
-                let ev_barrier = Self::output_barrier_for(prev, output, curr_is_blitting);
+                let ev_barrier = Self::eval_barrier_for(
+                    prev,
+                    &output.name,
+                    output.level_usage, // always a specific mip
+                    curr_is_blitting,
+                    true,
+                );
                 if ev_barrier.already_issued {
                     break;
                 }
@@ -382,7 +402,7 @@ impl BarrierGen {
         }
         if log::log_enabled!(log::Level::Trace) {
             // Log the generated barriers if we're in TRACE logging level
-            log::debug!(
+            log::trace!(
                 "emitted {} barriers for pass {} at index {}",
                 barriers.len(),
                 self.passes[currenti].name,
@@ -393,7 +413,7 @@ impl BarrierGen {
                     .replace("{", "{\n")
                     .replace(", ", ",\n ")
                     .replace("}", "\n}");
-                log::debug!(
+                log::trace!(
                     "pass {} at {}, barrier {}, {}: {} \n{}",
                     self.passes[currenti].name,
                     currenti,

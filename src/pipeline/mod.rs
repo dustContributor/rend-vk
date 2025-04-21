@@ -151,16 +151,7 @@ impl Pipeline {
                 stage.destroy(device);
             }
             for attachment in &self.attachments {
-                if attachment.is_default() {
-                    // Default attachments are owned by the swapchain
-                    continue;
-                }
-                device.free_memory(attachment.memory, None);
-                device.destroy_image_view(attachment.view, None);
-                for view in &attachment.per_level_views {
-                    device.destroy_image_view(view.clone(), None);
-                }
-                device.destroy_image(attachment.image, None);
+                attachment.destroy(device);
             }
         }
     }
