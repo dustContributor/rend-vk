@@ -821,6 +821,7 @@ pub fn make_device(
     let features = vk::PhysicalDeviceFeatures {
         shader_clip_distance: 1,
         depth_clamp: 1,
+        sampler_anisotropy: 1,
         ..Default::default()
     };
     let mut features12 = vk::PhysicalDeviceVulkan12Features {
