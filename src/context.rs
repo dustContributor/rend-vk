@@ -2,7 +2,6 @@ use std::{any::TypeId, collections::HashMap};
 
 use ash::vk;
 
-#[derive(Clone)]
 pub struct VulkanContext {
     pub entry: ash::Entry,
     pub instance: ash::Instance,
@@ -12,7 +11,6 @@ pub struct VulkanContext {
     pub extension: ExtensionContext,
 }
 
-#[derive(Clone)]
 pub struct ExtensionContext {
     pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
     pub swapchain: ash::extensions::khr::Swapchain,
@@ -20,6 +18,10 @@ pub struct ExtensionContext {
 }
 
 impl VulkanContext {
+    pub fn is_debug_enabled(&self) -> bool {
+        self.extension.is_debug_enabled()
+    }
+
     pub fn try_begin_debug_label(&self, command_buffer: vk::CommandBuffer, name: &str) -> bool {
         self.extension.try_begin_debug_label(command_buffer, name)
     }
@@ -53,9 +55,12 @@ impl VulkanContext {
 }
 
 impl ExtensionContext {
+    pub fn is_debug_enabled(&self) -> bool {
+        // Assume no debug utils means debug isn't enabled
+        self.debug_utils.is_some()
+    }
     pub fn try_begin_debug_label(&self, command_buffer: vk::CommandBuffer, name: &str) -> bool {
-        if !self.debug_utils.is_some() {
-            // Assume no debug utils means debug isn't enabled
+        if !self.is_debug_enabled() {
             return false;
         }
         let dbg = self.debug_utils.as_ref().unwrap();
@@ -70,7 +75,7 @@ impl ExtensionContext {
     }
 
     pub fn try_end_debug_label(&self, command_buffer: vk::CommandBuffer) -> bool {
-        if !self.debug_utils.is_some() {
+        if !self.is_debug_enabled() {
             // Assume no debug utils means debug isn't enabled
             return false;
         }
@@ -85,8 +90,7 @@ impl ExtensionContext {
     where
         T: vk::Handle,
     {
-        if !self.debug_utils.is_some() {
-            // Assume no debug utils means debug isn't enabled
+        if !self.is_debug_enabled() {
             return false;
         }
         let dbg = self.debug_utils.as_ref().unwrap();

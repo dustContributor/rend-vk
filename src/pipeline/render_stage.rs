@@ -21,6 +21,7 @@ pub struct RenderStage {
     pub inputs: Vec<Attachment>,
     pub per_instance_updaters: Vec<ResourceKind>,
     pub per_pass_updaters: Vec<ResourceKind>,
+    pub per_pass_constant: Vec<f32>,
     pub attachment_descriptors: Option<Box<DescriptorGroup>>,
     pub task_kind: TaskKind,
     pub batch_parent_id: u32,
@@ -253,17 +254,27 @@ impl RenderStage {
         mem: &DeviceAllocator,
         shader_resources_by_kind: &HashMap<ResourceKind, SingleResource>,
     ) -> Vec<u64> {
-        if self.per_pass_updaters.is_empty() {
+        if self.per_pass_updaters.is_empty() && self.per_pass_constant.is_empty() {
             // Nothing to upload
             return Vec::new();
         }
-        let total_size: usize = self
-            .per_pass_updaters
-            .iter()
-            .map(|e| e.resource_size())
-            .sum();
+        let aligned_pass_constant_size = (self.per_pass_constant.len() * size_of::<f32>())
+            .next_multiple_of(size_of::<glam::Vec4>());
+        let total_size = aligned_pass_constant_size
+            + self
+                .per_pass_updaters
+                .iter()
+                .map(|e| e.resource_size())
+                .sum::<usize>();
         let dst = mem.alloc(total_size as u64).unwrap();
-        let mut offset = 0u64;
+        if !self.per_pass_constant.is_empty() {
+            unsafe {
+                let src = self.per_pass_constant.as_ptr();
+                let dst = dst.addr as *mut f32;
+                dst.copy_from_nonoverlapping(src, self.per_pass_constant.len());
+            }
+        }
+        let mut offset = aligned_pass_constant_size as u64;
         for kind in self.per_pass_updaters.clone() {
             if let Some(res) = shader_resources_by_kind.get(&kind) {
                 offset = updater::fill_single(res, &dst, offset);

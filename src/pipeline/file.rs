@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use ash::vk;
+use indexmap::IndexMap;
 use serde::Deserialize;
 
 use super::state::*;
@@ -193,6 +194,7 @@ pub struct RenderPass {
     pub inputs: Vec<AttachmentInput>,
     pub per_pass_updaters: Vec<UpdaterKind>,
     pub per_instance_updaters: Vec<UpdaterKind>,
+    pub per_pass_constant: Option<IndexMap<String, f32>>,
     pub state: BaseState,
     #[serde(default)]
     pub is_disabled: bool,

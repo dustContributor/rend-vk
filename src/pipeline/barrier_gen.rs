@@ -231,7 +231,11 @@ impl BarrierGen {
                 new_layout,
             );
         }
-        if prev_pass.outputs.iter().any(|e| e.name == name) {
+        if prev_pass
+            .outputs
+            .iter()
+            .any(|e| e.name.eq(name) && e.level == level)
+        {
             // Previous pass had this attachment as an output
             if is_output {
                 // Only check for same barriers if it's evaluating an output against outputs
@@ -392,8 +396,10 @@ impl BarrierGen {
                     } else {
                         vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
                     })
-                    .subresource_range(Attachment::default_subresource_range(
+                    .subresource_range(Attachment::subresource_range_wlevels(
                         output.format.aspect(),
+                        output.level_usage as u32,
+                        1,
                     ))
                     .build();
                 barriers.push((&output.name, true, barrier));

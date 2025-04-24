@@ -371,7 +371,8 @@ impl Pipeline {
                     .unwrap()
                     .place_image_sampler(
                         ctx,
-                        e.0.usage_view(),
+                        // using main all mip views so per-mip views dont offset the base mip map level
+                        e.0.view,
                         vk::ImageLayout::READ_ONLY_OPTIMAL,
                         e.1.sampler,
                     );
@@ -460,6 +461,10 @@ impl Pipeline {
                 ctx.device.create_pipeline_layout(&info, None)
             }
             .unwrap();
+            ctx.try_set_debug_name(
+                &format!("{}_pipeline_layout", render_pass.name),
+                pipeline_layout,
+            );
             let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
                 .stages(&shader_stages)
                 .vertex_input_state(&vertex_input_state_info)
@@ -485,10 +490,7 @@ impl Pipeline {
             let graphics_pipeline = graphics_pipelines[0];
 
             ctx.try_set_debug_name(&format!("{}_pipeline", render_pass.name), graphics_pipeline);
-            ctx.try_set_debug_name(
-                &format!("{}_pipeline_layout", render_pass.name),
-                pipeline_layout,
-            );
+
             // TODO: Deferred descriptor writes
             // if let Some(d) = &mut attachment_descriptors {
             //     // If there are any input descriptors, write them into device memory
@@ -517,6 +519,10 @@ impl Pipeline {
                     .iter()
                     .map(|e| e.to_resource_kind())
                     .collect(),
+                per_pass_constant: match &render_pass.per_pass_constant {
+                    Some(m) => m.iter().map(|p| *p.1).collect(),
+                    None => Vec::new(),
+                },
                 inputs,
                 outputs: attachment_outputs,
                 index: pass_index as u32,
