@@ -371,8 +371,12 @@ impl Pipeline {
                     .unwrap()
                     .place_image_sampler(
                         ctx,
-                        // using main all mip views so per-mip views dont offset the base mip map level
-                        e.0.view,
+                        /*
+                         * Have to use only the specific mip usage view, otherwise VVL
+                         * complains about mip layout transitions if the view encompasses all of them
+                         * and we're still reading and writing through the mip chain
+                         */
+                        e.0.usage_view(),
                         vk::ImageLayout::READ_ONLY_OPTIMAL,
                         e.1.sampler,
                     );
