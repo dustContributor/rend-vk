@@ -89,7 +89,7 @@ impl Stage for RenderStage {
          *  At this point we already waited for the previous stage invocation to finish,
          *  we can free the buffers used back then.
          */
-        self.release_reserved_buffers(&ctx.buffer_allocator);
+        self.release_reserved_buffers(ctx.buffer_allocator);
         // Compose the descriptor set array to bind for this stage
         let mut descriptor_sets = vec![ctx.sampler_descriptors.set, ctx.image_descriptors.set];
         if let Some(desc) = &self.attachment_descriptors {
@@ -118,7 +118,7 @@ impl Stage for RenderStage {
             // Nothing to draw, nothing to reserve
             Vec::new()
         } else {
-            self.reserve_pass_buffers(&ctx.buffer_allocator, ctx.shader_resources_by_kind)
+            self.reserve_pass_buffers(ctx.buffer_allocator, ctx.shader_resources_by_kind)
         };
         for task in tasks.unwrap_or(&Vec::new()) {
             let mesh_buffer = ctx.mesh_buffers_by_id.get(&task.mesh_buffer_id).unwrap();
@@ -136,7 +136,7 @@ impl Stage for RenderStage {
                 ]);
             }
             // Third, the per-instance date for the task, uploaded per task
-            push_constants.extend(&self.reserve_instance_buffers(&ctx.buffer_allocator, task));
+            push_constants.extend(&self.reserve_instance_buffers(ctx.buffer_allocator, task));
             // Now we push the data into the command stream and issue the draws
             unsafe {
                 if !push_constants.is_empty() {
@@ -146,7 +146,7 @@ impl Stage for RenderStage {
                         self.layout,
                         ShaderStageFlags::ALL_GRAPHICS,
                         0u32,
-                        &push_constants,
+                        push_constants,
                     );
                 }
                 if is_indexed {

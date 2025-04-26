@@ -1,5 +1,3 @@
-use std::ffi::CStr;
-
 use ash::{vk, Device};
 
 use crate::context::VulkanContext;
@@ -37,11 +35,11 @@ impl ShaderProgram {
         fragment: Option<(String, Vec<u32>)>,
         geometry: Option<(String, Vec<u32>)>,
     ) -> Self {
-        let shader_entry_name = unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") };
+        let shader_entry_name = c"main";
         let stage_infos: Vec<Shader> = vec![vertex, fragment, geometry]
             .into_iter()
             .enumerate()
-            .map(|(i, c)| match c {
+            .filter_map(|(i, c)| match c {
                 Some(shader_bin) => {
                     let (sh_type, sh_type_name) = match i {
                         0 => (vk::ShaderStageFlags::VERTEX, "vert"),
@@ -51,7 +49,7 @@ impl ShaderProgram {
                     };
                     let info = vk::ShaderModuleCreateInfo::builder().code(&shader_bin.1);
                     let module = unsafe { ctx.device.create_shader_module(&info, None) }
-                        .expect(&format!("shader module error, type: {}", i));
+                        .unwrap_or_else(|_| panic!("shader module error, type: {}", i));
                     ctx.try_set_debug_name(
                         &format!("{}_shader_module_{}", name, sh_type_name),
                         module,
@@ -68,12 +66,10 @@ impl ShaderProgram {
                 }
                 None => None,
             })
-            .filter(|e| e.is_some())
-            .map(|e| e.unwrap())
             .collect();
 
         ShaderProgram {
-            name: name,
+            name,
             shaders: stage_infos,
         }
     }

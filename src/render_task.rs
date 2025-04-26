@@ -45,7 +45,7 @@ impl TaskKind {
         if v < 1 || v > (Self::MAX_VALUE as u64) {
             panic!("invalid task kind!")
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 

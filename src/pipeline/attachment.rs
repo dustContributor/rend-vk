@@ -26,7 +26,7 @@ impl Attachment {
 
     pub fn per_level_view(&self, level: u8) -> vk::ImageView {
         match self.per_level_views.get(level as usize) {
-            Some(vw) => vw.clone(),
+            Some(vw) => *vw,
             None => panic!("attachment {} doesn't has mip level {}", self.name, level),
         }
     }
@@ -47,9 +47,9 @@ impl Attachment {
             device.free_memory(self.memory, None);
             device.destroy_image_view(self.view, None);
             for view in &self.per_level_views {
-                let view = view.clone();
+                let view = *view;
                 /*
-                 * paranoid check, if the main view matches only one level,
+                 * paranoid check, if the main vieattachmentw matches only one level,
                  * it may be present here too
                  */
                 if self.view != view {
@@ -153,7 +153,7 @@ impl Attachment {
         a: &Attachment,
     ) -> vk::RenderingAttachmentInfo {
         vk::RenderingAttachmentInfo {
-            image_view: a.view.clone(),
+            image_view: a.view,
             image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,

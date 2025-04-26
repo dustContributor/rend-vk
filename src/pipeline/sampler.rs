@@ -89,7 +89,7 @@ impl Sampler {
             .address_mode_u(wrap_mode.to_vk())
             .address_mode_v(wrap_mode.to_vk())
             .address_mode_w(wrap_mode.to_vk())
-            .anisotropy_enable(if anisotropy > 1 { true } else { false })
+            .anisotropy_enable(anisotropy > 1)
             .compare_enable(compare_func != CompareFunc::None)
             .compare_op(match compare_func {
                 CompareFunc::None => vk::CompareOp::ALWAYS,

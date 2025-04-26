@@ -39,7 +39,7 @@ impl ResourceKind {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v) }
+            unsafe { std::mem::transmute::<u8, Self>(v) }
         }
     }
 
@@ -47,7 +47,7 @@ impl ResourceKind {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 
@@ -55,7 +55,7 @@ impl ResourceKind {
         if v > (Self::MAX_VALUE as usize) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 

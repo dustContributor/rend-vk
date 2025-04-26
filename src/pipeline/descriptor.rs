@@ -18,12 +18,8 @@ pub struct DescriptorBuffer {
     host: Box<[u8]>,
 }
 
-fn next_mul_u32(v: u32, mul: u32) -> u32 {
-    ((v + mul - 1) / mul) * mul
-}
-
 fn next_mul_u64(v: u64, mul: u64) -> u64 {
-    ((v + mul - 1) / mul) * mul
+    v.div_ceil(mul) * mul
 }
 
 impl DescriptorBuffer {
@@ -55,7 +51,6 @@ impl DescriptorBuffer {
                 .build()]
         } else {
             (0..count)
-                .into_iter()
                 .map(|e| {
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(e)
@@ -411,25 +406,22 @@ pub fn make_pool(ctx: &VulkanContext) -> vk::DescriptorPool {
     let image_sampler_size = vk::DescriptorPoolSize {
         descriptor_count: MAX_DESCRIPTOR_IMAGE_SAMPLER,
         ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-        ..Default::default()
     };
     let image_size = vk::DescriptorPoolSize {
         descriptor_count: MAX_DESCRIPTOR_IMAGE,
         ty: vk::DescriptorType::SAMPLED_IMAGE,
-        ..Default::default()
     };
     let sampler_size = vk::DescriptorPoolSize {
         descriptor_count: MAX_DESCRIPTOR_SAMPLER,
         ty: vk::DescriptorType::SAMPLER,
-        ..Default::default()
     };
     let pool_sizes = [image_sampler_size, image_size, sampler_size];
     let info = vk::DescriptorPoolCreateInfo::builder()
         .max_sets(MAX_DESCRIPTOR_SETS)
         .pool_sizes(&pool_sizes)
         .build();
-    let pool = unsafe { ctx.device.create_descriptor_pool(&info, None).unwrap() };
-    return pool;
+    // create pool and return
+    unsafe { ctx.device.create_descriptor_pool(&info, None).unwrap() }
 }
 
 impl DescriptorGroup {
@@ -451,7 +443,6 @@ impl DescriptorGroup {
                 .build()]
         } else {
             (0..count)
-                .into_iter()
                 .map(|e| {
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(e)
@@ -475,7 +466,7 @@ impl DescriptorGroup {
         let set = unsafe {
             ctx.device
                 .allocate_descriptor_sets(&alloc_info)
-                .expect(format!("faled allocating {}!", name).as_str())
+                .unwrap_or_else(|_| panic!("faled allocating {}!", name))
         }
         .pop()
         .unwrap();
@@ -581,7 +572,6 @@ impl DescriptorGroup {
             image_view,
             image_layout,
             sampler,
-            ..Default::default()
         };
         let infos = [info];
         let (dst_binding, dst_array_element) = if self.is_array {
@@ -601,8 +591,8 @@ impl DescriptorGroup {
         let writes = [write];
         let copies = [];
         unsafe { ctx.device.update_descriptor_sets(&writes, &copies) };
-        // Mark index slot as occupied
+        // Mark index slot as occupied and return
         self.occupancy.set(index as usize, true);
-        return index;
+        index
     }
 }

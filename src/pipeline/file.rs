@@ -449,7 +449,7 @@ impl Filtering {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v) }
+            unsafe { std::mem::transmute::<u8, Self>(v) }
         }
     }
 
@@ -457,7 +457,7 @@ impl Filtering {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 
@@ -492,7 +492,7 @@ impl WrapMode {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v) }
+            unsafe { std::mem::transmute::<u8, Self>(v) }
         }
     }
 
@@ -500,7 +500,7 @@ impl WrapMode {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 
@@ -547,7 +547,7 @@ impl CompareFunc {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v) }
+            unsafe { std::mem::transmute::<u8, Self>(v) }
         }
     }
 
@@ -555,7 +555,7 @@ impl CompareFunc {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 
@@ -775,7 +775,7 @@ where
         )
     }
     fn handle_option(desc: DescOption<T>) -> T {
-        let desc = match desc {
+        match desc {
             DescOption::Predefined(v) => match v {
                 OptionPredefined::Default => T::def(),
                 OptionPredefined::No => T::no(),
@@ -783,8 +783,7 @@ where
             },
             DescOption::Specific(v) => Self::handle_specific(&v),
             DescOption::Configured(v) => v,
-        };
-        return desc;
+        }
     }
 }
 
@@ -891,7 +890,6 @@ impl BlendDesc {
                     | vk::ColorComponentFlags::G
                     | vk::ColorComponentFlags::B
                     | vk::ColorComponentFlags::A,
-                ..Default::default()
             })
             .collect();
         let info = vk::PipelineColorBlendStateCreateInfo::builder()
@@ -954,7 +952,6 @@ impl ViewportDesc {
             },
             min_depth: depth.range_start,
             max_depth: depth.range_end,
-            ..Default::default()
         }
     }
 }
@@ -973,26 +970,23 @@ impl ScissorDesc {
                 },
             },
             extent: Pipeline::extent_of(self.width, self.height, window_width, window_height),
-            ..Default::default()
         }
     }
 }
 
 impl ClearDesc {
     pub fn to_vk_color(&self) -> Option<vk::ClearValue> {
-        self.color.and_then(|e| {
-            Some(vk::ClearValue {
-                color: vk::ClearColorValue {
-                    // Convolutedw way to separate a RGBA u32 into a vec4
-                    float32: e
-                        .to_ne_bytes()
-                        .into_iter()
-                        .map(|v| (v as f32) / 255.0)
-                        .collect::<Vec<_>>()
-                        .try_into()
-                        .unwrap(),
-                },
-            })
+        self.color.map(|e| vk::ClearValue {
+            color: vk::ClearColorValue {
+                // Convolutedw way to separate a RGBA u32 into a vec4
+                float32: e
+                    .to_ne_bytes()
+                    .into_iter()
+                    .map(|v| (v as f32) / 255.0)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+            },
         })
     }
 
@@ -1002,7 +996,6 @@ impl ClearDesc {
                 depth_stencil: vk::ClearDepthStencilValue {
                     depth: self.depth.unwrap_or(0.0),
                     stencil: self.stencil.unwrap_or(0),
-                    ..Default::default()
                 },
             })
         } else {

@@ -134,8 +134,8 @@ impl Pipeline {
                     .build()
             })
             .collect();
-
-        return initial_barriers;
+        // return initial barriers
+        initial_barriers
     }
 
     pub fn destroy(&self, device: &ash::Device) {

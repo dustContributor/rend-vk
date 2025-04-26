@@ -116,7 +116,7 @@ fn main() {
                 indices.len(),
             );
         };
-        return id;
+        id
     };
 
     let gen_frustum = || Frustum {
@@ -134,8 +134,7 @@ fn main() {
         let do_thing = |v: Vec4| {
             let v = inv_proj * v;
             let v = v / v.w;
-            let v = v / v.z;
-            return v;
+            v / v.z
         };
         let bleft = do_thing(Vec4::new(-1.0, -1.0, -1.0, 1.0));
         let bright = do_thing(Vec4::new(1.0, -1.0, -1.0, 1.0));
@@ -329,7 +328,7 @@ fn main() {
                         instance_count: 1,
                         vertex_count: 6,
                         indices_offset: 0,
-                        kind: kind,
+                        kind,
                         resources: task_res,
                     },
                     0,
@@ -338,8 +337,8 @@ fn main() {
         }
 
         renderer.render();
-
         true
+        // renderer.get_current_frame() < 2
     });
     let mut renderer = renderer;
     renderer.destroy();
