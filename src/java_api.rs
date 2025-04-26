@@ -126,9 +126,10 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
     {
         log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
         log_panics::init();
-        return JNI_TRUE;
+        JNI_TRUE
+    } else {
+        JNI_FALSE
     }
-    return JNI_FALSE;
 }
 
 #[no_mangle]
@@ -152,7 +153,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
      */
     let glfw_create_window_surface = unsafe {
         std::mem::transmute::<
-            _,
+            *const (),
             extern "C" fn(vk::Instance, u64, u64, *const vk::SurfaceKHR) -> vk::Result,
         >(glfw_create_window_surface as *const ())
     };
@@ -176,7 +177,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     let boxed = Box::from(renderer);
     let ptr = Box::into_raw(boxed) as u64;
     log::trace!("renderer finished!");
-    return ptr;
+    ptr
 }
 
 #[no_mangle]
@@ -206,9 +207,9 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getCurrentFrame(
     renderer: u64,
 ) -> u64 {
     let renderer = to_renderer(renderer);
-    let v = renderer.get_current_frame();
+    let current_frame = renderer.get_current_frame();
     Box::leak(renderer);
-    return v;
+    current_frame
 }
 
 #[no_mangle]
@@ -241,7 +242,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
     });
     Box::leak(renderer);
     match sampler {
-        Some(id) => id.try_into().unwrap(),
+        Some(id) => id,
         None => MISSING_SAMPLER_ID,
     }
 }
@@ -264,7 +265,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
         anisotropy,
     });
     Box::leak(renderer);
-    sampler.try_into().unwrap()
+    sampler
 }
 
 #[no_mangle]
@@ -287,7 +288,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
         count,
     );
     Box::leak(renderer);
-    return mesh_id;
+    mesh_id
 }
 
 #[no_mangle]
@@ -352,7 +353,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
         staging_size,
     );
     Box::leak(renderer);
-    return texture_id;
+    texture_id
 }
 
 #[no_mangle]
@@ -385,10 +386,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTextureMipMaps(
         .fetch_texture(id)
         .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
     let dest = unsafe {
-        std::slice::from_raw_parts_mut(
-            dest as *mut JavaMipMap,
-            size_of::<JavaMipMap>() * texture.mip_map_count() as usize,
-        )
+        std::slice::from_raw_parts_mut(dest as *mut JavaMipMap, texture.mip_map_count() as usize)
     };
     for (i, item) in texture.mip_maps.iter().enumerate() {
         dest[i] = item.to_java();
@@ -418,7 +416,11 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
     let renderer = to_renderer(renderer);
     let is_uploaded = renderer.is_texture_uploaded(id);
     Box::leak(renderer);
-    return if is_uploaded { JNI_TRUE } else { JNI_FALSE };
+    if is_uploaded {
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
 }
 
 #[no_mangle]
@@ -518,7 +520,7 @@ fn unpack_render_task_resources(
         offset = next_end;
         resources_by_kind.insert(kind, wrapper);
     }
-    return resources_by_kind;
+    resources_by_kind
 }
 
 fn unpack_single_resource<T>(data: &[u8]) -> (SingleResource, usize)
@@ -554,5 +556,5 @@ where
     let items = unsafe { std::slice::from_raw_parts(slice_aligned.as_ptr().cast::<T>(), count) };
 
     let next_end = items.as_ptr_range().end as usize - data.as_ptr() as usize;
-    return (items, next_end);
+    (items, next_end)
 }
