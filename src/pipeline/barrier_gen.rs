@@ -35,24 +35,13 @@ pub struct BarrierGen {
     levels_by_owner: HashMap<String, u8>,
 }
 
+#[derive(Default)]
 struct BarrierEval {
     src_access: vk::AccessFlags2,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
     already_issued: bool,
     keep_searching: bool,
-}
-
-impl Default for BarrierEval {
-    fn default() -> Self {
-        Self {
-            old_layout: Default::default(),
-            new_layout: Default::default(),
-            src_access: Default::default(),
-            already_issued: Default::default(),
-            keep_searching: Default::default(),
-        }
-    }
 }
 
 impl BarrierEval {
@@ -173,12 +162,11 @@ impl BarrierGen {
             Some(r) => *r,
             None => panic!("levels for attachment '{}' not found!", name),
         };
-        let level_range = if MipMap::is_all_levels_value(level_usage) {
+        if MipMap::is_all_levels_value(level_usage) {
             0..owner_levels
         } else {
             level_usage..level_usage + 1
-        };
-        return level_range;
+        }
     }
 
     fn eval_barrier_for(
@@ -430,6 +418,6 @@ impl BarrierGen {
                 );
             });
         }
-        return barriers.iter().map(|e| e.2).collect();
+        barriers.iter().map(|e| e.2).collect()
     }
 }

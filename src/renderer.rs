@@ -79,9 +79,7 @@ impl Renderer {
         log::trace!("destroying renderer...");
         unsafe { self.vulkan_context.device.device_wait_idle().unwrap() };
         self.pipeline.destroy(&self.vulkan_context.device);
-        for e in [&self.general_allocator] {
-            e.destroy(&self.vulkan_context.device);
-        }
+        self.general_allocator.destroy(&self.vulkan_context.device);
         unsafe {
             let destroy_semaphore = |s| self.vulkan_context.device.destroy_semaphore(s, None);
             let destroy_fence = |s| self.vulkan_context.device.destroy_fence(s, None);
@@ -112,16 +110,13 @@ impl Renderer {
     }
 
     pub fn try_get_sampler(&self, key: SamplerKey) -> Option<u8> {
-        match self.pipeline.samplers_by_key.get(&key) {
-            Some(s) => Some(s.position),
-            None => None,
-        }
+        self.pipeline.samplers_by_key.get(&key).map(|s| s.position)
     }
 
     pub fn get_sampler(&mut self, key: SamplerKey) -> u8 {
         let id = self.try_get_sampler(key);
-        if id.is_some() {
-            return id.unwrap();
+        if let Some(id) = id {
+            return id;
         }
         //  Sampler for this key not found, generate one
         let id = self.pipeline.samplers_by_key.len() as u32;
@@ -135,7 +130,7 @@ impl Renderer {
         // TODO: Deferred descriptor writes
         // sampler_descriptors.into_device_single_at(0, id);
         // Return the ID for referencing on the client side
-        return id as u8;
+        id as u8
     }
 
     pub fn fetch_mesh(&self, id: u32) -> Option<&MeshBuffer> {
@@ -154,7 +149,7 @@ impl Renderer {
             .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
         let free_if_not_empty = |v: &DeviceSlice| {
             if v.size > 0 {
-                self.general_allocator.free(v.clone());
+                self.general_allocator.free(*v);
             }
         };
         free_if_not_empty(&mesh.vertices);
@@ -207,7 +202,7 @@ impl Renderer {
             },
         );
 
-        return mesh_id;
+        mesh_id
     }
 
     pub fn fetch_texture(&self, id: u32) -> Option<&Texture> {
@@ -240,7 +235,7 @@ impl Renderer {
         let texture = Texture {
             id: texture_id,
             mip_maps: mip_maps.into(),
-            staging: staging,
+            staging,
             ..crate::texture::make(
                 &self.vulkan_context,
                 name,
@@ -259,7 +254,7 @@ impl Renderer {
             vk::ImageLayout::READ_ONLY_OPTIMAL,
         );
         self.textures_by_id.insert(texture_id, texture);
-        return texture_id;
+        texture_id
     }
 
     pub fn queue_texture_for_uploading(&mut self, id: u32) {
@@ -274,7 +269,8 @@ impl Renderer {
             .textures_by_id
             .get(&id)
             .unwrap_or_else(|| panic!("missing texture with id {}", id));
-        return texture.staging.is_none();
+        // If it no longer has staging memory, then it's uploaded
+        texture.staging.is_none()
     }
 
     pub fn place_shader_resource(&mut self, kind: ResourceKind, item: SingleResource) {
@@ -288,14 +284,14 @@ impl Renderer {
                 .swapchain
                 .acquire_next_image(
                     self.swapchain_context.swapchain,
-                    std::u64::MAX,
+                    u64::MAX,
                     self.present_complete_semaphore,
                     vk::Fence::null(),
                 )
                 .unwrap()
         };
         let attachment = self.swapchain_context.attachments[present_index as usize].clone();
-        return (present_index, attachment);
+        (present_index, attachment)
     }
 
     fn present(&self, swapchain_attachment_index: u32) {
@@ -436,7 +432,7 @@ impl Renderer {
                 // Free the staging buffer after it has been used
                 match &texture.staging {
                     Some(staging) => {
-                        let device = staging.as_ref().clone();
+                        let device = *staging.as_ref();
                         self.general_allocator.free(device);
                     }
                     _ => panic!(
@@ -446,7 +442,8 @@ impl Renderer {
                 }
                 // Set staging to None to mark the texture as "uploaded"
                 texture.staging = None;
-                return false;
+                // No longer retain the transition, already uploaded
+                false
             });
             if prev_len != self.ongoing_optimal_transitions.len() {
                 // Update the descriptors on the device
@@ -500,7 +497,7 @@ impl Renderer {
         unsafe {
             self.vulkan_context
                 .device
-                .wait_for_fences(&fences, true, std::u64::MAX)
+                .wait_for_fences(&fences, true, u64::MAX)
                 .expect("fence wait failed!");
             self.vulkan_context
                 .device
@@ -803,7 +800,8 @@ where
     });
     log::trace!("initial layout transitions issued!");
     log::trace!("renderer finished!");
-    return renderer;
+    // Return initialized renderer
+    renderer
 }
 
 pub fn make_device(
@@ -813,8 +811,7 @@ pub fn make_device(
     is_debug_enabled: bool,
 ) -> ash::Device {
     let mut device_extension_names_raw = vec![khr::Swapchain::name().as_ptr()];
-    let non_semantic_info_name =
-        CStr::from_bytes_with_nul(b"VK_KHR_shader_non_semantic_info\0").unwrap();
+    let non_semantic_info_name = c"VK_KHR_shader_non_semantic_info";
     if is_debug_enabled {
         device_extension_names_raw.push(non_semantic_info_name.as_ptr());
     }
@@ -866,7 +863,8 @@ pub fn make_device(
             .expect("couldn't create the device!")
     };
     log::info!("device initialized!");
-    return device;
+    // Return initialized device
+    device
 }
 
 pub fn make_instance(
@@ -875,12 +873,11 @@ pub fn make_instance(
     is_debug_enabled: bool,
     is_validation_layer_enabled: bool,
 ) -> ash::Instance {
-    let app_name = CStr::from_bytes_with_nul(b"rend-vk\0").unwrap();
+    let app_name = c"rend-vk";
 
     let mut layers_names_raw = vec![];
 
-    let validation_layer_name =
-        CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap();
+    let validation_layer_name = c"VK_LAYER_KHRONOS_validation";
     if is_debug_enabled && is_validation_layer_enabled {
         layers_names_raw.push(validation_layer_name.as_ptr());
     }
@@ -918,7 +915,8 @@ pub fn make_instance(
             .expect("instance creation error!")
     };
     log::info!("instance initialized!");
-    return instance;
+    // Return initialized instance
+    instance
 }
 
 pub fn select_physical_device(
@@ -986,7 +984,8 @@ pub fn select_physical_device(
         if a.1.is_none() && b.1.is_some() {
             return std::cmp::Ordering::Greater;
         }
-        return std::cmp::Ordering::Equal;
+        // Otherwise determine equal
+        std::cmp::Ordering::Equal
     });
     // Just pick the first and use it
     tmp.into_iter()
@@ -1036,7 +1035,7 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
         buffer_allocator: &mut DeviceAllocator,
     ) -> DeviceSlice {
         let buffer = buffer_allocator
-            .alloc(std::mem::size_of_val(&elements) as u64)
+            .alloc(std::mem::size_of_val(elements) as u64)
             .expect("couldn't allocate index buffer");
         let mut slice = unsafe {
             Align::new(
