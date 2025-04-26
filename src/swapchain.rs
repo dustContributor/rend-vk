@@ -13,11 +13,11 @@ pub struct SwapchainContext {
 
 impl SwapchainContext {
     pub fn make(ctx: &VulkanContext, surface: vk::SurfaceKHR, is_vsync_enabled: bool) -> Self {
-        let present_mode = present_mode(&ctx, surface, is_vsync_enabled);
-        let surface_extent = surface_extent(&ctx, surface, 1280, 720);
-        let surface_format = surface_format(&ctx, surface);
-        let swapchain = swapchain(&ctx, surface, surface_extent, present_mode);
-        let swapchain_attachments = attachments(&ctx, surface, swapchain, surface_extent);
+        let present_mode = present_mode(ctx, surface, is_vsync_enabled);
+        let surface_extent = surface_extent(ctx, surface, 1280, 720);
+        let surface_format = surface_format(ctx, surface);
+        let swapchain = swapchain(ctx, surface, surface_extent, present_mode);
+        let swapchain_attachments = attachments(ctx, surface, swapchain, surface_extent);
         ctx.try_set_debug_name("swapchain_main", swapchain);
         Self {
             present_mode,
@@ -68,7 +68,6 @@ pub fn attachments(
                     g: vk::ComponentSwizzle::G,
                     b: vk::ComponentSwizzle::B,
                     a: vk::ComponentSwizzle::A,
-                    ..Default::default()
                 })
                 .subresource_range(vk::ImageSubresourceRange {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -76,7 +75,6 @@ pub fn attachments(
                     level_count: 1,
                     base_array_layer: 0,
                     layer_count: 1,
-                    ..Default::default()
                 })
                 .image(image)
                 .build();
@@ -92,8 +90,8 @@ pub fn attachments(
         .zip(image_views.iter())
         .enumerate()
         .for_each(|(i, (img, view))| {
-            ctx.try_set_debug_name(&format!("swapchain_{}_image", i), img.clone());
-            ctx.try_set_debug_name(&format!("swapchain_{}_image_view", i), view.clone());
+            ctx.try_set_debug_name(&format!("swapchain_{}_image", i), *img);
+            ctx.try_set_debug_name(&format!("swapchain_{}_image_view", i), *view);
         });
     let attachments: Vec<Attachment> = images
         .into_iter()

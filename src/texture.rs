@@ -14,7 +14,7 @@ pub struct Texture {
     pub staging: Option<Box<DeviceSlice>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MipMap {
     pub index: u32,
     pub width: u32,
@@ -39,18 +39,6 @@ impl MipMap {
         vk::Extent2D {
             width: self.width,
             height: self.height,
-        }
-    }
-}
-
-impl Default for MipMap {
-    fn default() -> Self {
-        Self {
-            index: 0,
-            width: 0,
-            height: 0,
-            size: 0,
-            offset: 0,
         }
     }
 }
@@ -210,12 +198,12 @@ fn usage_flags_for(format: crate::format::Format, is_attachment: bool) -> vk::Im
     } else {
         vk::ImageUsageFlags::COLOR_ATTACHMENT
     };
-    return depth_or_color
     // for attachment sampling
-    | vk::ImageUsageFlags::SAMPLED
+    vk::ImageUsageFlags::SAMPLED
     // transfer flags for blits
     | vk::ImageUsageFlags::TRANSFER_DST
-    | vk::ImageUsageFlags::TRANSFER_SRC;
+    | vk::ImageUsageFlags::TRANSFER_SRC
+    | depth_or_color
 }
 
 pub fn make(
