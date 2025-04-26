@@ -43,12 +43,12 @@ impl Pipeline {
                 }
             };
         }
-        return Pipeline {
+        Pipeline {
             passes,
             programs,
             targets,
             shared_state,
-        };
+        }
     }
 
     fn spirv_path_of(shader: &str) -> String {
@@ -68,7 +68,7 @@ impl Pipeline {
         let base_path = std::path::Path::new(&base_path).parent().unwrap();
         std::fs::DirBuilder::new()
             .recursive(true)
-            .create(&base_path)
+            .create(base_path)
             .expect(&format!(
                 "failed creating the SPIR-V folder at {}!",
                 base_path.to_str().unwrap()
@@ -76,8 +76,7 @@ impl Pipeline {
         // Same shader could be used in multiple programs, flatten and de-duplicate
         let shaders = programs
             .iter()
-            .map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
-            .flatten()
+            .flat_map(|p| vec![&p.fragment, &p.vertex, &p.geometry])
             .filter(|f| !f.is_empty())
             .collect::<HashSet<_>>();
         // Invoke glslang and compile each shader into SPIR-V
@@ -103,7 +102,7 @@ impl Pipeline {
                 .expect(format!("failed to start compiler for {}!", &shader).as_str());
 
             if !output.status.success() {
-                let msg = String::from_utf8_lossy(if output.stdout.len() > 0 {
+                let msg = String::from_utf8_lossy(if !output.stdout.is_empty() {
                     &output.stdout
                 } else {
                     &output.stderr
@@ -183,7 +182,7 @@ impl Pipeline {
                 let extent =
                     Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
                 let texture = texture::make(
-                    &ctx,
+                    ctx,
                     f.name.clone(),
                     extent.width,
                     extent.height,
@@ -199,7 +198,8 @@ impl Pipeline {
                 for (i, view) in per_level_views.iter().enumerate() {
                     ctx.try_set_debug_name(&format!("{}_att_image_view{}", f.name, i), *view);
                 }
-                return (
+                // key -> name, value -> attachment
+                (
                     f.name.clone(),
                     Attachment {
                         name: f.name.clone(),
@@ -213,7 +213,7 @@ impl Pipeline {
                         level_usage: 0,
                         descriptor_index: 0,
                     },
-                );
+                )
             })
             .collect();
         // Default attachment is provided by the caller since it depends on the swapchain.
@@ -265,13 +265,12 @@ impl Pipeline {
                 .scissors(&scissors)
                 .viewports(&viewports);
             let rasterization_state = triangle.to_vk(depth);
-            let depth_stencil_attachment = match &render_pass.depth_stencil {
-                Some(name) => Some(attachments_by_name.get(&name.to_string()).expect(&format!(
+            let depth_stencil_attachment = render_pass.depth_stencil.as_ref().map(|name| {
+                attachments_by_name.get(&name.to_string()).expect(&format!(
                     "depth stencil attachment {} missing for pass {}!",
                     name, render_pass.name
-                ))),
-                _ => None,
-            };
+                ))
+            });
             let binding_descs = [];
             let attrib_descs = [];
             let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
@@ -354,7 +353,7 @@ impl Pipeline {
                 .map(|e| e.info)
                 .collect::<Vec<_>>();
 
-            let mut attachment_descriptors = (render_pass.inputs.len() > 0).then(|| {
+            let mut attachment_descriptors = (!render_pass.inputs.is_empty()).then(|| {
                 Box::new(Self::attachment_image_desc_buffer(
                     ctx,
                     descriptor_pool,
@@ -430,10 +429,8 @@ impl Pipeline {
                 .iter()
                 .map(make_rendering_attachment_info)
                 .collect();
-            let depth_stencil_rendering = match depth_stencil_attachment {
-                Some(att) => Some(make_rendering_attachment_info(att)),
-                None => None,
-            };
+            let depth_stencil_rendering =
+                depth_stencil_attachment.map(make_rendering_attachment_info);
             /*
              * Add the depth-stencil attachment to the output list if present,
              * this way proper barriers for writing/testing will be generated if
@@ -553,14 +550,14 @@ impl Pipeline {
         // TODO: Deferred descriptor writes
         // sampler_descriptors.into_device();
         // image_descriptors.into_device();
-        return crate::pipeline::Pipeline {
+        crate::pipeline::Pipeline {
             stages,
             attachments: attachments_by_name.into_values().collect(),
             descriptor_pool,
             image_descriptors,
             sampler_descriptors,
             samplers_by_key,
-        };
+        }
     }
 
     fn find_attachments(
@@ -591,8 +588,8 @@ impl Pipeline {
         window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
     ) -> crate::pipeline::blit_stage::BlitStage {
-        let mut outputs = Self::find_attachments(&[blit.output.get()], &attachments_by_name);
-        let mut inputs = Self::find_attachments(&[blit.input.get()], &attachments_by_name);
+        let mut outputs = Self::find_attachments(&[blit.output.get()], attachments_by_name);
+        let mut inputs = Self::find_attachments(&[blit.input.get()], attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
         crate::pipeline::blit_stage::BlitStage {
             name: blit.name.clone(),
@@ -607,15 +604,14 @@ impl Pipeline {
     }
 
     pub fn image_desc_buffer(ctx: &VulkanContext, pool: vk::DescriptorPool) -> DescriptorGroup {
-        let desc_buffer = DescriptorGroup::of(
+        DescriptorGroup::of(
             ctx,
             pool,
             "images".to_string(),
             DescriptorType::SAMPLED_IMAGE,
             1024,
             true,
-        );
-        desc_buffer
+        )
     }
 
     pub fn attachment_image_desc_buffer(
@@ -625,15 +621,14 @@ impl Pipeline {
         size: u32,
     ) -> DescriptorGroup {
         let name = format!("{}_attachments", prefix);
-        let desc_buffer = DescriptorGroup::of(
+        DescriptorGroup::of(
             ctx,
             pool,
             name,
             DescriptorType::COMBINED_IMAGE_SAMPLER,
             size,
             false,
-        );
-        desc_buffer
+        )
     }
 
     pub fn sampler_desc_buffer(
@@ -641,15 +636,14 @@ impl Pipeline {
         pool: vk::DescriptorPool,
         size: u32,
     ) -> DescriptorGroup {
-        let desc_buffer = DescriptorGroup::of(
+        DescriptorGroup::of(
             ctx,
             pool,
             "samplers".to_string(),
             DescriptorType::SAMPLER,
             size,
             false,
-        );
-        desc_buffer
+        )
     }
 
     pub fn extent_of(
