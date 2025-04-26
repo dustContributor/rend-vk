@@ -61,13 +61,13 @@ impl Format {
     }
 
     pub fn has_stencil(self) -> bool {
-        match self {
+        matches!(
+            self,
             Self::D16_UNORM_S8_UINT
-            | Self::D24_UNORM_S8_UINT
-            | Self::D32_SFLOAT_S8_UINT
-            | Self::S8_UINT => true,
-            _ => false,
-        }
+                | Self::D24_UNORM_S8_UINT
+                | Self::D32_SFLOAT_S8_UINT
+                | Self::S8_UINT
+        )
     }
 
     pub fn aspect(self) -> vk::ImageAspectFlags {
@@ -82,11 +82,11 @@ impl Format {
             vk::ImageAspectFlags::NONE
         };
         let aspect = depth | stencil;
-        return if aspect == vk::ImageAspectFlags::NONE {
+        if aspect == vk::ImageAspectFlags::NONE {
             vk::ImageAspectFlags::COLOR
         } else {
             aspect
-        };
+        }
     }
 
     pub fn size_for(self, width: u32, height: u32) -> u32 {
@@ -112,7 +112,7 @@ impl Format {
         if v > Self::MAX_VALUE {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v) }
+            unsafe { std::mem::transmute::<u8, Self>(v) }
         }
     }
 
@@ -120,7 +120,7 @@ impl Format {
         if v > (Self::MAX_VALUE as u32) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 
@@ -128,7 +128,7 @@ impl Format {
         if v > (Self::MAX_VALUE as usize) {
             panic!()
         } else {
-            unsafe { std::mem::transmute(v as u8) }
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
         }
     }
 

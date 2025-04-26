@@ -30,9 +30,9 @@ impl VulkanContext {
         self.extension.try_end_debug_label(command_buffer)
     }
 
-    pub fn try_set_debug_name<T: 'static>(&self, name: &str, obj: T) -> bool
+    pub fn try_set_debug_name<T>(&self, name: &str, obj: T) -> bool
     where
-        T: vk::Handle,
+        T: 'static + vk::Handle,
     {
         self.extension.try_set_debug_name(&self.device, name, obj)
     }
@@ -86,9 +86,9 @@ impl ExtensionContext {
         true
     }
 
-    pub fn try_set_debug_name<T: 'static>(&self, device: &ash::Device, name: &str, obj: T) -> bool
+    pub fn try_set_debug_name<T>(&self, device: &ash::Device, name: &str, obj: T) -> bool
     where
-        T: vk::Handle,
+        T: 'static + vk::Handle,
     {
         if !self.is_debug_enabled() {
             return false;
@@ -96,7 +96,7 @@ impl ExtensionContext {
         let dbg = self.debug_utils.as_ref().unwrap();
         let c_name = std::ffi::CString::new(name).unwrap();
         let type_id = TypeId::of::<T>();
-        let object_type = OBJECT_TYPES_BY_TYPE_ID.get(&type_id).unwrap().clone();
+        let object_type = *OBJECT_TYPES_BY_TYPE_ID.get(&type_id).unwrap();
         let name_info = vk::DebugUtilsObjectNameInfoEXT::builder()
             .object_type(object_type)
             .object_handle(vk::Handle::as_raw(obj))
@@ -228,7 +228,7 @@ lazy_static! {
             ),
         ]
         .iter()
-        .map(|e| e.clone())
+        .copied()
         .collect()
     };
 }

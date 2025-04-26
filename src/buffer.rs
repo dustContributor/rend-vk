@@ -228,7 +228,7 @@ impl DeviceBuffer {
         ctx.try_set_debug_name(&format!("{}_buffer_memory", name), mem);
         ctx.try_set_debug_name(&format!("{}_buffer", name), buffer);
 
-        return Self {
+        Self {
             type_index: memi,
             buffer,
             addr,
@@ -237,7 +237,7 @@ impl DeviceBuffer {
             alignment,
             memory: mem,
             size: mem_info.allocation_size,
-        };
+        }
     }
 
     fn get_descriptor_offset_alignment(
@@ -272,7 +272,7 @@ impl InnerDeviceAllocator {
             start: 0,
             end: buffer.size,
         }];
-        return Self { buffer, ranges };
+        Self { buffer, ranges }
     }
 
     fn alloc(&mut self, size: u64) -> Option<DeviceSlice> {
@@ -311,7 +311,7 @@ impl InnerDeviceAllocator {
                 kind: self.buffer.kind,
             });
         }
-        return None;
+        None
     }
 
     fn free(&mut self, slice: DeviceSlice) {
