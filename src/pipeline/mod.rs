@@ -120,7 +120,7 @@ impl Pipeline {
                         continue;
                     }
                     // found the first layout for this specific level
-                    first_layouts.push((att.image, lvl, barrier.old_layout, sub_range));
+                    first_layouts.push((att.image, barrier.old_layout, lvl, sub_range.aspect_mask));
                     break;
                 }
             }
@@ -128,20 +128,22 @@ impl Pipeline {
         // generate all of the initial barriers transitioning into the first expected layout
         let initial_barriers: Vec<_> = first_layouts
             .into_iter()
-            .map(|(image, lvl, old_layout, sub_range)| {
+            .map(|(image, initial_layout, base_mip_level, aspect_mask)| {
                 vk::ImageMemoryBarrier2::builder()
                     .image(image)
                     .src_access_mask(vk::AccessFlags2::NONE)
                     .dst_access_mask(vk::AccessFlags2::NONE)
                     .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(old_layout)
+                    .new_layout(initial_layout)
                     .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
                     .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
                     // every mip level is transitioned individually, occurs only once so no problem
                     .subresource_range(vk::ImageSubresourceRange {
-                        base_mip_level: lvl,
+                        base_mip_level,
                         level_count: 1,
-                        ..sub_range
+                        base_array_layer: 0,
+                        layer_count: 1,
+                        aspect_mask,
                     })
                     .build()
             })
