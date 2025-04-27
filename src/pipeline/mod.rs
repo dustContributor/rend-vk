@@ -97,40 +97,52 @@ impl Pipeline {
     }
 
     pub fn gen_initial_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
-        let mut first_layout_by_image: HashMap<
-            vk::Image,
-            (vk::ImageLayout, vk::ImageSubresourceRange),
-        > = HashMap::new();
-
-        self.stages
+        let mut first_layouts: Vec<_> = Vec::new();
+        // collect all barriers in the pipeline since we're going to check them all
+        let barriers: Vec<_> = self
+            .stages
             .iter()
             .flat_map(|e| e.image_barriers())
-            .for_each(|barrier| {
-                if first_layout_by_image.contains_key(&barrier.image) {
-                    // Already registered the first occurence of this image
-                    return;
+            .collect();
+        // for every mip level of every attachment, find the first layout the render pipeline needs it to be in
+        for att in &self.attachments {
+            for lvl in 0..att.levels() as u32 {
+                for barrier in &barriers {
+                    if barrier.image != att.image {
+                        // barrier doesn't corresponds to this image
+                        continue;
+                    }
+                    let sub_range = barrier.subresource_range;
+                    if lvl < sub_range.base_mip_level
+                        || lvl >= (sub_range.base_mip_level + sub_range.level_count)
+                    {
+                        // barrier doesn't corresponds to level
+                        continue;
+                    }
+                    // found the first layout for this specific level
+                    first_layouts.push((att.image, lvl, barrier.old_layout, sub_range));
+                    break;
                 }
-                first_layout_by_image.insert(
-                    barrier.image,
-                    (barrier.old_layout, barrier.subresource_range),
-                );
-            });
-
-        let initial_barriers: Vec<_> = first_layout_by_image
+            }
+        }
+        // generate all of the initial barriers transitioning into the first expected layout
+        let initial_barriers: Vec<_> = first_layouts
             .into_iter()
-            .map(|e| {
-                let image = e.0;
-                let layout = e.1 .0;
-                let subr = e.1 .1;
+            .map(|(image, lvl, old_layout, sub_range)| {
                 vk::ImageMemoryBarrier2::builder()
                     .image(image)
                     .src_access_mask(vk::AccessFlags2::NONE)
                     .dst_access_mask(vk::AccessFlags2::NONE)
                     .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(layout)
+                    .new_layout(old_layout)
                     .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
                     .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
-                    .subresource_range(subr)
+                    // every mip level is transitioned individually, occurs only once so no problem
+                    .subresource_range(vk::ImageSubresourceRange {
+                        base_mip_level: lvl,
+                        level_count: 1,
+                        ..sub_range
+                    })
                     .build()
             })
             .collect();
