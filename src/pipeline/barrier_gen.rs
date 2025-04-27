@@ -99,7 +99,7 @@ impl BarrierGen {
                         .map(|i| Image::of_attachment(&i))
                         .collect();
                     let mut inputs = Vec::with_capacity(p.inputs.len());
-                    for input in p.inputs.iter() {
+                    for input in p.inputs.iter().map(|i| i.get()) {
                         for lvl in
                             Self::level_range_for(&input.name, input.level.get(), &levels_by_owner)
                         {

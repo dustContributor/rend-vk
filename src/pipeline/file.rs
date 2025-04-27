@@ -191,7 +191,7 @@ pub struct RenderPass {
     pub depth_stencil: Option<String>,
     pub batch: crate::render_task::TaskKind,
     pub outputs: Vec<StrOrObj<AttachmentOutput>>,
-    pub inputs: Vec<AttachmentInput>,
+    pub inputs: Vec<StrOrObj<AttachmentInput>>,
     pub per_pass_updaters: Vec<UpdaterKind>,
     pub per_instance_updaters: Vec<UpdaterKind>,
     pub per_pass_constant: Option<IndexMap<String, f32>>,

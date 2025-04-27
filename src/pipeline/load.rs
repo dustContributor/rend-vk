@@ -283,19 +283,22 @@ impl Pipeline {
 
             let dynamic_state_info =
                 vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
-            // TODO: Check why if depth output isn't placed last, VVL errors get reported
-            let attachment_outputs = Self::find_attachments(
-                &render_pass
-                    .outputs
-                    .iter()
-                    .map(|e| e.get())
-                    .collect::<Vec<_>>(),
-                &attachments_by_name,
-            );
-            let attachment_inputs =
-                Self::find_attachments(&render_pass.inputs, &attachments_by_name);
-            let attachment_samplers: Vec<_> = render_pass
+            let render_pass_inputs = render_pass
                 .inputs
+                .iter()
+                .map(|e| e.get())
+                .collect::<Vec<_>>();
+            let render_pass_outputs = render_pass
+                .outputs
+                .iter()
+                .map(|e| e.get())
+                .collect::<Vec<_>>();
+            // TODO: Check why if depth output isn't placed last, VVL errors get reported
+            let attachment_outputs =
+                Self::find_attachments(&render_pass_outputs, &attachments_by_name);
+            let attachment_inputs =
+                Self::find_attachments(&render_pass_inputs, &attachments_by_name);
+            let attachment_samplers: Vec<_> = render_pass_inputs
                 .iter()
                 .map(|i| {
                     let sampler = Self::handle_option(i.sampler.clone());
@@ -385,10 +388,9 @@ impl Pipeline {
                 }
             };
             // Final passes have special rendering attachment info hanlding on render.
-            let default_attachment_index = render_pass
-                .outputs
+            let default_attachment_index = render_pass_outputs
                 .iter()
-                .position(|e| Attachment::DEFAULT_NAME == e.get().name);
+                .position(|e| Attachment::DEFAULT_NAME == e.name);
 
             // Generate attachment structs with the proper descriptor index/offset
             let inputs: Vec<_> = attachment_inputs
