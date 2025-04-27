@@ -993,11 +993,14 @@ pub fn select_physical_device(
         .expect("couldn't find a suitable physical device!")
 }
 
+
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
+    #[allow(dead_code)]
     #[derive(Clone, Debug, Copy)]
     struct Attrib3f {
         pub values: [f32; 3],
     }
+    #[allow(dead_code)]
     #[derive(Clone, Debug, Copy)]
     struct Attrib2f {
         pub values: [f32; 2],
