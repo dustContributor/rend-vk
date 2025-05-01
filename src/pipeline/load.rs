@@ -261,9 +261,16 @@ impl Pipeline {
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
             let viewports = [viewport.to_vk(&depth, window_width as f32, window_height as f32)];
             let scissors = [scissor.to_vk(window_width as f32, window_height as f32)];
+            // OpenGL NDC from -1 to 1 on depth, instead of 0 to 1
+            // let mut depth_clip_control = vk::PipelineViewportDepthClipControlCreateInfoEXT {
+            //     negative_one_to_one: 0,
+            //     ..Default::default()
+            // };
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
                 .scissors(&scissors)
-                .viewports(&viewports);
+                .viewports(&viewports)
+                // .push_next(&mut depth_clip_control)
+                .build();
             let rasterization_state = triangle.to_vk(depth);
             let depth_stencil_attachment = render_pass.depth_stencil.as_ref().map(|name| {
                 attachments_by_name.get(&name.to_string()).expect(&format!(

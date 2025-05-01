@@ -837,10 +837,16 @@ pub fn make_device(
         synchronization2: 1,
         ..Default::default()
     };
+    // OpenGL NDC from -1 to 1 on depth, instead of 0 to 1
+    // let mut depth_clip_control_feature = vk::PhysicalDeviceDepthClipControlFeaturesEXT {
+    //     depth_clip_control: 1,
+    //     ..Default::default()
+    // };
     let mut features2 = vk::PhysicalDeviceFeatures2::builder()
         .features(features)
         .push_next(&mut features12)
         .push_next(&mut features13)
+        // .push_next(&mut depth_clip_control_feature)
         .build();
 
     let priorities = [1.0];
@@ -992,7 +998,6 @@ pub fn select_physical_device(
         .find_map(|e| e.1)
         .expect("couldn't find a suitable physical device!")
 }
-
 
 fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
     #[allow(dead_code)]
