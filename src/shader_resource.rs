@@ -171,9 +171,9 @@ pub struct Frustum {
     pub inv_height: f32,
     pub near_plane: f32,
     pub far_plane: f32,
+    pub fragments_per_meter_plane: f32,
     // Pad to 32 bytes
     pub pad0: u32,
-    pub pad1: u32,
 }
 #[derive(Clone, Serialize)]
 #[repr(C)]

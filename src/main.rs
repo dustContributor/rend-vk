@@ -126,8 +126,8 @@ fn main() {
         width: window_width,
         inv_height: 1.0 / window_height,
         inv_width: 1.0 / window_width,
+        fragments_per_meter_plane: 600.0,
         pad0: 0,
-        pad1: 0,
     };
 
     let gen_view_ray = || {

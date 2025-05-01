@@ -24,6 +24,7 @@ struct Frustum
   float invHeight;
   float nearPlane;
   float farPlane;
+  float fragmentsPerMeterPlane;
 };
 
 struct View
@@ -574,6 +575,9 @@ void print(vec3 v) {
 }
 void print(vec2 v) {
   debugPrintfEXT("\nvec2 {x: %f, y: %f}", v.x, v.y);
+}
+void print(ivec2 v) {
+  debugPrintfEXT("\nivec2 {x: %d, y: %d}", v.x, v.y);
 }
 void print(mat4 v) {
   debugPrintfEXT("\nmat4 {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}\n     {x: %f, y: %f, z: %f, w: %f}", v[0].x, v[0].y, v[0].z, v[0].w, v[1].x, v[1].y, v[1].z, v[1].w, v[2].x, v[2].y, v[2].z, v[2].w, v[3].x, v[3].y, v[3].z, v[3].w);
