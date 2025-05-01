@@ -240,6 +240,10 @@
             "wrapMode": "CLAMP_TO_EDGE",
             "compareFunc": "LESS_OR_EQUAL"
           }
+        },
+        {
+          "name": "saoOcclusion",
+          "sampler": "DEFAULT"
         }
       ],
       "perInstanceUpdaters": [

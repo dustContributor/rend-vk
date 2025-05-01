@@ -100,6 +100,11 @@
       }
     },
     {
+      "isDisabled": false,
+      "name": "shader/sao.json",
+      "type": "include"
+    },
+    {
       "name": "shader/csm.json",
       "type": "include"
     },

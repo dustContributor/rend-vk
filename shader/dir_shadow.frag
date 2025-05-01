@@ -38,6 +38,7 @@ SAMPLING(gbCascade0, SMP_RT, 2DShadow, 4)
 SAMPLING(gbCascade1, SMP_RT, 2DShadow, 5)
 SAMPLING(gbCascade2, SMP_RT, 2DShadow, 6)
 SAMPLING(gbCascade3, SMP_RT, 2DShadow, 7)
+SAMPLING(gbOcclusion, SMP_RT, 2D, 8)
 
 const float MIN_SHADOW_DIFFUSE = 0.15;
 
@@ -108,6 +109,8 @@ void main() {
 
 	float inShadowSpecular = inShadow;
 	float inShadowDiffuse = max(inShadow, MIN_SHADOW_DIFFUSE);
+ 
+	float occlusion = texture(gbOcclusion, passTexCoord).x;
 
-	outLightAcc = (txAlbedo.xyz * diffuse * cosAngle) * inShadowDiffuse + ambient + specular * inShadowSpecular;
+	outLightAcc = (txAlbedo.xyz * diffuse * cosAngle) * inShadowDiffuse + (ambient * occlusion) + specular * inShadowSpecular;
 }
