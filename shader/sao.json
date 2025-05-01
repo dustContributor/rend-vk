@@ -1,0 +1,362 @@
+{
+  "targets": [
+    {
+      "name": "saoLinearDepth",
+      "format": "R32_SFLOAT",
+      "level": 5,
+      "width": 1.0,
+      "height": 1.0
+    },
+    {
+      "name": "saoPackPos",
+      "format": "R8G8_UNORM",
+      "width": 1.0,
+      "height": 1.0
+    },
+    {
+      "name": "saoOcclusion",
+      "format": "R16_SFLOAT",
+      "width": 1.0,
+      "height": 1.0
+    },
+    {
+      "name": "saoOcclusionTemp",
+      "format": "R16_SFLOAT",
+      "width": 1.0,
+      "height": 1.0
+    }
+  ],
+  "programs": [
+    {
+      "name": "saoLinearZ",
+      "vertex": "sao_basefs.vert",
+      "fragment": "sao_linearz.frag"
+    },
+    {
+      "name": "saoMinifyZ",
+      "vertex": "sao_minifyz.vert",
+      "fragment": "sao_minifyz.frag"
+    },
+    {
+      "name": "saoOcclusion",
+      "vertex": "sao_basefs.vert",
+      "fragment": "sao_occlusion.frag"
+    },
+    {
+      "name": "saoPackPos",
+      "vertex": "sao_basefs.vert",
+      "fragment": "sao_packpos.frag"
+    },
+    {
+      "name": "saoBlur",
+      "vertex": "sao_blur.vert",
+      "fragment": "sao_blur.frag"
+    }
+  ],
+  "sharedState": {
+    "saoMinifyState": {
+      "writing": "COLOR",
+      "depth": "NO",
+      "scissor": "DEFAULT",
+      "viewport": "DEFAULT",
+      "stencil": "NO",
+      "triangle": "DEFAULT",
+      "blending": "NO",
+      "clearing": "NO"
+    },
+    "saoBaseState": {
+      "writing": "COLOR",
+      "depth": {
+        "func": "GREATER",
+        "rangeStart": 1.0,
+        "rangeEnd": 1.0,
+        "testing": true,
+        "clamping": false
+      },
+      "scissor": "DEFAULT",
+      "viewport": "DEFAULT",
+      "stencil": "NO",
+      "triangle": "DEFAULT",
+      "blending": "NO",
+      "clearing": "COLOR"
+    }
+  },
+  "passes": [
+    {
+      "name": "saoLinearZ",
+      "type": "render",
+      "program": "saoLinearZ",
+      "batch": "FULLSCREEN",
+      "depthStencil": null,
+      "outputs": [
+        {
+          "name": "saoLinearDepth"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "depth",
+          "sampler": "DEFAULT"
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "state",
+        "writing": "COLOR",
+        "depth": "NO",
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "name": "saoMinifyZ1",
+      "type": "render",
+      "program": "saoMinifyZ",
+      "batch": "FULLSCREEN",
+      "depthStencil": null,
+      "perPassConstant": {
+        "prevLevel": 0
+      },
+      "inputs": [
+        {
+          "name": "saoLinearDepth",
+          "sampler": "DEFAULT",
+          "level": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "saoLinearDepth",
+          "level": 1
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [],
+      "state": {
+        "type": "state",
+        "writing": "COLOR",
+        "depth": "NO",
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "NO",
+        "clearing": "YES"
+      }
+    },
+    {
+      "name": "saoMinifyZ2",
+      "type": "render",
+      "program": "saoMinifyZ",
+      "batch": "FULLSCREEN",
+      "depthStencil": null,
+      "perPassConstant": {
+        "prevLevel": 1
+      },
+      "inputs": [
+        {
+          "name": "saoLinearDepth",
+          "sampler": "DEFAULT",
+          "level": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "saoLinearDepth",
+          "level": 2
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [],
+      "state": {
+        "type": "reference",
+        "name": "saoMinifyState"
+      }
+    },
+    {
+      "name": "saoMinifyZ3",
+      "type": "render",
+      "program": "saoMinifyZ",
+      "batch": "FULLSCREEN",
+      "depthStencil": null,
+      "perPassConstant": {
+        "prevLevel": 2
+      },
+      "inputs": [
+        {
+          "name": "saoLinearDepth",
+          "sampler": "DEFAULT",
+          "level": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "saoLinearDepth",
+          "level": 3
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [],
+      "state": {
+        "type": "reference",
+        "name": "saoMinifyState"
+      }
+    },
+    {
+      "name": "saoMinifyZ4",
+      "type": "render",
+      "program": "saoMinifyZ",
+      "batch": "FULLSCREEN",
+      "depthStencil": null,
+      "perPassConstant": {
+        "prevLevel": 3
+      },
+      "inputs": [
+        {
+          "name": "saoLinearDepth",
+          "sampler": "DEFAULT",
+          "level": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "saoLinearDepth",
+          "level": 4
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [],
+      "state": {
+        "type": "reference",
+        "name": "saoMinifyState"
+      }
+    },
+    {
+      "name": "saoPackPos",
+      "type": "render",
+      "program": "saoPackPos",
+      "batch": "FULLSCREEN",
+      "depthStencil": "depth",
+      "perPassConstant": {},
+      "outputs": [
+        "saoPackPos"
+      ],
+      "inputs": [
+        {
+          "name": "saoLinearDepth",
+          "sampler": "DEFAULT",
+          "level": 0
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "reference",
+        "name": "saoBaseState"
+      }
+    },
+    {
+      "name": "saoOcclusion",
+      "type": "render",
+      "program": "saoOcclusion",
+      "batch": "FULLSCREEN",
+      "depthStencil": "depth",
+      "perPassConstant": {},
+      "outputs": [
+        "saoOcclusion"
+      ],
+      "inputs": [
+        "depth",
+        "saoLinearDepth"
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "reference",
+        "name": "saoBaseState"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "saoBlurX",
+      "type": "render",
+      "program": "saoBlur",
+      "batch": "FULLSCREEN",
+      "depthStencil": "depth",
+      "perPassConstant": {
+        "blurAxisX": 1,
+        "blurAxisY": 0
+      },
+      "outputs": [
+        "saoOcclusionTemp"
+      ],
+      "inputs": [
+        {
+          "name": "saoPackPos",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "saoOcclusion",
+          "sampler": "DEFAULT"
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "reference",
+        "name": "saoBaseState"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "saoBlurY",
+      "type": "render",
+      "program": "saoBlur",
+      "batch": "FULLSCREEN",
+      "depthStencil": "depth",
+      "perPassConstant": {
+        "blurAxisX": 0,
+        "blurAxisY": 1
+      },
+      "outputs": [
+        "saoOcclusion"
+      ],
+      "inputs": [
+        {
+          "name": "saoPackPos",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "saoOcclusionTemp",
+          "sampler": "DEFAULT"
+        }
+      ],
+      "perInstanceUpdaters": [],
+      "perPassUpdaters": [
+        "VIEW",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "reference",
+        "name": "saoBaseState"
+      }
+    }
+  ]
+}
