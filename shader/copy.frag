@@ -27,6 +27,22 @@ INPUTS_END
 // Output parameters.
 ATTR_LOC(0) out vec4 outFrag;
 
+vec3 crosshair(vec2 texCoord, vec3 outColor) {
+   const vec3 color = vec3(1);
+   const float loLim = 0.019;
+   const float hiLim = 0.021;
+   float dist = length(texCoord - vec2(0.5));
+   if(dist < 0.001) {
+      return color;
+   }
+   if (dist < hiLim && dist > loLim) {
+      float ndist = (dist - loLim) / (hiLim - loLim);
+      ndist = abs((ndist - 0.5) * 2.0);
+      return mix(color, outColor, max(0.75, ndist));
+   }
+   return outColor;
+}
+
 void main() {
    vec2 texCoord = apiTexCoord(passTexCoord);
 	vec4 txAlbedo = texture(gbAlbedo, texCoord).xyzw;
@@ -40,6 +56,7 @@ void main() {
    vec3 outColor = txLightAcc.xyz;
    float luminosity = luminosity(outColor);
    outColor *= (luminosity / (luminosity + 1.0));
+   outColor = crosshair(texCoord, outColor);
    outColor = pow(outColor, vec3(1.0/2.2));
    outColor = colorIfNaN(outColor);
    outColor = colorIfInf(outColor);
