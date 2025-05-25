@@ -154,8 +154,8 @@ impl Stage for RenderStage {
                         ctx.command_buffer,
                         mesh_buffer.indices.buffer,
                         mesh_buffer.indices.offset
-                            + (task.indices_offset as u64 * size_of::<u32>() as u64),
-                        vk::IndexType::UINT32,
+                            + (task.indices_offset as u64 * size_of::<u16>() as u64),
+                        vk::IndexType::UINT16,
                     );
                     ctx.vulkan.device.cmd_draw_indexed(
                         ctx.command_buffer,

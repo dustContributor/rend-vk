@@ -85,7 +85,7 @@ fn main() {
         let normals = [
             0.0f32, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
         ];
-        let indices = [2u32, 3, 1, 2, 1, 0];
+        let indices = [2u16, 3, 1, 2, 1, 0];
         let id = renderer.gen_mesh(
             size_of_val(&vertices) as u32,
             size_of_val(&normals) as u32,
@@ -112,7 +112,7 @@ fn main() {
             );
             std::ptr::copy_nonoverlapping(
                 indices.as_ptr(),
-                mesh.indices.addr as *mut u32,
+                mesh.indices.addr as *mut u16,
                 indices.len(),
             );
         };
