@@ -64,19 +64,6 @@ fn main() {
     let proj = Mat4::perspective_rh(fov_y_radians, aspect_ratio, near_plane, far_plane);
     let inv_proj = proj.inverse();
 
-    let make_model_matrix = |pos: Vec3| {
-        Mat4::from_scale_rotation_translation(
-            Vec3::new(10.0, 10.0, 10.0),
-            Quat::from_euler(
-                glam::EulerRot::XYZ,
-                -90.0f32.to_radians(),
-                0.0,
-                45.0f32.to_radians(),
-            ),
-            pos,
-        )
-    };
-
     let gen_quad = |renderer: &mut renderer::Renderer| {
         let xs = 0.5f32;
         let ys = 0.5f32;
@@ -288,8 +275,31 @@ fn main() {
         );
 
         let mut quad_resources: HashMap<ResourceKind, MultiResource> = HashMap::new();
-        let quad1_model = make_model_matrix(Vec3::new(0.0, -1.0, 0.0));
-        let quad2_model = make_model_matrix(Vec3::new(-2.0, -0.5, 0.0));
+        let quad1_model = Mat4::from_scale_rotation_translation(
+            Vec3::new(10.0, 10.0, 10.0),
+            Quat::from_euler(
+                glam::EulerRot::XYZ,
+                -90.0f32.to_radians(),
+                0.0,
+                45.0f32.to_radians(),
+            ),
+            Vec3::new(0.0, -2.0, 20.0),
+        );
+        let quad2_model = Mat4::from_scale_rotation_translation(
+            Vec3::new(5.0, 5.0, 5.0),
+            Quat::from_euler(
+                glam::EulerRot::XYZ,
+                -90.0f32.to_radians(),
+                0.0,
+                -45.0f32.to_radians(),
+            ),
+            Vec3::new(5.0, -4.0, 17.0),
+        );
+        let quad3_model = Mat4::from_scale_rotation_translation(
+            Vec3::new(50.0, 50.0, 50.0),
+            Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0),
+            Vec3::new(0.0, -5.0, 20.0),
+        );
 
         quad_resources.insert(
             ResourceKind::StaticShadow,
@@ -313,7 +323,7 @@ fn main() {
             }]),
         );
         for kind in [TaskKind::MeshStatic, TaskKind::MeshStaticShadowDir] {
-            for model_mat in [quad1_model, quad2_model] {
+            for model_mat in [quad1_model, quad2_model, quad3_model] {
                 let mut task_res = quad_resources.clone();
                 task_res.insert(
                     ResourceKind::Transform,
