@@ -12,9 +12,9 @@ use super::{
     sampler::{Sampler, SamplerKey},
     stage::Stage,
 };
-use crate::shader;
 use crate::{context::VulkanContext, texture};
 use crate::{pipeline::attachment::Attachment, renderer::Renderer};
+use crate::{shader, shader_resource::ResourceKind};
 
 impl Pipeline {
     pub fn read(name: Option<&str>) -> Self {
@@ -506,6 +506,19 @@ impl Pipeline {
             //     // If there are any input descriptors, write them into device memory
             //     d.into_device()
             // }
+            let per_pass_updaters: Vec<_> = render_pass
+                .per_pass_updaters
+                .iter()
+                .map(|e| e.to_resource_kind())
+                .collect();
+
+            if !Self::is_pass_updater_order_valid(&per_pass_updaters) {
+                panic!(
+                    "per pass updaters in pass '{}' are not sorted correctly by resource size!",
+                    render_pass.name
+                );
+            }
+
             stages.push(Box::new(crate::pipeline::render_stage::RenderStage {
                 name: render_pass.name.clone(),
                 is_validation_layer_enabled,
@@ -524,11 +537,7 @@ impl Pipeline {
                     .iter()
                     .map(|e| e.to_resource_kind())
                     .collect(),
-                per_pass_updaters: render_pass
-                    .per_pass_updaters
-                    .iter()
-                    .map(|e| e.to_resource_kind())
-                    .collect(),
+                per_pass_updaters,
                 per_pass_constant: match &render_pass.per_pass_constant {
                     Some(m) => m.iter().map(|p| *p.1).collect(),
                     None => Vec::new(),
@@ -567,6 +576,18 @@ impl Pipeline {
             sampler_descriptors,
             samplers_by_key,
         }
+    }
+
+    fn is_pass_updater_order_valid(per_pass_updaters: &[ResourceKind]) -> bool {
+        let mut sorted_per_pass_updaters = per_pass_updaters.to_vec();
+        // Sort in reverse, from bigger to smaller resource size due alignment concerns
+        sorted_per_pass_updaters.sort_by(|a, b| b.resource_size().cmp(&a.resource_size()));
+        for (idx, upd) in sorted_per_pass_updaters.iter().enumerate() {
+            if per_pass_updaters[idx] != *upd {
+                return false;
+            }
+        }
+        true
     }
 
     fn find_attachments(
