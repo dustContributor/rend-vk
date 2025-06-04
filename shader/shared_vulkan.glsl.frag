@@ -26,6 +26,7 @@ BUFFER_REF(Transforms, Transform)
 BUFFER_REF(Materials, Material)
 BUFFER_REF(DirLights, DirLight)
 BUFFER_REF(PointLights, PointLight)
+BUFFER_REF(SpotLights, SpotLight)
 BUFFER_REF(StaticShadows, StaticShadow)
 BUFFER_REF(TransformExtras, TransformExtra)
 // Per pass data
@@ -48,7 +49,7 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define READ_INST_FRUSTUM_MACRO registers.frustums.items[passInstanceId]
 #define READ_INST_VIEWRAY_MACRO registers.viewRays.items[passInstanceId]
 #define READ_INST_POINTLIGHT_MACRO registers.pointLights.items[passInstanceId]
-#define READ_INST_SPOTLIGHT_MACRO registers.spotLight.items[passInstanceId]
+#define READ_INST_SPOTLIGHT_MACRO registers.spotLights.items[passInstanceId]
 #define READ_INST_JOINT_MACRO registers.joints.items[passInstanceId]
 #define READ_INST_SKY_MACRO registers.skies.items[passInstanceId]
 #define READ_INST_STATIC_SHADOW_MACRO registers.staticShadows.items[passInstanceId]
@@ -61,8 +62,6 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define READ_PASS_DIRLIGHT_MACRO registers.pass.dirLight
 #define READ_PASS_FRUSTUM_MACRO registers.pass.frustum
 #define READ_PASS_VIEWRAY_MACRO registers.pass.viewRay
-#define READ_PASS_POINTLIGHT_MACRO registers.pass.pointLight
-#define READ_PASS_SPOTLIGHT_MACRO registers.pass.spotLight
 #define READ_PASS_JOINT_MACRO registers.pass.joint
 #define READ_PASS_SKY_MACRO registers.pass.sky
 #define READ_PASS_STATIC_SHADOW_MACRO registers.pass.staticShadow
@@ -97,6 +96,7 @@ BUFFER_REF(TransformExtras, TransformExtra)
 #define USING_INST_MATERIAL_MACRO Materials materials;
 #define USING_INST_DIRLIGHT_MACRO DirLights dirLights;
 #define USING_INST_POINTLIGHT_MACRO PointLights pointLights;
+#define USING_INST_SPOTLIGHT_MACRO SpotLights spotLights;
 #define USING_INST_STATIC_SHADOW_MACRO StaticShadows staticShadows;
 #define USING_INST_TRANSFORM_EXTRA_MACRO TransformExtras transformExtras;
 // Per-pass data definitions

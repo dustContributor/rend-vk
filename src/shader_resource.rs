@@ -154,12 +154,13 @@ pub struct PointLight {
 #[derive(Clone, Serialize)]
 #[repr(C)]
 pub struct SpotLight {
-    pub cos_cutoff_rad: f32,
-    pub sin_cutoff_rad: f32,
+    pub position: Vec3,
+    pub cutoff_rad: f32,
+    pub direction: Vec3,
     pub range: f32,
-    pub inv_range: f32,
-    pub intensity: f32,
     pub color: Vec3,
+    // Pad to 48 bytes
+    pub pad0: u32,
 }
 
 #[derive(Clone, Serialize)]

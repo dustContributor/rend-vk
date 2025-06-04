@@ -49,6 +49,11 @@
       "fragment": "point_light.frag"
     },
     {
+      "name": "spotLight",
+      "vertex": "spot_light.vert",
+      "fragment": "spot_light.frag"
+    },
+    {
       "name": "gbuffer",
       "vertex": "gbuffer.vert",
       "fragment": "gbuffer.frag"
@@ -64,7 +69,28 @@
       "fragment": "nuklear.frag"
     }
   ],
-  "sharedState": {},
+  "sharedState": {
+    "lightBasic": {
+      "writing": "COLOR",
+      "depth": {
+        "testing": true,
+        "clamping": false,
+        "func": "GREATER_OR_EQUAL",
+        "rangeStart": 0,
+        "rangeEnd": 1
+      },
+      "scissor": "DEFAULT",
+      "viewport": "DEFAULT",
+      "stencil": "NO",
+      "triangle": {
+        "cullFace": "FRONT",
+        "polygonMode": "FILL",
+        "frontFace": "CCW"
+      },
+      "blending": "YES",
+      "clearing": "NO"
+    }
+  },
   "passes": [
     {
       "name": "gbuffer",
@@ -146,15 +172,49 @@
         "VIEW"
       ],
       "state": {
-        "type": "state",
-        "writing": "COLOR",
-        "depth": "DEFAULT",
-        "scissor": "DEFAULT",
-        "viewport": "DEFAULT",
-        "stencil": "NO",
-        "triangle": "DEFAULT",
-        "blending": "YES",
-        "clearing": "NO"
+        "type": "reference",
+        "name": "lightBasic"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "spotLight",
+      "type": "render",
+      "program": "spotLight",
+      "batch": "LIGHT_SPOT",
+      "depthStencil": "depth",
+      "outputs": [
+        "lightAcc"
+      ],
+      "inputs": [
+        {
+          "name": "albedo",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "normal",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "misc",
+          "sampler": "DEFAULT"
+        },
+        {
+          "name": "depth",
+          "sampler": "DEFAULT"
+        }
+      ],
+      "perInstanceUpdaters": [
+        "SPOT_LIGHT"
+      ],
+      "perPassUpdaters": [
+        "VIEW",
+        "VIEW_RAY",
+        "FRUSTUM"
+      ],
+      "state": {
+        "type": "reference",
+        "name": "lightBasic"
       }
     },
     {

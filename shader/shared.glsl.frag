@@ -116,15 +116,12 @@ struct PointLight
 
 struct SpotLight
 {
-  // Cosine of cutoff angle in radians.
-  float cosCutoffRad;
-  // Sine of cutoff angle in radians.
-  float sinCutoffRad;
-  // Range of the spotlight.
+  vec3 position;
+  float cutoffRad;
+  vec3 direction;
   float range;
-  // Inverse range for attenuation.
-  float invRange;
   vec3 color;
+  uint padding0;
 };
 
 struct Joint

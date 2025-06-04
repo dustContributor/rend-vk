@@ -501,14 +501,10 @@ fn unpack_render_task_resources(
             ResourceKind::Transform => unpack_multi_resource::<Transform>(offset, instances, data),
             ResourceKind::Material => unpack_multi_resource::<Material>(offset, instances, data),
             ResourceKind::DirLight => unpack_multi_resource::<DirLight>(offset, instances, data),
-            // ResourceKind::Frustum => unpack_multi_resources::<Frustum>(start, end, data),
-            // ResourceKind::ViewRay => unpack_multi_resources::<ViewRay>(start, end, data),
             ResourceKind::PointLight => {
                 unpack_multi_resource::<PointLight>(offset, instances, data)
             }
-            // ResourceKind::SpotLight => unpack_multi_resources::<SpotLight>(start, end, data),
-            // ResourceKind::Joint => unpack_multi_resources::<Joint>(start, end, data),
-            // ResourceKind::Sky => unpack_multi_resources::<Sky>(start, end, data),
+            ResourceKind::SpotLight => unpack_multi_resource::<SpotLight>(offset, instances, data),
             ResourceKind::StaticShadow => {
                 unpack_multi_resource::<StaticShadow>(offset, instances, data)
             }
