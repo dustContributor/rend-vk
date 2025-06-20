@@ -43,7 +43,6 @@ void main() {
     vec3 translation = mix(prevTrans, currTrans, tm.interpolation);
     mat4 model = trn.model;
     model[3] = vec4(translation.xyz, 1.0);
-    // TODO: prevModel doesn't really has the previous transform
     mat4 prevMvp = vw.prevViewProj * trn.prevModel;
     mat4 mvp = vw.viewProj * model;
     mat3 mv = mat3(vw.view * model);
