@@ -7,10 +7,6 @@
 
 DESCRIPTOR(SAMPLER, DEFAULT, 0)
 SAMPLING(gbLightAcc, SMP_RT, 2D, 0)
-SAMPLING(gbNormal, SMP_RT, 2D, 1)
-SAMPLING(gbAlbedo, SMP_RT, 2D, 2)
-SAMPLING(gbMisc, SMP_RT, 2D, 3)
-// SAMPLING(gbDepth, SMP_RT, 2D, 4)
 
 // Input parameters.
 ATTR_LOC(0) in vec2 passTexCoord;
@@ -45,10 +41,7 @@ vec3 crosshair(vec2 texCoord, vec3 outColor) {
 
 void main() {
    vec2 texCoord = apiTexCoord(passTexCoord);
-	vec4 txAlbedo = texture(gbAlbedo, texCoord).xyzw;
 	vec3 txLightAcc = texture(gbLightAcc, texCoord).xyz;
-	vec3 txNormal = texture(gbNormal, texCoord).xyz;
-	vec3 txMisc = texture(gbMisc, texCoord).xyz;
 
 	Frustum frustum = READ(PASS, FRUSTUM);
 	ViewRay viewRay = READ(PASS, VIEWRAY);
