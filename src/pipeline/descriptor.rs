@@ -402,7 +402,7 @@ pub const MAX_DESCRIPTOR_IMAGE: u32 = 2048;
 pub const MAX_DESCRIPTOR_IMAGE_SAMPLER: u32 = 64;
 pub const MAX_DESCRIPTOR_SAMPLER: u32 = 32;
 
-pub fn make_pool(ctx: &VulkanContext) -> vk::DescriptorPool {
+pub fn make_pool(ctx: &VulkanContext, is_dynamic: bool) -> vk::DescriptorPool {
     let image_sampler_size = vk::DescriptorPoolSize {
         descriptor_count: MAX_DESCRIPTOR_IMAGE_SAMPLER,
         ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -417,6 +417,11 @@ pub fn make_pool(ctx: &VulkanContext) -> vk::DescriptorPool {
     };
     let pool_sizes = [image_sampler_size, image_size, sampler_size];
     let info = vk::DescriptorPoolCreateInfo::builder()
+        .flags(if is_dynamic {
+            vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND
+        } else {
+            vk::DescriptorPoolCreateFlags::empty()
+        })
         .max_sets(MAX_DESCRIPTOR_SETS)
         .pool_sizes(&pool_sizes)
         .build();
@@ -432,6 +437,7 @@ impl DescriptorGroup {
         descriptor_type: vk::DescriptorType,
         count: u32,
         is_array: bool,
+        is_dynamic: bool,
     ) -> Self {
         assert!(count > 0, "cant have zero sized descriptor buffers!");
         let bindings: Vec<_> = if is_array {
@@ -453,9 +459,27 @@ impl DescriptorGroup {
                 })
                 .collect()
         };
-        let info = vk::DescriptorSetLayoutCreateInfo::builder()
+        let mut info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&bindings)
+            .flags(if is_dynamic {
+                vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL
+            } else {
+                vk::DescriptorSetLayoutCreateFlags::empty()
+            });
+        let binding_flags_count = if is_array { 1 } else { count };
+        let binding_flags: Vec<_> = (0..binding_flags_count)
+            .map(|_| {
+                vk::DescriptorBindingFlags::UPDATE_AFTER_BIND
+                    | vk::DescriptorBindingFlags::PARTIALLY_BOUND
+                    | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING
+            })
+            .collect();
+        let mut binding_flags_info = vk::DescriptorSetLayoutBindingFlagsCreateInfo::builder()
+            .binding_flags(&binding_flags)
             .build();
+        if is_dynamic {
+            info = info.push_next(&mut binding_flags_info);
+        }
         let layout = unsafe { ctx.device.create_descriptor_set_layout(&info, None) }.unwrap();
         let set_layouts = [layout];
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()

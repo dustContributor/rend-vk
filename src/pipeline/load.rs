@@ -219,7 +219,7 @@ impl Pipeline {
         // Default attachment is provided by the caller since it depends on the swapchain.
         attachments_by_name.insert(default_attachment.name.clone(), default_attachment);
         // Descriptor pool to use across all descriptor sets
-        let descriptor_pool = super::descriptor::make_pool(ctx);
+        let descriptor_pool = super::descriptor::make_pool(ctx, true);
         ctx.try_set_debug_name("main_descriptor_pool", descriptor_pool);
         let image_descriptors = Self::image_desc_buffer(ctx, descriptor_pool);
         let mut sampler_descriptors =
@@ -641,6 +641,7 @@ impl Pipeline {
             DescriptorType::SAMPLED_IMAGE,
             1024,
             true,
+            true,
         )
     }
 
@@ -658,6 +659,7 @@ impl Pipeline {
             DescriptorType::COMBINED_IMAGE_SAMPLER,
             size,
             false,
+            false,
         )
     }
 
@@ -672,7 +674,8 @@ impl Pipeline {
             "samplers".to_string(),
             DescriptorType::SAMPLER,
             size,
-            false,
+            true,
+            true,
         )
     }
 

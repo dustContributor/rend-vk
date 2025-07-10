@@ -823,6 +823,9 @@ pub fn make_device(
     };
     let mut features12 = vk::PhysicalDeviceVulkan12Features {
         descriptor_indexing: 1,
+        descriptor_binding_update_unused_while_pending: 1,
+        descriptor_binding_partially_bound: 1,
+        descriptor_binding_sampled_image_update_after_bind: 1,
         timeline_semaphore: 1,
         buffer_device_address: 1,
         scalar_block_layout: 1,
