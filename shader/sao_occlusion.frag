@@ -180,22 +180,17 @@ vec3 reconstructCSFaceNormal(vec3 C) {
     return normalize(cross(dFdy(C), dFdx(C)));
 }
 
-/** Used for packing Z into the GB channels */
-float CSZToKey(float z, float farPlane) {
-    return clamp(z * (1.0 / farPlane), 0.0, 1.0);
-}
-
-/** Used for packing Z into the GB channels */
-vec2 packKey(float key) {
-    // Round to the nearest 1/256.0
-    float temp = floor(key * 256.0);
-
-    // Integer part
-    float x = temp * (1.0 / 256.0);
-
-    // Fractional part
-    float y = key * 256.0 - temp;
-    return vec2(x,y);
+float getRandomAngle(ivec2 coords) {
+    /* 
+    * NOTE: The original hash function from the HPG12 AlchemyAO paper generates 
+    * very high values in the order of millions, this can break down if the hardware
+    * has bad sin/cos precision (intel on anv for example), use a different hashing function
+    * that has a more reasonable range.
+    */
+    uvec2 q = uvec2(coords) * uvec2(1719413u*929u, 140473u*2467u*11u);
+    uint n = q.x ^ q.y;
+    n = n * (n ^ (n >> 15));
+    return float(n) * (NUM_TAU / float(0xFFFFFFFFu));
 }
 
 void main() {
@@ -215,8 +210,7 @@ void main() {
     // World space point being shaded
     vec3 C = getPosition(ssC, linearDepth, view.proj, frustum.width, frustum.height);
 
-    // Hash function used in the HPG12 AlchemyAO paper
-    float randomPatternRotationAngle = (3 * ssC.x ^ ssC.y + ssC.x * ssC.y) * 10;
+    float randomPatternRotationAngle = getRandomAngle(ssC);
 
     // Reconstruct normals from positions. These will lead to 1-pixel black lines
     // at depth discontinuities, however the blur will wipe those out so they are not visible
@@ -241,7 +235,7 @@ void main() {
             frustum.height);
     }
 
-    float A = max(0.0, 1.0 - sum * INTENSITY_DIV_R6 * (5.0 / NUM_SAMPLES));
+		float A = max(0.0, 1.0 - sum * INTENSITY_DIV_R6 * (5.0 / NUM_SAMPLES));
 
     // Bilateral box-filter over a quad for free, respecting depth edges
     // (the difference that this makes is subtle)
