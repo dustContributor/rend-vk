@@ -259,18 +259,6 @@ impl Pipeline {
             let clearing = Self::handle_option(render_pass_state.clearing.clone());
             let stencil_op_state = stencil.to_vk();
             let depth_stencil_state = depth.to_vk(stencil_op_state, &writing);
-            let viewports = [viewport.to_vk(&depth, window_width as f32, window_height as f32)];
-            let scissors = [scissor.to_vk(window_width as f32, window_height as f32)];
-            // OpenGL NDC from -1 to 1 on depth, instead of 0 to 1
-            // let mut depth_clip_control = vk::PipelineViewportDepthClipControlCreateInfoEXT {
-            //     negative_one_to_one: 0,
-            //     ..Default::default()
-            // };
-            let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
-                .scissors(&scissors)
-                .viewports(&viewports)
-                // .push_next(&mut depth_clip_control)
-                .build();
             let rasterization_state = triangle.to_vk(depth);
             let depth_stencil_attachment = render_pass.depth_stencil.as_ref().map(|name| {
                 attachments_by_name.get(&name.to_string()).expect(&format!(
@@ -475,6 +463,34 @@ impl Pipeline {
                 &format!("{}_pipeline_layout", render_pass.name),
                 pipeline_layout,
             );
+
+            // OpenGL NDC from -1 to 1 on depth, instead of 0 to 1
+            // let mut depth_clip_control = vk::PipelineViewportDepthClipControlCreateInfoEXT {
+            //     negative_one_to_one: 0,
+            //     ..Default::default()
+            // };
+            // Out of all outputs, find the minimum extent among them
+            let min_extent = attachment_outputs
+                .iter()
+                .map(|e| e.usage_extent())
+                .reduce(|acc, e| vk::Extent2D {
+                    width: e.width.min(acc.width),
+                    height: e.height.min(acc.height),
+                })
+                .unwrap_or(vk::Extent2D {
+                    width: window_width,
+                    height: window_height,
+                });
+            // After having the concrete destination view, we can set up viewport/scissor with proper dimensions
+            let viewports =
+                [viewport.to_vk(&depth, min_extent.width as f32, min_extent.height as f32)];
+            let scissors = [scissor.to_vk(min_extent.width as f32, min_extent.height as f32)];
+            let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
+                .scissors(&scissors)
+                .viewports(&viewports)
+                // .push_next(&mut depth_clip_control)
+                .build();
+
             let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
                 .stages(&shader_stages)
                 .vertex_input_state(&vertex_input_state_info)

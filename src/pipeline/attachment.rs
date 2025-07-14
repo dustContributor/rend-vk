@@ -38,6 +38,18 @@ impl Attachment {
         }
     }
 
+    pub fn usage_extent(&self) -> vk::Extent2D {
+        let level_usage = if crate::texture::MipMap::is_all_levels_value(self.level_usage) {
+            0 // override with base level for full extent
+        } else {
+            self.level_usage as usize
+        };
+        vk::Extent2D {
+            width: crate::texture::mip_dimensions_of(level_usage, self.extent.width),
+            height: crate::texture::mip_dimensions_of(level_usage, self.extent.height),
+        }
+    }
+
     pub fn destroy(&self, device: &ash::Device) {
         if self.is_default() {
             // Default attachments are owned by the swapchain
