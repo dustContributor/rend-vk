@@ -62,7 +62,7 @@
       "stencil": "NO",
       "triangle": "DEFAULT",
       "blending": "NO",
-      "clearing": "NO"
+      "clearing": "YES"
     },
     "saoBaseState": {
       "writing": "COLOR",
