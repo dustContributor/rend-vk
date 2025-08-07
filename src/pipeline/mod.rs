@@ -38,10 +38,6 @@ pub struct Pipeline {
     pub samplers_by_key: HashMap<SamplerKey, Sampler>,
 }
 
-pub fn signal_value_for(current_frame: u64, total_stages: u32, stage_index: u32) -> u64 {
-    current_frame * total_stages as u64 + stage_index as u64
-}
-
 #[derive(Clone)]
 pub struct RenderContext<'a> {
     pub vulkan: &'a crate::context::VulkanContext,
@@ -56,32 +52,12 @@ pub struct RenderContext<'a> {
 }
 
 impl Pipeline {
-    pub fn process_stages(
-        &mut self,
-        pass_semaphore: vk::Semaphore,
-        render_queue: vk::Queue,
-        current_frame: u64,
-        render_context: RenderContext,
-    ) {
-        let total_stages = self.stages.len() as u32;
+    pub fn process_stages(&mut self, render_context: RenderContext) {
         for stage in self.stages.iter_mut() {
             render_context
                 .vulkan
                 .try_begin_debug_label(render_context.command_buffer, stage.name());
-            stage.wait_for_previous_frame(
-                &render_context.vulkan.device,
-                current_frame,
-                total_stages,
-                pass_semaphore,
-            );
             stage.work(render_context.clone());
-            stage.signal_next_frame(
-                &render_context.vulkan.device,
-                current_frame,
-                total_stages,
-                pass_semaphore,
-                render_queue,
-            );
             render_context
                 .vulkan
                 .try_end_debug_label(render_context.command_buffer);
@@ -90,10 +66,6 @@ impl Pipeline {
 
     pub fn total_stages(&self) -> u32 {
         self.stages.len() as u32
-    }
-
-    pub fn signal_value_for(&self, current_frame: u64, stage_index: u32) -> u64 {
-        signal_value_for(current_frame, self.total_stages(), stage_index)
     }
 
     pub fn gen_initial_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {

@@ -345,8 +345,9 @@ impl Renderer {
         for batch in &mut self.batches_by_task_type.values_mut() {
             batch.clear();
         }
-        // Increment ID for next frame
-        self.incr_current_frame();
+        // Signal current frame and increment ID for next frame
+        let previ = self.incr_current_frame();
+        self.signal_frame(previ);
     }
 
     fn submit_and_wait<F>(&mut self, recording: F)
@@ -415,41 +416,42 @@ impl Renderer {
     }
 
     fn setup_frame(&mut self) {
+        if self.ongoing_optimal_transitions.is_empty() {
+            return;
+        }
         // Process any queued texture transitions
-        if !self.ongoing_optimal_transitions.is_empty() {
-            let current_timeline_counter = unsafe {
-                self.vulkan_context
-                    .device
-                    .get_semaphore_counter_value(self.pass_timeline_semaphore)
-                    .unwrap()
-            };
-            let prev_len = self.ongoing_optimal_transitions.len();
-            self.ongoing_optimal_transitions.retain(|e| {
-                if e.1 > current_timeline_counter {
-                    return true;
-                }
-                let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
-                // Free the staging buffer after it has been used
-                match &texture.staging {
-                    Some(staging) => {
-                        let device = *staging.as_ref();
-                        self.general_allocator.free(device);
-                    }
-                    _ => panic!(
-                        "staging buffer for texture {} {} is missing!",
-                        texture.id, texture.name
-                    ),
-                }
-                // Set staging to None to mark the texture as "uploaded"
-                texture.staging = None;
-                // No longer retain the transition, already uploaded
-                false
-            });
-            if prev_len != self.ongoing_optimal_transitions.len() {
-                // Update the descriptors on the device
-                //TODO: Deferred descriptor writes
-                // self.pipeline.image_descriptors.into_device();
+        let current_timeline_counter = unsafe {
+            self.vulkan_context
+                .device
+                .get_semaphore_counter_value(self.pass_timeline_semaphore)
+                .unwrap()
+        };
+        let prev_len = self.ongoing_optimal_transitions.len();
+        self.ongoing_optimal_transitions.retain(|e| {
+            if e.1 >= current_timeline_counter {
+                return true;
             }
+            let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
+            // Free the staging buffer after it has been used
+            match &texture.staging {
+                Some(staging) => {
+                    let device = *staging.as_ref();
+                    self.general_allocator.free(device);
+                }
+                _ => panic!(
+                    "staging buffer for texture {} {} is missing!",
+                    texture.id, texture.name
+                ),
+            }
+            // Set staging to None to mark the texture as "uploaded"
+            texture.staging = None;
+            // No longer retain the transition, already uploaded
+            false
+        });
+        if prev_len != self.ongoing_optimal_transitions.len() {
+            // Update the descriptors on the device
+            //TODO: Deferred descriptor writes
+            // self.pipeline.image_descriptors.into_device();
         }
     }
 
@@ -467,29 +469,39 @@ impl Renderer {
         for texture_id in self.optimal_transition_queue.drain(..) {
             let texture = &self.textures_by_id[&texture_id];
             texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
-            self.ongoing_optimal_transitions.push((
-                texture_id,
-                self.pipeline.signal_value_for(current_frame + 1, 0),
-            ))
+            self.ongoing_optimal_transitions
+                .push((texture_id, current_frame))
         }
         self.vulkan_context.try_end_debug_label(command_buffer);
 
-        self.pipeline.process_stages(
-            self.pass_timeline_semaphore,
-            self.main_queue,
-            current_frame,
-            pipeline::RenderContext {
-                vulkan: &self.vulkan_context,
-                batches_by_task_type: &self.batches_by_task_type,
-                mesh_buffers_by_id: &self.mesh_buffers_by_id,
-                shader_resources_by_kind: &self.shader_resources_by_kind,
-                sampler_descriptors: &sampler_descriptors,
-                image_descriptors: &image_descriptors,
-                buffer_allocator: &self.general_allocator,
-                command_buffer,
-                default_attachment,
-            },
-        );
+        self.pipeline.process_stages(pipeline::RenderContext {
+            vulkan: &self.vulkan_context,
+            batches_by_task_type: &self.batches_by_task_type,
+            mesh_buffers_by_id: &self.mesh_buffers_by_id,
+            shader_resources_by_kind: &self.shader_resources_by_kind,
+            sampler_descriptors: &sampler_descriptors,
+            image_descriptors: &image_descriptors,
+            buffer_allocator: &self.general_allocator,
+            command_buffer,
+            default_attachment,
+        });
+    }
+
+    fn signal_frame(&self, frame_index: u64) {
+        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
+            .semaphore(self.pass_timeline_semaphore)
+            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
+            .value(frame_index)
+            .build()];
+        let signal_submit_infos = [vk::SubmitInfo2::builder()
+            .signal_semaphore_infos(&pass_semaphore_signal_info)
+            .build()];
+        unsafe {
+            self.vulkan_context
+                .device
+                .queue_submit2(self.main_queue, &signal_submit_infos, vk::Fence::null())
+                .unwrap()
+        };
     }
 
     fn wait_and_reset_fence(&self, fence: vk::Fence) {
@@ -771,7 +783,7 @@ where
         optimal_transition_queue: Vec::new(),
         ongoing_optimal_transitions: Vec::new(),
         shader_resources_by_kind: HashMap::new(),
-        current_frame: AtomicU64::new(0),
+        current_frame: AtomicU64::new(1),
     };
     // Reserve the texture ID 0 with an empty texture
     renderer.gen_texture(
