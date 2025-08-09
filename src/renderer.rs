@@ -127,8 +127,6 @@ impl Renderer {
         let sampler_descriptors = &mut self.pipeline.sampler_descriptors;
         // Write its descriptor into the GPU for later shader usage
         sampler_descriptors.place_sampler_at(&self.vulkan_context, id, sampler.sampler);
-        // TODO: Deferred descriptor writes
-        // sampler_descriptors.into_device_single_at(0, id);
         // Return the ID for referencing on the client side
         id as u8
     }
@@ -277,6 +275,48 @@ impl Renderer {
         self.shader_resources_by_kind.insert(kind, item);
     }
 
+    pub fn get_current_frame(&self) -> u64 {
+        self.current_frame.load(Ordering::Relaxed)
+    }
+
+    pub fn render(&mut self) {
+        // TODO: Trace feature to write RenderTask to files
+        // if log::log_enabled!(log::Level::Trace) {
+        //     let base_path = std::path::Path::new("log");
+        //     std::fs::DirBuilder::new()
+        //         .recursive(true)
+        //         .create(&base_path)
+        //         .expect(&format!(
+        //             "failed creating the log folder at {}!",
+        //             base_path.to_str().unwrap()
+        //         ));
+        //     let dst_path = base_path.join(format!(
+        //         "rendvk_renderer_rendertasks_{:?}.json",
+        //         self.current_frame
+        //     ));
+        //     let dst_file = File::create(dst_path).unwrap();
+        //     let mut writer = BufWriter::new(dst_file);
+        //     serde_json::to_writer_pretty(&mut writer, &self.batches_by_task_type).unwrap();
+        //     writer.flush().unwrap();
+        // }
+        let (attachment_index, default_attachment) = self.acquire_next_swapchain_attachment();
+
+        self.setup_frame();
+
+        self.record_and_submit_draw_commands(|r, c| {
+            r.process_pipeline(c, &default_attachment);
+        });
+
+        self.present(attachment_index);
+
+        // Clear batch queues for next frame
+        for batch in &mut self.batches_by_task_type.values_mut() {
+            batch.clear();
+        }
+        // Signal current frame and increment ID for next frame
+        self.signal_frame();
+    }
+
     fn acquire_next_swapchain_attachment(&self) -> (u32, Attachment) {
         let (present_index, _) = unsafe {
             self.vulkan_context
@@ -311,45 +351,165 @@ impl Renderer {
         };
     }
 
-    pub fn render(&mut self) {
-        // TODO: Trace feature to write RenderTask to files
-        // if log::log_enabled!(log::Level::Trace) {
-        //     let base_path = std::path::Path::new("log");
-        //     std::fs::DirBuilder::new()
-        //         .recursive(true)
-        //         .create(&base_path)
-        //         .expect(&format!(
-        //             "failed creating the log folder at {}!",
-        //             base_path.to_str().unwrap()
-        //         ));
-        //     let dst_path = base_path.join(format!(
-        //         "rendvk_renderer_rendertasks_{:?}.json",
-        //         self.current_frame
-        //     ));
-        //     let dst_file = File::create(dst_path).unwrap();
-        //     let mut writer = BufWriter::new(dst_file);
-        //     serde_json::to_writer_pretty(&mut writer, &self.batches_by_task_type).unwrap();
-        //     writer.flush().unwrap();
-        // }
-        let (attachment_index, default_attachment) = self.acquire_next_swapchain_attachment();
-
-        self.setup_frame();
-
-        self.draw_record_submit_commands(|r, c| {
-            r.process_pipeline(c, &default_attachment);
-        });
-
-        self.present(attachment_index);
-
-        // Clear batch queues for next frame
-        for batch in &mut self.batches_by_task_type.values_mut() {
-            batch.clear();
+    fn setup_frame(&mut self) {
+        if self.ongoing_optimal_transitions.is_empty() {
+            return;
         }
-        // Signal current frame and increment ID for next frame
-        let previ = self.incr_current_frame();
-        self.signal_frame(previ);
+        // Process any queued texture transitions
+        let current_timeline_counter = unsafe {
+            self.vulkan_context
+                .device
+                .get_semaphore_counter_value(self.pass_timeline_semaphore)
+                .unwrap()
+        };
+        self.ongoing_optimal_transitions.retain(|e| {
+            if e.1 >= current_timeline_counter {
+                return true;
+            }
+            let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
+            // Free the staging buffer after it has been used
+            match &texture.staging {
+                Some(staging) => {
+                    let device = *staging.as_ref();
+                    self.general_allocator.free(device);
+                }
+                _ => panic!(
+                    "staging buffer for texture {} {} is missing!",
+                    texture.id, texture.name
+                ),
+            }
+            // Set staging to None to mark the texture as "uploaded"
+            texture.staging = None;
+            // No longer retain the transition, already uploaded
+            false
+        });
     }
 
+    fn process_pipeline(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        default_attachment: &Attachment,
+    ) {
+        let current_frame = self.get_current_frame();
+        let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
+        let image_descriptors = self.pipeline.image_descriptors.clone();
+
+        self.vulkan_context
+            .try_begin_debug_label(command_buffer, "issue_queued_transitions");
+        for texture_id in self.optimal_transition_queue.drain(..) {
+            let texture = &self.textures_by_id[&texture_id];
+            texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
+            self.ongoing_optimal_transitions
+                .push((texture_id, current_frame))
+        }
+        self.vulkan_context.try_end_debug_label(command_buffer);
+
+        self.pipeline.process_stages(pipeline::RenderContext {
+            vulkan: &self.vulkan_context,
+            batches_by_task_type: &self.batches_by_task_type,
+            mesh_buffers_by_id: &self.mesh_buffers_by_id,
+            shader_resources_by_kind: &self.shader_resources_by_kind,
+            sampler_descriptors: &sampler_descriptors,
+            image_descriptors: &image_descriptors,
+            buffer_allocator: &self.general_allocator,
+            command_buffer,
+            default_attachment,
+        });
+    }
+
+    fn signal_frame(&self) {
+        let frame_index = self.current_frame.fetch_add(1, Ordering::Relaxed);
+        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
+            .semaphore(self.pass_timeline_semaphore)
+            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
+            .value(frame_index)
+            .build()];
+        let signal_submit_infos = [vk::SubmitInfo2::builder()
+            .signal_semaphore_infos(&pass_semaphore_signal_info)
+            .build()];
+        unsafe {
+            self.vulkan_context
+                .device
+                .queue_submit2(self.main_queue, &signal_submit_infos, vk::Fence::null())
+                .unwrap()
+        };
+    }
+
+    fn wait_and_reset_fence(&self, fence: vk::Fence) {
+        let fences = [fence];
+        unsafe {
+            self.vulkan_context
+                .device
+                .wait_for_fences(&fences, true, u64::MAX)
+                .expect("fence wait failed!");
+            self.vulkan_context
+                .device
+                .reset_fences(&fences)
+                .expect("fence reset failed!");
+        }
+    }
+
+    /// Main draw command recording and submission logic
+    fn record_and_submit_draw_commands<F>(&mut self, recording: F)
+    where
+        F: Fn(&mut Renderer, vk::CommandBuffer),
+    {
+        self.wait_and_reset_fence(self.draw_commands_reuse_fence);
+
+        unsafe {
+            self.vulkan_context
+                .device
+                .reset_command_buffer(
+                    self.draw_command_buffer,
+                    vk::CommandBufferResetFlags::RELEASE_RESOURCES,
+                )
+                .expect("reset command buffer failed!");
+
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+                .build();
+
+            self.vulkan_context
+                .device
+                .begin_command_buffer(self.draw_command_buffer, &command_buffer_begin_info)
+                .expect("begin commandbuffer failed!");
+
+            recording(self, self.draw_command_buffer);
+
+            self.vulkan_context
+                .device
+                .end_command_buffer(self.draw_command_buffer)
+                .expect("end command buffer failed!");
+
+            let command_buffers = [self.draw_command_buffer];
+
+            let wait_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+            let wait_semaphores = [self.present_complete_semaphore];
+            let signal_semaphores = [self.rendering_complete_semaphore];
+
+            let submit_info = vk::SubmitInfo::builder()
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_mask)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(&signal_semaphores);
+
+            let submit_infos = [submit_info.build()];
+
+            self.vulkan_context
+                .device
+                .queue_submit(
+                    self.main_queue,
+                    &submit_infos,
+                    self.draw_commands_reuse_fence,
+                )
+                .expect("queue submit failed!");
+        }
+    }
+
+    /// Used for renderer initialization, where several commands
+    /// have to be submitted to  transition render targets
+    /// for example. Since it's part of renderer initialization, it just
+    /// waits for idle as synchronization mechanism
     fn submit_and_wait<F>(&mut self, recording: F)
     where
         F: Fn(&mut Renderer, vk::CommandBuffer),
@@ -405,173 +565,6 @@ impl Renderer {
                 .device_wait_idle()
                 .expect("wait idle failed!");
         };
-    }
-
-    fn incr_current_frame(&self) -> u64 {
-        self.current_frame.fetch_add(1, Ordering::Relaxed)
-    }
-
-    pub fn get_current_frame(&self) -> u64 {
-        self.current_frame.load(Ordering::Relaxed)
-    }
-
-    fn setup_frame(&mut self) {
-        if self.ongoing_optimal_transitions.is_empty() {
-            return;
-        }
-        // Process any queued texture transitions
-        let current_timeline_counter = unsafe {
-            self.vulkan_context
-                .device
-                .get_semaphore_counter_value(self.pass_timeline_semaphore)
-                .unwrap()
-        };
-        let prev_len = self.ongoing_optimal_transitions.len();
-        self.ongoing_optimal_transitions.retain(|e| {
-            if e.1 >= current_timeline_counter {
-                return true;
-            }
-            let texture = &mut self.textures_by_id.get_mut(&e.0).unwrap();
-            // Free the staging buffer after it has been used
-            match &texture.staging {
-                Some(staging) => {
-                    let device = *staging.as_ref();
-                    self.general_allocator.free(device);
-                }
-                _ => panic!(
-                    "staging buffer for texture {} {} is missing!",
-                    texture.id, texture.name
-                ),
-            }
-            // Set staging to None to mark the texture as "uploaded"
-            texture.staging = None;
-            // No longer retain the transition, already uploaded
-            false
-        });
-        if prev_len != self.ongoing_optimal_transitions.len() {
-            // Update the descriptors on the device
-            //TODO: Deferred descriptor writes
-            // self.pipeline.image_descriptors.into_device();
-        }
-    }
-
-    fn process_pipeline(
-        &mut self,
-        command_buffer: vk::CommandBuffer,
-        default_attachment: &Attachment,
-    ) {
-        let current_frame = self.get_current_frame();
-        let sampler_descriptors = self.pipeline.sampler_descriptors.clone();
-        let image_descriptors = self.pipeline.image_descriptors.clone();
-
-        self.vulkan_context
-            .try_begin_debug_label(command_buffer, "issue_queued_transitions");
-        for texture_id in self.optimal_transition_queue.drain(..) {
-            let texture = &self.textures_by_id[&texture_id];
-            texture.transition_to_optimal(&self.vulkan_context, self.draw_command_buffer);
-            self.ongoing_optimal_transitions
-                .push((texture_id, current_frame))
-        }
-        self.vulkan_context.try_end_debug_label(command_buffer);
-
-        self.pipeline.process_stages(pipeline::RenderContext {
-            vulkan: &self.vulkan_context,
-            batches_by_task_type: &self.batches_by_task_type,
-            mesh_buffers_by_id: &self.mesh_buffers_by_id,
-            shader_resources_by_kind: &self.shader_resources_by_kind,
-            sampler_descriptors: &sampler_descriptors,
-            image_descriptors: &image_descriptors,
-            buffer_allocator: &self.general_allocator,
-            command_buffer,
-            default_attachment,
-        });
-    }
-
-    fn signal_frame(&self, frame_index: u64) {
-        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
-            .semaphore(self.pass_timeline_semaphore)
-            .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
-            .value(frame_index)
-            .build()];
-        let signal_submit_infos = [vk::SubmitInfo2::builder()
-            .signal_semaphore_infos(&pass_semaphore_signal_info)
-            .build()];
-        unsafe {
-            self.vulkan_context
-                .device
-                .queue_submit2(self.main_queue, &signal_submit_infos, vk::Fence::null())
-                .unwrap()
-        };
-    }
-
-    fn wait_and_reset_fence(&self, fence: vk::Fence) {
-        let fences = [fence];
-        unsafe {
-            self.vulkan_context
-                .device
-                .wait_for_fences(&fences, true, u64::MAX)
-                .expect("fence wait failed!");
-            self.vulkan_context
-                .device
-                .reset_fences(&fences)
-                .expect("fence reset failed!");
-        }
-    }
-
-    fn draw_record_submit_commands<F>(&mut self, recording: F)
-    where
-        F: Fn(&mut Renderer, vk::CommandBuffer),
-    {
-        self.wait_and_reset_fence(self.draw_commands_reuse_fence);
-
-        unsafe {
-            self.vulkan_context
-                .device
-                .reset_command_buffer(
-                    self.draw_command_buffer,
-                    vk::CommandBufferResetFlags::RELEASE_RESOURCES,
-                )
-                .expect("reset command buffer failed!");
-
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-                .build();
-
-            self.vulkan_context
-                .device
-                .begin_command_buffer(self.draw_command_buffer, &command_buffer_begin_info)
-                .expect("begin commandbuffer failed!");
-
-            recording(self, self.draw_command_buffer);
-
-            self.vulkan_context
-                .device
-                .end_command_buffer(self.draw_command_buffer)
-                .expect("end command buffer failed!");
-
-            let command_buffers = [self.draw_command_buffer];
-
-            let wait_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let wait_semaphores = [self.present_complete_semaphore];
-            let signal_semaphores = [self.rendering_complete_semaphore];
-
-            let submit_info = vk::SubmitInfo::builder()
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_mask)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(&signal_semaphores);
-
-            let submit_infos = [submit_info.build()];
-
-            self.vulkan_context
-                .device
-                .queue_submit(
-                    self.main_queue,
-                    &submit_infos,
-                    self.draw_commands_reuse_fence,
-                )
-                .expect("queue submit failed!");
-        }
     }
 }
 

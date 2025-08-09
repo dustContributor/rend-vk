@@ -517,11 +517,6 @@ impl Pipeline {
 
             ctx.try_set_debug_name(&format!("{}_pipeline", render_pass.name), graphics_pipeline);
 
-            // TODO: Deferred descriptor writes
-            // if let Some(d) = &mut attachment_descriptors {
-            //     // If there are any input descriptors, write them into device memory
-            //     d.into_device()
-            // }
             let per_pass_updaters: Vec<_> = render_pass
                 .per_pass_updaters
                 .iter()
