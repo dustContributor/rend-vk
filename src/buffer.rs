@@ -18,7 +18,6 @@ pub struct DeviceSlice {
     pub buffer: vk::Buffer,
     pub size: u64,
     pub offset: u64,
-    pub alignment: u64,
     pub addr: *mut c_void,
     pub device_addr: u64,
     pub kind: BufferKind,
@@ -30,7 +29,6 @@ impl DeviceSlice {
             buffer: vk::Buffer::null(),
             size: 0,
             offset: 0,
-            alignment: 0,
             addr: std::ptr::null_mut(),
             device_addr: 0,
             kind: BufferKind::Undefined,
@@ -306,7 +304,6 @@ impl InnerDeviceAllocator {
                 addr,
                 size,
                 offset,
-                alignment: self.buffer.alignment,
                 device_addr,
                 kind: self.buffer.kind,
             });
