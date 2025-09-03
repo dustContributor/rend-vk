@@ -155,9 +155,10 @@ pub fn surface_format(ctx: &VulkanContext, surface: vk::SurfaceKHR) -> vk::Surfa
             .unwrap()
     };
     // Try finding the first SRGB format available
-    let srgb = formats
-        .iter()
-        .find(|e| Format::of_u32(e.format.as_raw() as u32).is_srgb());
+    let srgb = formats.iter().find(|e| {
+        let name = format!("{:?}", e.format);
+        name.to_uppercase().contains("SRGB")
+    });
     if let Some(fmt) = srgb {
         *fmt
     } else {
