@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::{context::VulkanContext, format::Format, pipeline::attachment::Attachment};
+use crate::{context::VulkanContext, pipeline::attachment::Attachment};
 
 pub struct SwapchainContext {
     pub surface: vk::SurfaceKHR,
