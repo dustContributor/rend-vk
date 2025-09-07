@@ -9,11 +9,11 @@ use crate::context::VulkanContext;
 
 #[derive(Clone)]
 pub struct DeviceAllocator {
-    inner: Rc<RefCell<InnerDeviceAllocator>>,
-    pub buffer: DeviceBuffer,
+    context: Rc<VulkanContext>,
+    chunks: RefCell<Vec<Rc<RefCell<Chunk>>>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct DeviceSlice {
     pub buffer: vk::Buffer,
     pub size: u64,
@@ -47,61 +47,114 @@ impl DeviceSlice {
 }
 
 impl DeviceAllocator {
-    pub fn new_general(ctx: &VulkanContext, size: u64) -> Self {
+    pub const CHUNK_SIZE: u64 = 32 * 1024 * 1024;
+
+    pub fn new_general(ctx: Rc<VulkanContext>, size: u64) -> Self {
         Self::new(ctx, size, BufferKind::General)
     }
 
-    pub fn new_descriptor(ctx: &VulkanContext, size: u64) -> Self {
+    pub fn new_descriptor(ctx: Rc<VulkanContext>, size: u64) -> Self {
         Self::new(ctx, size, BufferKind::Descriptor)
     }
 
-    pub fn new(ctx: &VulkanContext, size: u64, kind: BufferKind) -> Self {
-        let inner = InnerDeviceAllocator::new(ctx, size, kind);
-        let buffer = inner.buffer.clone();
-        let refc = Rc::new(RefCell::new(inner));
+    pub fn new(ctx: Rc<VulkanContext>, size: u64, kind: BufferKind) -> Self {
+        let chunk = Chunk::new(&ctx, size, kind);
+        let refc = Rc::new(RefCell::new(chunk));
         Self {
-            buffer,
-            inner: refc,
+            context: ctx,
+            chunks: RefCell::new(vec![refc]),
         }
     }
 
     pub fn alloc(&self, size: u64) -> Option<DeviceSlice> {
-        self.inner.borrow_mut().alloc(size)
+        if let Some(slice) = self.try_alloc(size) {
+            return Some(slice);
+        }
+        let mut chunk = Chunk::new(&self.context, Self::CHUNK_SIZE, self.kind());
+        if let Some(slice) = chunk.alloc(size) {
+            let chunk_ref = Rc::new(RefCell::new(chunk));
+            let mut chunks = self.chunks.borrow_mut();
+            chunks.push(chunk_ref);
+            return Some(slice);
+        }
+        panic!("can't allocate a buffer of this size {}!", size)
+    }
+
+    fn try_alloc(&self, size: u64) -> Option<DeviceSlice> {
+        let chunks = self.chunks.borrow();
+        for chunk in chunks.iter() {
+            if let Some(slice) = chunk.borrow_mut().alloc(size) {
+                return Some(slice);
+            }
+        }
+        None
     }
 
     pub fn free(&self, slice: DeviceSlice) {
-        self.inner.borrow_mut().free(slice)
+        let chunks = self.chunks.borrow_mut();
+        for chunk in chunks.iter() {
+            let mut chunk = chunk.borrow_mut();
+            if chunk.address_range().contains(&slice.device_addr) {
+                chunk.free(slice);
+                return;
+            }
+        }
+        panic!("can't free this slice! {:?}", slice)
     }
 
     pub fn destroy(&self, device: &ash::Device) {
-        self.inner.borrow().destroy(device)
+        let mut chunks = self.chunks.borrow_mut();
+        for chunk in chunks.iter() {
+            chunk.borrow().destroy(device);
+        }
+        chunks.clear();
     }
 
     pub fn available(&self) -> u64 {
-        self.inner.borrow().available()
+        self.chunks
+            .borrow()
+            .iter()
+            .map(|c| c.borrow().available())
+            .sum()
+    }
+
+    pub fn used(&self) -> u64 {
+        self.size() - self.available()
+    }
+
+    pub fn chunks(&self) -> u64 {
+        self.chunks.borrow().len() as u64
     }
 
     pub fn alignment(&self) -> u64 {
-        self.inner.borrow().buffer.alignment
+        self.chunks
+            .borrow()
+            .iter()
+            .map(|c| c.borrow().buffer.alignment)
+            .next()
+            .unwrap_or(0)
     }
 
     pub fn size(&self) -> u64 {
-        self.inner.borrow().buffer.size
+        self.chunks
+            .borrow()
+            .iter()
+            .map(|c| c.borrow().buffer.size)
+            .next()
+            .unwrap_or(0)
     }
 
     pub fn kind(&self) -> BufferKind {
-        self.inner.borrow().buffer.kind
-    }
-
-    ///
-    /// Just go to town with it if you want
-    ///
-    pub fn buffer(&self) -> DeviceBuffer {
-        self.inner.borrow().buffer.clone()
+        self.chunks
+            .borrow()
+            .iter()
+            .map(|c| c.borrow().buffer.kind)
+            .next()
+            .unwrap_or(BufferKind::Undefined)
     }
 }
 
-#[derive(Copy, Clone, PartialEq, strum_macros::Display)]
+#[derive(Copy, Clone, PartialEq, Debug, strum_macros::Display)]
 pub enum BufferKind {
     Undefined,
     General,
@@ -143,7 +196,7 @@ impl Range {
     }
 }
 
-struct InnerDeviceAllocator {
+struct Chunk {
     buffer: DeviceBuffer,
     ranges: Vec<Range>,
 }
@@ -259,7 +312,7 @@ impl DeviceBuffer {
     }
 }
 
-impl InnerDeviceAllocator {
+impl Chunk {
     fn new(ctx: &VulkanContext, size: u64, kind: BufferKind) -> Self {
         let buffer = DeviceBuffer::new(ctx, size, kind);
         Self::wrap(buffer)
@@ -373,5 +426,12 @@ impl InnerDeviceAllocator {
 
     fn available(&self) -> u64 {
         self.ranges.iter().map(|r| r.size()).sum()
+    }
+
+    fn address_range(&self) -> std::ops::Range<u64> {
+        std::ops::Range {
+            start: self.buffer.device_addr,
+            end: self.buffer.device_addr + self.buffer.size,
+        }
     }
 }

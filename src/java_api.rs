@@ -15,7 +15,7 @@ use crate::{
     },
     pos_mul,
     render_task::{self, TaskKind},
-    renderer::{self, MeshBuffer, Renderer},
+    renderer::{self, AllocatorStats, MeshBuffer, Renderer},
     shader_resource::*,
     texture::{MipMap, Texture},
 };
@@ -107,6 +107,28 @@ impl ToJava<JavaTexture> for Texture {
             mip_map_count: self.mip_map_count(),
             staging: staging_buffer.0,
             staging_len: staging_buffer.1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C, packed(4))]
+pub struct JavaAllocatorStats {
+    pub size: u64,
+    pub available: u64,
+    pub used: u64,
+    pub alignment: u64,
+    pub chunks: u64,
+}
+
+impl ToJava<JavaAllocatorStats> for AllocatorStats {
+    fn to_java(&self) -> JavaAllocatorStats {
+        JavaAllocatorStats {
+            alignment: self.alignment,
+            available: self.available,
+            chunks: self.chunks,
+            size: self.size,
+            used: self.used,
         }
     }
 }
@@ -210,6 +232,20 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getCurrentFrame(
     let current_frame = renderer.get_current_frame();
     Box::leak(renderer);
     current_frame
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_getAllocatorStats(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    dest: u64,
+) {
+    let renderer = to_renderer(renderer);
+    let stats = renderer.get_allocator_stats();
+    let dest = unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaAllocatorStats, 1) };
+    dest[0] = stats.to_java();
+    Box::leak(renderer);
 }
 
 #[no_mangle]

@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     ffi::CStr,
     mem::align_of,
+    rc::Rc,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -41,8 +42,17 @@ pub struct MeshBuffer {
     pub count: u32,
 }
 
+#[derive(Clone)]
+pub struct AllocatorStats {
+    pub size: u64,
+    pub available: u64,
+    pub used: u64,
+    pub alignment: u64,
+    pub chunks: u64,
+}
+
 pub struct Renderer {
-    pub vulkan_context: Box<context::VulkanContext>,
+    pub vulkan_context: Rc<context::VulkanContext>,
     swapchain_context: Box<swapchain::SwapchainContext>,
     debug_context: Option<Box<debug::DebugContext>>,
     pipeline: Box<Pipeline>,
@@ -277,6 +287,16 @@ impl Renderer {
 
     pub fn get_current_frame(&self) -> u64 {
         self.current_frame.load(Ordering::Relaxed)
+    }
+
+    pub fn get_allocator_stats(&self) -> AllocatorStats {
+        AllocatorStats {
+            size: self.general_allocator.size(),
+            alignment: self.general_allocator.alignment(),
+            available: self.general_allocator.available(),
+            used: self.general_allocator.used(),
+            chunks: self.general_allocator.chunks(),
+        }
     }
 
     pub fn render(&mut self) {
@@ -631,7 +651,7 @@ where
 
     let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
-    let ctx = VulkanContext {
+    let ctx = Rc::new(VulkanContext {
         entry,
         device,
         instance,
@@ -642,7 +662,7 @@ where
             swapchain: swapchain_extension,
             surface: surface_extension,
         },
-    };
+    });
 
     ctx.try_set_debug_name("main_physical_device", physical_device);
     ctx.try_set_debug_name("main_device", ctx.device.handle());
@@ -725,7 +745,7 @@ where
     log::trace!("semaphores created!");
 
     log::trace!("creating allocators...");
-    let mut general_allocator = DeviceAllocator::new_general(&ctx, 64 * 1024 * 1024);
+    let mut general_allocator = DeviceAllocator::new_general(ctx.clone(), 64 * 1024 * 1024);
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
@@ -760,7 +780,7 @@ where
         batches_by_task_type,
         debug_context,
         swapchain_context: Box::new(swapchain_context),
-        vulkan_context: Box::new(ctx),
+        vulkan_context: ctx,
         general_allocator: Box::new(general_allocator),
         mesh_buffers_by_id,
         mesh_buffer_ids,
@@ -1057,7 +1077,7 @@ fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
             Align::new(
                 buffer.addr,
                 align_of::<u32>() as u64,
-                buffer_allocator.buffer.alignment,
+                buffer_allocator.alignment(),
             )
         };
         slice.copy_from_slice(elements);

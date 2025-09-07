@@ -35,9 +35,9 @@ impl DescriptorBuffer {
     ) -> Self {
         assert!(count > 0, "cant have zero sized descriptor buffers!");
         assert!(
-            BufferKind::Descriptor == mem.buffer.kind,
+            BufferKind::Descriptor == mem.kind(),
             "allocator with kind {} passed, kind {} needed!",
-            mem.buffer.kind,
+            mem.kind(),
             BufferKind::Descriptor
         );
         let descriptor_size = Self::size_of(descriptor_type, &ctx.instance, &ctx.physical_device);
