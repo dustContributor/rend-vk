@@ -336,11 +336,21 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     dest: u64,
 ) {
     let renderer = to_renderer(renderer);
-    let mesh = renderer
-        .fetch_mesh(id)
-        .unwrap_or_else(|| panic!("couldn't find mesh with id {}", id));
+    let mesh = renderer.fetch_mesh_or_fail(id);
     let dest = unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaMesh, 1) };
     dest[0] = mesh.to_java();
+    Box::leak(renderer);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_freeMesh(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    renderer: u64,
+    id: u32,
+) {
+    let mut renderer = to_renderer(renderer);
+    renderer.free_mesh(id);
     Box::leak(renderer);
 }
 
@@ -401,9 +411,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
     dest: u64,
 ) {
     let renderer = to_renderer(renderer);
-    let texture = renderer
-        .fetch_texture(id)
-        .unwrap_or_else(|| panic!("couldn't find texture with id {}", id));
+    let texture = renderer.fetch_texture_or_fail(id);
     let dest = unsafe { std::slice::from_raw_parts_mut(dest as *mut JavaTexture, 1) };
     dest[0] = texture.to_java();
     Box::leak(renderer);

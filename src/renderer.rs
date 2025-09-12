@@ -217,6 +217,11 @@ impl Renderer {
         self.textures_by_id.get(&id)
     }
 
+    pub fn fetch_texture_or_fail(&self, id: u32) -> &Texture {
+        self.fetch_texture(id)
+            .unwrap_or_else(|| panic!("couldn't find texture with id {}", id))
+    }
+
     pub fn gen_texture(
         &mut self,
         name: String,
