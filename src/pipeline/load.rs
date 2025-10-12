@@ -12,7 +12,10 @@ use super::{
     sampler::{Sampler, SamplerKey},
     stage::Stage,
 };
-use crate::{context::VulkanContext, texture};
+use crate::{
+    context::VulkanContext,
+    texture::{self, TextureKind},
+};
 use crate::{pipeline::attachment::Attachment, renderer::Renderer};
 use crate::{shader, shader_resource::ResourceKind};
 
@@ -188,6 +191,7 @@ impl Pipeline {
                     extent.height,
                     f.level,
                     f.format,
+                    TextureKind::T2D,
                     true,
                 );
                 let per_level_views =

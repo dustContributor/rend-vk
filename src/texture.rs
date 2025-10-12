@@ -1,11 +1,20 @@
 use ash::vk;
 
-use crate::{buffer::DeviceSlice, context::VulkanContext};
+use crate::{buffer::DeviceSlice, context::VulkanContext, UsedAsIndex};
+
+#[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display, Hash)]
+pub enum TextureKind {
+    T1D,
+    T2D,
+    T3D,
+    CUBEMAP,
+}
 
 #[derive(Clone)]
 pub struct Texture {
     pub id: u32,
     pub format: crate::format::Format,
+    pub kind: TextureKind,
     pub mip_maps: Vec<MipMap>,
     pub name: String,
     pub memory: vk::DeviceMemory,
@@ -76,28 +85,38 @@ impl Texture {
             base_mip_level: 0,
             aspect_mask: self.format.aspect(),
             level_count: self.mip_map_count(),
-            layer_count: 1,
+            layer_count: self.kind.layer_count(),
             ..Default::default()
         }
     }
 
     pub fn buffer_copy_regions(&self, offset: u64) -> Vec<vk::BufferImageCopy> {
-        self.mip_maps
-            .iter()
-            .map(|mm| {
-                vk::BufferImageCopy::builder()
-                    .image_subresource(
-                        vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(self.format.aspect())
-                            .layer_count(1)
-                            .mip_level(mm.index)
-                            .build(),
-                    )
-                    .image_extent(mm.extent().into())
-                    .buffer_offset(offset + mm.offset as u64)
-                    .build()
-            })
-            .collect()
+        let mut dest: Vec<vk::BufferImageCopy> = Vec::new();
+        let mut offset = offset;
+        for sidei in 0..TextureKind::CUBEMAP.layer_count() {
+            for mm in &self.mip_maps {
+                dest.push(
+                    vk::BufferImageCopy::builder()
+                        .image_subresource(
+                            vk::ImageSubresourceLayers::builder()
+                                .aspect_mask(self.format.aspect())
+                                .base_array_layer(sidei)
+                                .layer_count(1)
+                                .mip_level(mm.index)
+                                .build(),
+                        )
+                        .image_extent(mm.extent().into())
+                        .buffer_offset(offset + mm.offset as u64)
+                        .build(),
+                );
+            }
+            offset += dest.last().unwrap().buffer_offset;
+            if self.kind != TextureKind::CUBEMAP {
+                // only one image to transition
+                break;
+            }
+        }
+        dest
     }
 
     pub fn copy_into(
@@ -184,6 +203,65 @@ impl Texture {
     }
 }
 
+const MAX_TEXTURE_KIND: u8 = TextureKind::CUBEMAP.to_u8();
+impl UsedAsIndex<MAX_TEXTURE_KIND> for TextureKind {}
+
+impl TextureKind {
+    pub const fn layer_count(self) -> u32 {
+        match self {
+            TextureKind::T1D => 1,
+            TextureKind::T2D => 1,
+            TextureKind::CUBEMAP => 6,
+            TextureKind::T3D => panic!("unsupported T3D kind!"),
+        }
+    }
+
+    pub const fn view_type(self) -> vk::ImageViewType {
+        match self {
+            TextureKind::T1D => vk::ImageViewType::TYPE_1D,
+            TextureKind::T2D => vk::ImageViewType::TYPE_2D,
+            TextureKind::CUBEMAP => vk::ImageViewType::CUBE,
+            TextureKind::T3D => panic!("unsupported T3D kind!"),
+        }
+    }
+
+    pub const fn of_u8(v: u8) -> Self {
+        if v > Self::MAX_VALUE {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute::<u8, Self>(v) }
+        }
+    }
+
+    pub const fn of_u32(v: u32) -> Self {
+        if v > (Self::MAX_VALUE as u32) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
+        }
+    }
+
+    pub const fn of_usize(v: usize) -> Self {
+        if v > (Self::MAX_VALUE as usize) {
+            panic!()
+        } else {
+            unsafe { std::mem::transmute::<u8, Self>(v as u8) }
+        }
+    }
+
+    pub const fn to_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn to_u32(self) -> u32 {
+        self as u32
+    }
+
+    pub const fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
 /// Mipmap formula is max(1, floor(v / 2^i)) where i is the level and v the width or height of the whole texture
 pub fn mip_dimensions_of(index: usize, value: u32) -> u32 {
     (value as f32 / 2.0f32.powi(index as i32)).floor().max(1.0) as u32
@@ -213,6 +291,7 @@ pub fn make(
     height: u32,
     levels: u8,
     format: crate::format::Format,
+    kind: TextureKind,
     is_attachment: bool,
 ) -> Texture {
     assert!(levels > 0, "levels can't be 0!");
@@ -222,7 +301,7 @@ pub fn make(
         format: vk_format,
         extent: vk::Extent2D { width, height }.into(),
         mip_levels: levels as u32,
-        array_layers: 1,
+        array_layers: kind.layer_count(),
         samples: vk::SampleCountFlags::TYPE_1,
         tiling: vk::ImageTiling::OPTIMAL,
         usage: usage_flags_for(format, is_attachment),
@@ -278,12 +357,12 @@ pub fn make(
             vk::ImageSubresourceRange::builder()
                 .aspect_mask(format.aspect())
                 .level_count(levels as u32)
-                .layer_count(1)
+                .layer_count(kind.layer_count())
                 .build(),
         )
         .image(image)
         .format(vk_format)
-        .view_type(vk::ImageViewType::TYPE_2D);
+        .view_type(kind.view_type());
 
     let view = unsafe {
         ctx.device
@@ -303,6 +382,7 @@ pub fn make(
         format,
         image,
         view,
+        kind,
         staging: None,
     }
 }

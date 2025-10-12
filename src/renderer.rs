@@ -29,7 +29,7 @@ use crate::{
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
     swapchain,
-    texture::{MipMap, Texture},
+    texture::{MipMap, Texture, TextureKind},
     UsedAsIndex,
 };
 
@@ -226,6 +226,7 @@ impl Renderer {
         &mut self,
         name: String,
         format: crate::format::Format,
+        kind: TextureKind,
         mip_maps: &[MipMap],
         staging_size: u32,
     ) -> u32 {
@@ -256,6 +257,7 @@ impl Renderer {
                 mip_maps[0].height,
                 mip_maps.len() as u8,
                 format,
+                kind,
                 false,
             )
         };
@@ -807,6 +809,7 @@ where
     renderer.gen_texture(
         "default_texture".to_string(),
         Format::R8G8B8A8_UNORM,
+        TextureKind::T2D,
         &[MipMap {
             index: 0,
             size: 4,

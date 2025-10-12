@@ -17,7 +17,7 @@ use crate::{
     render_task::{self, TaskKind},
     renderer::{self, AllocatorStats, MeshBuffer, Renderer},
     shader_resource::*,
-    texture::{MipMap, Texture},
+    texture::{MipMap, Texture, TextureKind},
 };
 
 // Prevent calling init twice just in case
@@ -360,6 +360,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     _unused_jclazz: usize,
     renderer: u64,
     format: u32,
+    kind: u32,
     mip_maps: u64,
     mip_maps_len: u32,
     name: u64,
@@ -395,6 +396,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     let texture_id = renderer.gen_texture(
         name.to_string(),
         Format::of_u32(format),
+        TextureKind::of_u32(kind),
         &mip_maps,
         staging_size,
     );

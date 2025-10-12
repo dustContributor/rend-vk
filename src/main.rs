@@ -10,7 +10,7 @@ use rend_vk::{
     shader_resource::{
         DirLight, Frustum, Material, MultiResource, ResourceKind, StaticShadow, Transform, ViewRay,
     },
-    texture::MipMap,
+    texture::{MipMap, TextureKind},
     window::WindowContext,
     *,
 };
@@ -149,12 +149,14 @@ fn main() {
     let quad_texture_id = renderer.gen_texture(
         "quad_texture".to_string(),
         format::Format::R8G8B8A8_UNORM,
+        TextureKind::T2D,
         &quad_texture_mips,
         quad_texture_mips.iter().map(|e| e.size).sum(),
     );
     let quad_normal_id = renderer.gen_texture(
         "quad_normal".to_string(),
         format::Format::R8G8B8A8_UNORM,
+        TextureKind::T2D,
         &quad_texture_mips,
         quad_texture_mips.iter().map(|e| e.size).sum(),
     );
