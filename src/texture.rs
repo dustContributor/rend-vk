@@ -82,7 +82,6 @@ impl Texture {
 
     fn subresource_range(&self) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {
-            base_mip_level: 0,
             aspect_mask: self.format.aspect(),
             level_count: self.mip_map_count(),
             layer_count: self.kind.layer_count(),
@@ -91,9 +90,10 @@ impl Texture {
     }
 
     pub fn buffer_copy_regions(&self, offset: u64) -> Vec<vk::BufferImageCopy> {
-        let mut dest: Vec<vk::BufferImageCopy> = Vec::new();
+        let mut dest: Vec<vk::BufferImageCopy> =
+            Vec::with_capacity(self.kind.layer_count() as usize * self.mip_maps.len());
         let mut offset = offset;
-        for sidei in 0..TextureKind::CUBEMAP.layer_count() {
+        for sidei in 0..self.kind.layer_count() {
             for mm in &self.mip_maps {
                 dest.push(
                     vk::BufferImageCopy::builder()
@@ -106,14 +106,11 @@ impl Texture {
                                 .build(),
                         )
                         .image_extent(mm.extent().into())
-                        .buffer_offset(offset + mm.offset as u64)
+                        .buffer_offset(offset)
                         .build(),
                 );
-            }
-            offset += dest.last().unwrap().buffer_offset;
-            if self.kind != TextureKind::CUBEMAP {
-                // only one image to transition
-                break;
+                // advance to next mip map
+                offset += mm.size as u64;
             }
         }
         dest
