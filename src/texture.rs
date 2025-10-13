@@ -40,11 +40,11 @@ impl MipMap {
         Self::ALL_LEVELS_NAME == v
     }
 
-    pub fn is_all_levels_value(v: u8) -> bool {
+    pub const fn is_all_levels_value(v: u8) -> bool {
         Self::ALL_LEVELS_VALUE == v
     }
 
-    pub fn extent(&self) -> vk::Extent2D {
+    pub const fn extent(&self) -> vk::Extent2D {
         vk::Extent2D {
             width: self.width,
             height: self.height,
