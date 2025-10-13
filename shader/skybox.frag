@@ -21,7 +21,7 @@ INPUTS_BEGIN
 	UNUSED_INPUT(2) // normals
 	UNUSED_INPUT(3) // tex coords
   USING(INST, MATERIAL)
-  UNUSED_INPUT(5)
+  UNUSED_INPUT(5) // instance id
 INPUTS_END
 
 // Output parameters.
@@ -35,6 +35,5 @@ SAMPLING(matEnv, SMP_TEX, Cube, 0)
 
 void main () {
 	Material mat = READ(INST, MATERIAL);
-  // Fetch cubemap texel and output.
   outLightAcc = texture(SAMPLER_FOR(matEnv, Cube, mat.diffuseId, mat.diffuseSamplerId), passEyeDir).xyz;
 }

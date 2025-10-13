@@ -33,9 +33,6 @@ void main() {
   mat3 invView = transpose(mat3(vw.view));
 
   vec4 pos = vec4((passTexCoord * 2.0 - 1.0), 0.0, 1.0);
-  // vec4 pos = vec4(texCoordFromVID(gl_VertexID) * 2.0 - 1.0, 0.0, 1.0);
-
-  // mat3 invView = transpose(mat3(view));
   vec3 unproject = (invProj * pos).xyz;
 
   passEyeDir = invView * unproject;
