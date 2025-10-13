@@ -74,6 +74,7 @@ BUFFER_REF(TransformExtras, TransformExtra)
 // Default and pre-defined descriptor sets
 #define DESCRIPTOR_SAMPLER_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform sampler[] samplers;
 #define DESCRIPTOR_TEXTURE_DEFAULT_MACRO(BIND) layout (set = BIND, binding = 0) uniform texture2D[] textures;
+#define DESCRIPTOR_TEXTURE_CUBE_MACRO(BIND) layout (set = BIND, binding = 0) uniform textureCube[] textures;
 #define DESCRIPTOR_SAMPLER_MACRO(NAME, BIND) DESCRIPTOR_SAMPLER_##NAME##_MACRO(BIND)
 #define DESCRIPTOR_TEXTURE_MACRO(NAME, BIND) DESCRIPTOR_TEXTURE_##NAME##_MACRO(BIND)
 #define DESCRIPTOR_TARGET_IMAGE_MACRO(NAME, BIND) layout (set = DESC_SET_TARGET_IMAGE, binding = BIND) uniform texture2D NAME;

@@ -67,6 +67,11 @@
       "name": "nuklear",
       "vertex": "nuklear.vert",
       "fragment": "nuklear.frag"
+    },
+    {
+      "name": "skybox",
+      "vertex": "skybox.vert",
+      "fragment": "skybox.frag"
     }
   ],
   "sharedState": {
@@ -215,6 +220,41 @@
       "state": {
         "type": "reference",
         "name": "lightBasic"
+      }
+    },
+    {
+      "isDisabled": false,
+      "name": "skybox",
+      "type": "render",
+      "program": "skybox",
+      "batch": "SKYBOX",
+      "depthStencil": "depth",
+      "outputs": [
+        "lightAcc"
+      ],
+      "inputs": [],
+      "perInstanceUpdaters": [
+        "MATERIAL"
+      ],
+      "perPassUpdaters": [
+        "VIEW"
+      ],
+      "state": {
+        "type": "state",
+        "writing": "COLOR",
+        "depth": {
+          "testing": true,
+          "clamping": false,
+          "func": "EQUAL",
+          "rangeStart": 1,
+          "rangeEnd": 1
+        },
+        "scissor": "DEFAULT",
+        "viewport": "DEFAULT",
+        "stencil": "NO",
+        "triangle": "DEFAULT",
+        "blending": "YES",
+        "clearing": "NO"
       }
     },
     {
