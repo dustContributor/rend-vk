@@ -11,56 +11,66 @@ impl Format {
         (self >= Self::ETC2_R8G8B8A1_SRGB_BLOCK && self <= Self::ETC2_R8G8B8_UNORM_BLOCK )
     }
 
-    pub fn is_srgb(self) -> bool {
-        self == Self::A8B8G8R8_SRGB_PACK32
-            || self == Self::ASTC_10X10_SRGB_BLOCK
-            || self == Self::ASTC_10X5_SRGB_BLOCK
-            || self == Self::ASTC_10X6_SRGB_BLOCK
-            || self == Self::ASTC_10X8_SRGB_BLOCK
-            || self == Self::ASTC_12X10_SRGB_BLOCK
-            || self == Self::ASTC_12X12_SRGB_BLOCK
-            || self == Self::ASTC_4X4_SRGB_BLOCK
-            || self == Self::ASTC_5X4_SRGB_BLOCK
-            || self == Self::ASTC_5X5_SRGB_BLOCK
-            || self == Self::ASTC_6X5_SRGB_BLOCK
-            || self == Self::ASTC_6X6_SRGB_BLOCK
-            || self == Self::ASTC_8X5_SRGB_BLOCK
-            || self == Self::ASTC_8X6_SRGB_BLOCK
-            || self == Self::ASTC_8X8_SRGB_BLOCK
-            || self == Self::B8G8R8A8_SRGB
-            || self == Self::B8G8R8_SRGB
-            || self == Self::BC1_RGBA_SRGB_BLOCK
-            || self == Self::BC1_RGB_SRGB_BLOCK
-            || self == Self::BC2_SRGB_BLOCK
-            || self == Self::BC3_SRGB_BLOCK
-            || self == Self::BC7_SRGB_BLOCK
-            || self == Self::ETC2_R8G8B8A1_SRGB_BLOCK
-            || self == Self::ETC2_R8G8B8A8_SRGB_BLOCK
-            || self == Self::ETC2_R8G8B8_SRGB_BLOCK
-            || self == Self::R8G8B8A8_SRGB
-            || self == Self::R8G8B8_SRGB
-            || self == Self::R8G8_SRGB
-            || self == Self::R8_SRGB
+    pub const fn is_srgb(self) -> bool {
+        matches!(
+            self,
+            Self::A8B8G8R8_SRGB_PACK32
+                | Self::ASTC_10X10_SRGB_BLOCK
+                | Self::ASTC_10X5_SRGB_BLOCK
+                | Self::ASTC_10X6_SRGB_BLOCK
+                | Self::ASTC_10X8_SRGB_BLOCK
+                | Self::ASTC_12X10_SRGB_BLOCK
+                | Self::ASTC_12X12_SRGB_BLOCK
+                | Self::ASTC_4X4_SRGB_BLOCK
+                | Self::ASTC_5X4_SRGB_BLOCK
+                | Self::ASTC_5X5_SRGB_BLOCK
+                | Self::ASTC_6X5_SRGB_BLOCK
+                | Self::ASTC_6X6_SRGB_BLOCK
+                | Self::ASTC_8X5_SRGB_BLOCK
+                | Self::ASTC_8X6_SRGB_BLOCK
+                | Self::ASTC_8X8_SRGB_BLOCK
+                | Self::B8G8R8A8_SRGB
+                | Self::B8G8R8_SRGB
+                | Self::BC1_RGBA_SRGB_BLOCK
+                | Self::BC1_RGB_SRGB_BLOCK
+                | Self::BC2_SRGB_BLOCK
+                | Self::BC3_SRGB_BLOCK
+                | Self::BC7_SRGB_BLOCK
+                | Self::ETC2_R8G8B8A1_SRGB_BLOCK
+                | Self::ETC2_R8G8B8A8_SRGB_BLOCK
+                | Self::ETC2_R8G8B8_SRGB_BLOCK
+                | Self::R8G8B8A8_SRGB
+                | Self::R8G8B8_SRGB
+                | Self::R8G8_SRGB
+                | Self::R8_SRGB
+        )
     }
 
-    pub fn has_color(self) -> bool {
+    pub const fn has_color(self) -> bool {
         !self.has_depth_or_stencil()
     }
 
-    pub fn has_depth_and_stencil(self) -> bool {
+    pub const fn has_depth_and_stencil(self) -> bool {
         self.has_depth() && self.has_stencil()
     }
 
-    pub fn has_depth_or_stencil(self) -> bool {
+    pub const fn has_depth_or_stencil(self) -> bool {
         self.has_depth() || self.has_stencil()
     }
 
-    pub fn has_depth(self) -> bool {
-        (self >= Self::D16_UNORM && self <= Self::D32_SFLOAT_S8_UINT)
-            || self == Self::X8_D24_UNORM_PACK32
+    pub const fn has_depth(self) -> bool {
+        matches!(
+            self,
+            Self::D16_UNORM
+                | Self::D16_UNORM_S8_UINT
+                | Self::D24_UNORM_S8_UINT
+                | Self::D32_SFLOAT
+                | Self::D32_SFLOAT_S8_UINT
+                | Self::X8_D24_UNORM_PACK32
+        )
     }
 
-    pub fn has_stencil(self) -> bool {
+    pub const fn has_stencil(self) -> bool {
         matches!(
             self,
             Self::D16_UNORM_S8_UINT
@@ -340,7 +350,7 @@ const MAX_FORMAT: u8 = Format::X8_D24_UNORM_PACK32.to_u8();
 impl UsedAsIndex<MAX_FORMAT> for Format {}
 
 impl Format {
-    pub fn to_vk(self) -> vk::Format {
+    pub const fn to_vk(self) -> vk::Format {
         match self {
             Self::UNDEFINED => vk::Format::UNDEFINED,
             Self::A1R5G5B5_UNORM_PACK16 => vk::Format::A1R5G5B5_UNORM_PACK16,
