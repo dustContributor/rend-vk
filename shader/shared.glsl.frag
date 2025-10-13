@@ -6,11 +6,11 @@
 #endif
 
 // Numeric constants.
-#define NUM_PI 3.1415927
-#define NUM_TAU 6.2831855
-#define NUM_INV_PI 0.31830987
-#define NUM_INV_TAU 0.15915494
-#define NUM_SQRT2 1.4142135
+#define NUM_PI (3.1415927)
+#define NUM_TAU (6.2831855)
+#define NUM_INV_PI (0.31830987)
+#define NUM_INV_TAU (0.15915494)
+#define NUM_SQRT2 (1.4142135)
 
 #define DIR_LIGHT_CASCADES 4u
 
