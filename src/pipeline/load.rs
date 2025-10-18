@@ -89,6 +89,7 @@ impl Pipeline {
             // Some flags so the various macros work
             let args = [
                 &source_path,
+                "-g",
                 "-V",
                 "-DIS_VULKAN=1",
                 "-DIS_EXTERNAL_COMPILER=1",
