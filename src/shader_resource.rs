@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     hash::Hash,
     mem::{align_of, size_of},
 };
@@ -119,7 +118,7 @@ pub struct Transform {
 pub struct TransformExtra {
     pub prev_model: Mat4,
 }
-#[derive(Clone, Default, Serialize)]
+#[derive(Clone, Default, Serialize, Debug)]
 #[repr(C)]
 pub struct Material {
     pub shininess: f32,
@@ -257,10 +256,6 @@ pub enum SingleResource {
     TransformExtra(TransformExtra),
     View(View),
     Timing(Timing),
-}
-
-pub fn resources_by_kind_map() -> HashMap<ResourceKind, MultiResource> {
-    HashMap::new()
 }
 
 pub trait WrapResource<T> {
