@@ -392,7 +392,7 @@ pub struct DescriptorGroup {
     pub layout: vk::DescriptorSetLayout,
     pub set: vk::DescriptorSet,
     pub descriptor_type: vk::DescriptorType,
-    pub count: u32,
+    pub capacity: u32,
     pub is_array: bool,
     occupancy: BitVec,
 }
@@ -435,20 +435,20 @@ impl DescriptorGroup {
         pool: vk::DescriptorPool,
         name: String,
         descriptor_type: vk::DescriptorType,
-        count: u32,
+        capacity: u32,
         is_array: bool,
         is_dynamic: bool,
     ) -> Self {
-        assert!(count > 0, "cant have zero sized descriptor buffers!");
+        assert!(capacity > 0, "cant have zero sized descriptor groups!");
         let bindings: Vec<_> = if is_array {
             vec![vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
                 .descriptor_type(descriptor_type)
-                .descriptor_count(count)
+                .descriptor_count(capacity)
                 .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
                 .build()]
         } else {
-            (0..count)
+            (0..capacity)
                 .map(|e| {
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(e)
@@ -466,7 +466,7 @@ impl DescriptorGroup {
             } else {
                 vk::DescriptorSetLayoutCreateFlags::empty()
             });
-        let binding_flags_count = if is_array { 1 } else { count };
+        let binding_flags_count = if is_array { 1 } else { capacity };
         let binding_flags: Vec<_> = (0..binding_flags_count)
             .map(|_| {
                 vk::DescriptorBindingFlags::UPDATE_AFTER_BIND
@@ -495,7 +495,7 @@ impl DescriptorGroup {
         .pop()
         .unwrap();
         // Every descriptor is initially unoccupied
-        let occupancy = BitVec::repeat(false, count as usize);
+        let occupancy = BitVec::repeat(false, capacity as usize);
         ctx.try_set_debug_name(&format!("{}_descriptor_set", name), set);
         ctx.try_set_debug_name(&format!("{}_descriptor_set_layout", name), layout);
         Self {
@@ -503,7 +503,7 @@ impl DescriptorGroup {
             layout,
             descriptor_type,
             occupancy,
-            count,
+            capacity,
             is_array,
             set,
         }
@@ -515,6 +515,10 @@ impl DescriptorGroup {
             // device.free_descriptor_sets(pool, descriptor_sets)
             device.destroy_descriptor_set_layout(self.layout, None);
         }
+    }
+
+    pub fn count_active(&self) -> usize {
+        self.occupancy.count_ones()
     }
 
     pub fn next_free(&self) -> usize {

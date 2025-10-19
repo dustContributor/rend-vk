@@ -49,8 +49,8 @@ impl DeviceSlice {
 impl DeviceAllocator {
     pub const CHUNK_SIZE: u64 = 32 * 1024 * 1024;
 
-    pub fn new_general(ctx: Rc<VulkanContext>, size: u64) -> Self {
-        Self::new(ctx, size, BufferKind::General)
+    pub fn new_general(ctx: Rc<VulkanContext>) -> Self {
+        Self::new(ctx, Self::CHUNK_SIZE, BufferKind::General)
     }
 
     pub fn new_descriptor(ctx: Rc<VulkanContext>, size: u64) -> Self {

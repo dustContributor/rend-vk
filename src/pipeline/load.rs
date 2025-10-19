@@ -12,11 +12,12 @@ use super::{
     sampler::{Sampler, SamplerKey},
     stage::Stage,
 };
+use crate::pipeline::attachment::Attachment;
 use crate::{
     context::VulkanContext,
+    pipeline::descriptor,
     texture::{self, TextureKind},
 };
-use crate::{pipeline::attachment::Attachment, renderer::Renderer};
 use crate::{shader, shader_resource::ResourceKind};
 
 impl Pipeline {
@@ -226,9 +227,8 @@ impl Pipeline {
         // Descriptor pool to use across all descriptor sets
         let descriptor_pool = super::descriptor::make_pool(ctx, true);
         ctx.try_set_debug_name("main_descriptor_pool", descriptor_pool);
-        let image_descriptors = Self::image_desc_buffer(ctx, descriptor_pool);
-        let mut sampler_descriptors =
-            Self::sampler_desc_buffer(ctx, descriptor_pool, Renderer::MAX_SAMPLERS);
+        let image_descriptors = Self::image_descriptors(ctx, descriptor_pool);
+        let mut sampler_descriptors = Self::sampler_descriptors(ctx, descriptor_pool);
 
         let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
 
@@ -357,7 +357,7 @@ impl Pipeline {
                 .collect::<Vec<_>>();
 
             let mut attachment_descriptors = (!render_pass.inputs.is_empty()).then(|| {
-                Box::new(Self::attachment_image_desc_buffer(
+                Box::new(Self::attachment_image_descriptors(
                     ctx,
                     descriptor_pool,
                     &render_pass.name,
@@ -649,29 +649,28 @@ impl Pipeline {
         }
     }
 
-    pub fn image_desc_buffer(ctx: &VulkanContext, pool: vk::DescriptorPool) -> DescriptorGroup {
+    pub fn image_descriptors(ctx: &VulkanContext, pool: vk::DescriptorPool) -> DescriptorGroup {
         DescriptorGroup::of(
             ctx,
             pool,
             "images".to_string(),
             DescriptorType::SAMPLED_IMAGE,
-            1024,
+            descriptor::MAX_DESCRIPTOR_IMAGE,
             true,
             true,
         )
     }
 
-    pub fn attachment_image_desc_buffer(
+    pub fn attachment_image_descriptors(
         ctx: &VulkanContext,
         pool: vk::DescriptorPool,
         prefix: &str,
         size: u32,
     ) -> DescriptorGroup {
-        let name = format!("{}_attachments", prefix);
         DescriptorGroup::of(
             ctx,
             pool,
-            name,
+            format!("{}_attachments", prefix),
             DescriptorType::COMBINED_IMAGE_SAMPLER,
             size,
             false,
@@ -679,17 +678,13 @@ impl Pipeline {
         )
     }
 
-    pub fn sampler_desc_buffer(
-        ctx: &VulkanContext,
-        pool: vk::DescriptorPool,
-        size: u32,
-    ) -> DescriptorGroup {
+    pub fn sampler_descriptors(ctx: &VulkanContext, pool: vk::DescriptorPool) -> DescriptorGroup {
         DescriptorGroup::of(
             ctx,
             pool,
             "samplers".to_string(),
             DescriptorType::SAMPLER,
-            size,
+            descriptor::MAX_DESCRIPTOR_SAMPLER,
             true,
             true,
         )

@@ -3,14 +3,12 @@ use std::{
     alloc::Layout,
     collections::HashMap,
     ffi::CStr,
-    mem::align_of,
     rc::Rc,
     sync::atomic::{AtomicU64, Ordering},
 };
 
 use ash::{
     extensions::{ext::DebugUtils, khr},
-    util::Align,
     vk, Entry,
 };
 use bitvec::vec::BitVec;
@@ -40,6 +38,27 @@ pub struct MeshBuffer {
     pub tex_coords: DeviceSlice,
     pub indices: DeviceSlice,
     pub count: u32,
+}
+
+impl MeshBuffer {
+    pub fn write_vertices(&self, items: &[f32]) {
+        Self::write(items, &self.vertices);
+    }
+    pub fn write_normals(&self, items: &[f32]) {
+        Self::write(items, &self.normals);
+    }
+    pub fn write_tex_coords(&self, items: &[f32]) {
+        Self::write(items, &self.tex_coords);
+    }
+    pub fn write_indices(&self, items: &[u16]) {
+        Self::write(items, &self.indices);
+    }
+
+    fn write<T>(items: &[T], dst: &DeviceSlice) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(items.as_ptr(), dst.addr as *mut T, items.len());
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -83,7 +102,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub const ID_TEST_TRIANGLE: u32 = 0;
-    pub const MAX_SAMPLERS: u32 = 32;
+
+    pub const MAX_MESH_IDS: u32 = 1024;
 
     pub fn destroy(&mut self) {
         log::trace!("destroying renderer...");
@@ -130,6 +150,12 @@ impl Renderer {
         }
         //  Sampler for this key not found, generate one
         let id = self.pipeline.samplers_by_key.len() as u32;
+        if id as u32 >= self.pipeline.sampler_descriptors.capacity {
+            panic!(
+                "can't allocate more samplers than {}!",
+                self.pipeline.sampler_descriptors.capacity
+            );
+        }
         let sampler = Sampler::of_key(&self.vulkan_context, key, id as u8);
         let samplers_by_key = &mut self.pipeline.samplers_by_key;
         //  store it for later querying
@@ -752,7 +778,7 @@ where
     log::trace!("semaphores created!");
 
     log::trace!("creating allocators...");
-    let mut general_allocator = DeviceAllocator::new_general(ctx.clone(), 64 * 1024 * 1024);
+    let general_allocator = DeviceAllocator::new_general(ctx.clone());
     log::trace!("allocators created!");
 
     log::trace!("creating swapchain...");
@@ -768,30 +794,17 @@ where
     );
     log::trace!("pipeline created!");
 
-    log::trace!("creating test triangle...");
-    let test_triangle = make_test_triangle(&mut general_allocator);
-
-    let mut mesh_buffer_ids = BitVec::repeat(false, 1024);
-    let mut mesh_buffers_by_id = HashMap::new();
-    mesh_buffer_ids.set(Renderer::ID_TEST_TRIANGLE as usize, true);
-    mesh_buffers_by_id.insert(Renderer::ID_TEST_TRIANGLE, test_triangle);
-
-    let textures_by_id = HashMap::new();
-
-    log::trace!("test triangle created!");
-    let batches_by_task_type = HashMap::with_capacity(TaskKind::MAX_SIZE * 2);
-
     log::trace!("finishing renderer...");
     let mut renderer = Renderer {
         pipeline: Box::new(pip),
-        batches_by_task_type,
+        batches_by_task_type: HashMap::with_capacity(TaskKind::MAX_SIZE * 2),
         debug_context,
         swapchain_context: Box::new(swapchain_context),
         vulkan_context: ctx,
         general_allocator: Box::new(general_allocator),
-        mesh_buffers_by_id,
-        mesh_buffer_ids,
-        textures_by_id,
+        mesh_buffers_by_id: HashMap::new(),
+        mesh_buffer_ids: BitVec::repeat(false, 1024),
+        textures_by_id: HashMap::new(),
         draw_command_buffer,
         main_queue,
         rendering_complete_semaphore,
@@ -805,8 +818,23 @@ where
         shader_resources_by_kind: HashMap::new(),
         current_frame: AtomicU64::new(1),
     };
+    log::trace!("creating test triangle...");
+    let tri_geom = gen_triangle_geometry();
+    let tri_id = renderer.gen_mesh(
+        tri_geom.0.len() as u32,
+        tri_geom.1.len() as u32,
+        tri_geom.2.len() as u32,
+        0,
+        3,
+    );
+    let tri_mesh = renderer.fetch_mesh(tri_id).unwrap();
+    tri_mesh.write_vertices(&tri_geom.0);
+    tri_mesh.write_normals(&tri_geom.1);
+    tri_mesh.write_tex_coords(&tri_geom.2);
+    log::trace!("test triangle with id {tri_id} created!");
     // Reserve the texture ID 0 with an empty texture
-    renderer.gen_texture(
+    log::trace!("creating test texture...");
+    let tex_id = renderer.gen_texture(
         "default_texture".to_string(),
         Format::R8G8B8A8_UNORM,
         TextureKind::T2D,
@@ -819,6 +847,7 @@ where
         }],
         0,
     );
+    log::trace!("test texture with id {tex_id} created!");
     log::trace!("issuing initial layout transitions...");
     renderer.submit_and_wait(|r, c| {
         let barriers = r.pipeline.gen_initial_barriers();
@@ -1035,72 +1064,24 @@ pub fn select_physical_device(
         .expect("couldn't find a suitable physical device!")
 }
 
-fn make_test_triangle(buffer_allocator: &mut DeviceAllocator) -> MeshBuffer {
-    #[allow(dead_code)]
-    #[derive(Clone, Debug, Copy)]
-    struct Attrib3f {
-        pub values: [f32; 3],
-    }
-    #[allow(dead_code)]
-    #[derive(Clone, Debug, Copy)]
-    struct Attrib2f {
-        pub values: [f32; 2],
-    }
+fn gen_triangle_geometry() -> ([f32; 9], [f32; 9], [f32; 6]) {
+    #[rustfmt::skip]
     let vertices = [
-        Attrib3f {
-            values: [-1.0, 1.0, 0.0],
-        },
-        Attrib3f {
-            values: [1.0, 1.0, 0.0],
-        },
-        Attrib3f {
-            values: [0.0, -1.0, 0.0],
-        },
+        -1.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
+        0.0, -1.0, 0.0
     ];
-    let tex_coords = [
-        Attrib2f { values: [0.0, 0.0] },
-        Attrib2f { values: [1.0, 0.0] },
-        Attrib2f { values: [1.0, 1.0] },
-    ];
+    #[rustfmt::skip]
     let normals = [
-        Attrib3f {
-            values: [0.0, 1.0, 0.0],
-        },
-        Attrib3f {
-            values: [1.0, 1.0, 0.0],
-        },
-        Attrib3f {
-            values: [1.0, 0.0, 0.0],
-        },
+        0.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
+        1.0, 0.0, 0.0
     ];
-
-    fn alloc_and_copy<T: std::marker::Copy>(
-        elements: &[T],
-        buffer_allocator: &mut DeviceAllocator,
-    ) -> DeviceSlice {
-        let buffer = buffer_allocator
-            .alloc(std::mem::size_of_val(elements) as u64)
-            .expect("couldn't allocate index buffer");
-        let mut slice = unsafe {
-            Align::new(
-                buffer.addr,
-                align_of::<u32>() as u64,
-                buffer_allocator.alignment(),
-            )
-        };
-        slice.copy_from_slice(elements);
-        buffer
-    }
-
-    let vertex_buffer = alloc_and_copy(&vertices, buffer_allocator);
-    let normal_buffer = alloc_and_copy(&normals, buffer_allocator);
-    let tex_coord_buffer = alloc_and_copy(&tex_coords, buffer_allocator);
-
-    MeshBuffer {
-        vertices: vertex_buffer,
-        indices: DeviceSlice::empty(),
-        tex_coords: tex_coord_buffer,
-        normals: normal_buffer,
-        count: vertices.len() as u32,
-    }
+    #[rustfmt::skip]
+    let tex_coords = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0
+    ];
+    (vertices, normals, tex_coords)
 }

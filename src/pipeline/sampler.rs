@@ -62,12 +62,6 @@ impl Sampler {
         anisotropy: u8,
         position: u8,
     ) -> Self {
-        if position as u32 >= crate::renderer::Renderer::MAX_SAMPLERS {
-            panic!(
-                "can't allocate more samplers than {}!",
-                crate::renderer::Renderer::MAX_SAMPLERS
-            );
-        }
         let info = Self::info_of(filter, wrap_mode, compare_func, anisotropy);
         let sampler = unsafe { ctx.device.create_sampler(&info, None) }.unwrap();
         ctx.try_set_debug_name(&name, sampler);

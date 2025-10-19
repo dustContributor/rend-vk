@@ -81,28 +81,10 @@ fn main() {
             indices.len() as u32,
         );
         let mesh = renderer.fetch_mesh(id).expect("missing mesh!");
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                vertices.as_ptr(),
-                mesh.vertices.addr as *mut f32,
-                vertices.len(),
-            );
-            std::ptr::copy_nonoverlapping(
-                normals.as_ptr(),
-                mesh.normals.addr as *mut f32,
-                normals.len(),
-            );
-            std::ptr::copy_nonoverlapping(
-                tex_coords.as_ptr(),
-                mesh.tex_coords.addr as *mut f32,
-                tex_coords.len(),
-            );
-            std::ptr::copy_nonoverlapping(
-                indices.as_ptr(),
-                mesh.indices.addr as *mut u16,
-                indices.len(),
-            );
-        };
+        mesh.write_vertices(&vertices);
+        mesh.write_normals(&normals);
+        mesh.write_tex_coords(&tex_coords);
+        mesh.write_indices(&indices);
         id
     };
 
