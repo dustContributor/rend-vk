@@ -303,6 +303,11 @@ pub fn make(
         tiling: vk::ImageTiling::OPTIMAL,
         usage: usage_flags_for(format, is_attachment),
         sharing_mode: vk::SharingMode::EXCLUSIVE,
+        flags: if kind == TextureKind::CUBEMAP {
+            vk::ImageCreateFlags::CUBE_COMPATIBLE
+        } else {
+            vk::ImageCreateFlags::empty()
+        },
         ..Default::default()
     };
     let image = unsafe { ctx.device.create_image(&create_info, None) }.unwrap();
