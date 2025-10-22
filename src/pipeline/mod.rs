@@ -101,7 +101,7 @@ impl Pipeline {
         let initial_barriers: Vec<_> = first_layouts
             .into_iter()
             .map(|(image, initial_layout, base_mip_level, aspect_mask)| {
-                vk::ImageMemoryBarrier2::builder()
+                vk::ImageMemoryBarrier2::default()
                     .image(image)
                     .src_access_mask(vk::AccessFlags2::NONE)
                     .dst_access_mask(vk::AccessFlags2::NONE)
@@ -117,7 +117,6 @@ impl Pipeline {
                         layer_count: 1,
                         aspect_mask,
                     })
-                    .build()
             })
             .collect();
         // return initial barriers

@@ -32,9 +32,8 @@ impl Stage for BlitStage {
 
     fn work(&mut self, ctx: super::RenderContext) {
         if !self.image_barriers.is_empty() {
-            let barrier_dep_info = vk::DependencyInfo::builder()
-                .image_memory_barriers(&self.image_barriers)
-                .build();
+            let barrier_dep_info =
+                vk::DependencyInfo::default().image_memory_barriers(&self.image_barriers);
             unsafe {
                 ctx.vulkan
                     .device

@@ -869,14 +869,15 @@ impl DescHandler<ClearDesc> for Pipeline {
 }
 
 impl BlendDesc {
-    pub fn to_vk(
+    pub fn to_vk(&self) -> vk::PipelineColorBlendStateCreateInfo {
+        vk::PipelineColorBlendStateCreateInfo::default().logic_op_enable(false)
+    }
+
+    pub fn to_attachment_states(
         &self,
         attachment_count: u32,
-    ) -> (
-        Vec<vk::PipelineColorBlendAttachmentState>,
-        vk::PipelineColorBlendStateCreateInfo,
-    ) {
-        let attachments: Vec<_> = (0..attachment_count)
+    ) -> Vec<vk::PipelineColorBlendAttachmentState> {
+        (0..attachment_count)
             .map(|_| vk::PipelineColorBlendAttachmentState {
                 blend_enable: if self.disabled { 0 } else { 1 },
                 src_color_blend_factor: self.src_factor.to_vk(),
@@ -891,12 +892,7 @@ impl BlendDesc {
                     | vk::ColorComponentFlags::B
                     | vk::ColorComponentFlags::A,
             })
-            .collect();
-        let info = vk::PipelineColorBlendStateCreateInfo::builder()
-            .logic_op_enable(false)
-            .attachments(&attachments)
-            .build();
-        (attachments, info)
+            .collect()
     }
 }
 

@@ -79,7 +79,7 @@ impl Sampler {
         compare_func: CompareFunc,
         anisotropy: u8,
     ) -> vk::SamplerCreateInfo {
-        vk::SamplerCreateInfo::builder()
+        vk::SamplerCreateInfo::default()
             .address_mode_u(wrap_mode.to_vk())
             .address_mode_v(wrap_mode.to_vk())
             .address_mode_w(wrap_mode.to_vk())
@@ -94,7 +94,6 @@ impl Sampler {
             .mag_filter(filter.to_vk())
             .max_anisotropy(anisotropy as f32)
             .max_lod(vk::LOD_CLAMP_NONE)
-            .build()
     }
 
     pub fn destroy(&self, device: &ash::Device) {

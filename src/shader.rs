@@ -47,7 +47,7 @@ impl ShaderProgram {
                         2 => (vk::ShaderStageFlags::GEOMETRY, "geom"),
                         _ => panic!("unrecognized shader type {}", i),
                     };
-                    let info = vk::ShaderModuleCreateInfo::builder().code(&shader_bin.1);
+                    let info = vk::ShaderModuleCreateInfo::default().code(&shader_bin.1);
                     let module = unsafe { ctx.device.create_shader_module(&info, None) }
                         .unwrap_or_else(|_| panic!("shader module error, type: {}", i));
                     ctx.try_set_debug_name(

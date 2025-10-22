@@ -1,4 +1,3 @@
-use ash::extensions::ext::DebugUtils;
 use ash::vk;
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -33,13 +32,13 @@ unsafe extern "system" fn vulkan_debug_callback(
 }
 
 pub struct DebugContext {
-    loader: DebugUtils,
+    loader: ash::ext::debug_utils::Instance,
     callback: vk::DebugUtilsMessengerEXT,
 }
 
 impl DebugContext {
     pub fn new(entry: &ash::Entry, instance: &ash::Instance) -> Self {
-        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
                     | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -52,7 +51,7 @@ impl DebugContext {
             )
             .pfn_user_callback(Some(vulkan_debug_callback));
 
-        let debug_utils_loader = DebugUtils::new(entry, instance);
+        let debug_utils_loader = ash::ext::debug_utils::Instance::new(entry, instance);
         let debug_call_back =
             unsafe { debug_utils_loader.create_debug_utils_messenger(&debug_info, None) }.unwrap();
         DebugContext {

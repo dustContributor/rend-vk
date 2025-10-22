@@ -56,7 +56,7 @@ impl Stage for RenderStage {
          * New rendering info because lifetimes for the
          * arrays inside are too complex to keep around
          */
-        let mut rendering_info_builder = vk::RenderingInfo::builder()
+        let mut rendering_info_builder = vk::RenderingInfo::default()
             .color_attachments(&rendering_attachments)
             .render_area(self.render_area)
             .layer_count(1);
@@ -70,16 +70,15 @@ impl Stage for RenderStage {
             ));
         }
         if !image_barriers.is_empty() {
-            let barrier_dep_info = vk::DependencyInfo::builder()
-                .image_memory_barriers(&image_barriers)
-                .build();
+            let barrier_dep_info =
+                vk::DependencyInfo::default().image_memory_barriers(&image_barriers);
             unsafe {
                 ctx.vulkan
                     .device
                     .cmd_pipeline_barrier2(ctx.command_buffer, &barrier_dep_info);
             }
         }
-        let rendering_info = rendering_info_builder.build();
+        let rendering_info = rendering_info_builder;
         unsafe {
             ctx.vulkan
                 .device
@@ -185,9 +184,8 @@ impl Stage for RenderStage {
             let present_image_barriers = vec![Attachment::default_attachment_present_barrier(
                 ctx.default_attachment.image,
             )];
-            let barrier_dep_info = vk::DependencyInfo::builder()
-                .image_memory_barriers(&present_image_barriers)
-                .build();
+            let barrier_dep_info =
+                vk::DependencyInfo::default().image_memory_barriers(&present_image_barriers);
             unsafe {
                 ctx.vulkan
                     .device

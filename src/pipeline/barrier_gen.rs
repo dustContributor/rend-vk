@@ -297,7 +297,7 @@ impl BarrierGen {
                         continue;
                     }
                     // Image was written to before, barrier for reading
-                    let barrier = vk::ImageMemoryBarrier2::builder()
+                    let barrier = vk::ImageMemoryBarrier2::default()
                         .image(input.image)
                         .src_access_mask(ev_barrier.src_access)
                         .dst_access_mask(vk::AccessFlags2::MEMORY_READ)
@@ -324,8 +324,7 @@ impl BarrierGen {
                             input.format.aspect(),
                             level_usage as u32,
                             1,
-                        ))
-                        .build();
+                        ));
                     barriers.push((&input.name, false, barrier));
                     break;
                 }
@@ -361,7 +360,7 @@ impl BarrierGen {
                 if ev_barrier.keep_searching {
                     continue;
                 }
-                let barrier = vk::ImageMemoryBarrier2::builder()
+                let barrier = vk::ImageMemoryBarrier2::default()
                     .image(output.image)
                     .src_access_mask(ev_barrier.src_access)
                     .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
@@ -388,8 +387,7 @@ impl BarrierGen {
                         output.format.aspect(),
                         output.level_usage as u32,
                         1,
-                    ))
-                    .build();
+                    ));
                 barriers.push((&output.name, true, barrier));
                 break;
             }

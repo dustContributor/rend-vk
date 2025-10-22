@@ -80,19 +80,17 @@ impl Attachment {
     ) -> Vec<vk::ImageView> {
         let vk_format = format.to_vk();
         let infos = (0..levels).map(|l| {
-            vk::ImageViewCreateInfo::builder()
+            vk::ImageViewCreateInfo::default()
                 .subresource_range(
-                    vk::ImageSubresourceRange::builder()
+                    vk::ImageSubresourceRange::default()
                         .aspect_mask(format.aspect())
                         .base_mip_level(l as u32)
                         .level_count(1)
-                        .layer_count(1)
-                        .build(),
+                        .layer_count(1),
                 )
                 .image(image)
                 .format(vk_format)
                 .view_type(vk::ImageViewType::TYPE_2D)
-                .build()
         });
         infos
             .map(|info| unsafe {
@@ -135,7 +133,7 @@ impl Attachment {
     }
 
     pub fn default_attachment_write_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
-        vk::ImageMemoryBarrier2::builder()
+        vk::ImageMemoryBarrier2::default()
             .image(image)
             .src_access_mask(vk::AccessFlags2::MEMORY_READ)
             .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
@@ -144,11 +142,10 @@ impl Attachment {
             .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
             .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
             .subresource_range(Self::color_subresource_range())
-            .build()
     }
 
     pub fn default_attachment_present_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
-        vk::ImageMemoryBarrier2::builder()
+        vk::ImageMemoryBarrier2::default()
             .image(image)
             .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
             // None is the expected access mask for presenting
@@ -158,7 +155,6 @@ impl Attachment {
             .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
             .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
             .subresource_range(Self::color_subresource_range())
-            .build()
     }
 
     pub fn default_attachment_rendering_attachment_info(
@@ -186,12 +182,11 @@ impl Attachment {
         base: u32,
         count: u32,
     ) -> vk::ImageSubresourceRange {
-        vk::ImageSubresourceRange::builder()
+        vk::ImageSubresourceRange::default()
             .aspect_mask(aspect)
             .base_mip_level(base)
             .level_count(count)
             .base_array_layer(0)
             .layer_count(1)
-            .build()
     }
 }
