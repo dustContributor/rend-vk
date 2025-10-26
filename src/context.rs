@@ -16,6 +16,53 @@ pub struct ExtensionContext {
 }
 
 impl VulkanContext {
+    pub fn wait_and_reset_fence(&self, fence: vk::Fence) {
+        let fences = [fence];
+        unsafe {
+            self.device
+                .wait_for_fences(&fences, true, u64::MAX)
+                .expect("fence wait failed!");
+            self.device
+                .reset_fences(&fences)
+                .expect("fence reset failed!");
+        }
+    }
+
+    pub fn create_fence(&self, name: &str) -> vk::Fence {
+        let info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+        let fence = unsafe {
+            self.device
+                .create_fence(&info, None)
+                .expect("create fence failed!")
+        };
+        self.try_set_debug_name(name, fence);
+        fence
+    }
+
+    pub fn create_semaphore(&self, name: &str) -> vk::Semaphore {
+        self.create_semaphore_by_kind(name, vk::SemaphoreType::BINARY)
+    }
+
+    pub fn create_timeline_semaphore(&self, name: &str) -> vk::Semaphore {
+        self.create_semaphore_by_kind(name, vk::SemaphoreType::TIMELINE)
+    }
+
+    fn create_semaphore_by_kind(&self, name: &str, kind: vk::SemaphoreType) -> vk::Semaphore {
+        let mut type_info = vk::SemaphoreTypeCreateInfo::default()
+            .initial_value(0)
+            .semaphore_type(kind);
+        let info = vk::SemaphoreCreateInfo::default().push_next(&mut type_info);
+        let semaphore = unsafe {
+            self.device
+                .create_semaphore(&info, None)
+                .unwrap_or_else(|e| {
+                    panic!("couldn't create semaphore {}, error {}!", name, e);
+                })
+        };
+        self.try_set_debug_name(name, semaphore);
+        semaphore
+    }
+
     pub fn is_debug_enabled(&self) -> bool {
         self.extension.is_debug_enabled()
     }

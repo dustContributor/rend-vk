@@ -87,12 +87,10 @@ pub struct Renderer {
     pool: vk::CommandPool,
     draw_command_buffer: vk::CommandBuffer,
 
-    present_complete_semaphore: vk::Semaphore,
     rendering_complete_semaphore: vk::Semaphore,
     pass_timeline_semaphore: vk::Semaphore,
 
-    draw_commands_reuse_fence: vk::Fence,
-    setup_commands_reuse_fence: vk::Fence,
+    draw_commands_finished_fence: vk::Fence,
 
     current_frame: AtomicU64,
 }
@@ -110,11 +108,9 @@ impl Renderer {
         unsafe {
             let destroy_semaphore = |s| self.vulkan_context.device.destroy_semaphore(s, None);
             let destroy_fence = |s| self.vulkan_context.device.destroy_fence(s, None);
-            destroy_semaphore(self.present_complete_semaphore);
             destroy_semaphore(self.rendering_complete_semaphore);
             destroy_semaphore(self.pass_timeline_semaphore);
-            destroy_fence(self.draw_commands_reuse_fence);
-            destroy_fence(self.setup_commands_reuse_fence);
+            destroy_fence(self.draw_commands_finished_fence);
             self.vulkan_context
                 .device
                 .destroy_command_pool(self.pool, None);
@@ -349,20 +345,25 @@ impl Renderer {
         //     serde_json::to_writer_pretty(&mut writer, &self.batches_by_task_type).unwrap();
         //     writer.flush().unwrap();
         // }
-        let (attachment_index, default_attachment) = self
-            .swapchain_context
-            .acquire_next(self.present_complete_semaphore);
+
+        let acquired = self.swapchain_context.acquire_next();
 
         self.setup_frame();
 
-        self.record_and_submit_draw_commands(|r, c| {
-            r.process_pipeline(c, &default_attachment);
-        });
+        self.vulkan_context
+            .wait_and_reset_fence(self.draw_commands_finished_fence);
+
+        self.record_and_submit_draw_commands(
+            &acquired.attachment,
+            &[acquired.acquire_semaphore],
+            &[acquired.render_semaphore],
+            self.draw_commands_finished_fence,
+        );
 
         self.swapchain_context.present(
-            attachment_index,
+            acquired.index,
             self.main_queue,
-            self.rendering_complete_semaphore,
+            &[acquired.render_semaphore],
         );
 
         // Clear batch queues for next frame
@@ -455,27 +456,14 @@ impl Renderer {
         };
     }
 
-    fn wait_and_reset_fence(&self, fence: vk::Fence) {
-        let fences = [fence];
-        unsafe {
-            self.vulkan_context
-                .device
-                .wait_for_fences(&fences, true, u64::MAX)
-                .expect("fence wait failed!");
-            self.vulkan_context
-                .device
-                .reset_fences(&fences)
-                .expect("fence reset failed!");
-        }
-    }
-
     /// Main draw command recording and submission logic
-    fn record_and_submit_draw_commands<F>(&mut self, recording: F)
-    where
-        F: Fn(&mut Renderer, vk::CommandBuffer),
-    {
-        self.wait_and_reset_fence(self.draw_commands_reuse_fence);
-
+    fn record_and_submit_draw_commands(
+        &mut self,
+        dest_attachment: &Attachment,
+        to_wait_sem: &[vk::Semaphore],
+        to_signal_sem: &[vk::Semaphore],
+        to_signal_fen: vk::Fence,
+    ) {
         unsafe {
             self.vulkan_context
                 .device
@@ -493,7 +481,7 @@ impl Renderer {
                 .begin_command_buffer(self.draw_command_buffer, &command_buffer_begin_info)
                 .expect("begin commandbuffer failed!");
 
-            recording(self, self.draw_command_buffer);
+            self.process_pipeline(self.draw_command_buffer, &dest_attachment);
 
             self.vulkan_context
                 .device
@@ -503,24 +491,18 @@ impl Renderer {
             let command_buffers = [self.draw_command_buffer];
 
             let wait_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let wait_semaphores = [self.present_complete_semaphore];
-            let signal_semaphores = [self.rendering_complete_semaphore];
 
             let submit_info = vk::SubmitInfo::default()
-                .wait_semaphores(&wait_semaphores)
+                .wait_semaphores(&to_wait_sem)
                 .wait_dst_stage_mask(&wait_mask)
                 .command_buffers(&command_buffers)
-                .signal_semaphores(&signal_semaphores);
+                .signal_semaphores(&to_signal_sem);
 
             let submit_infos = [submit_info];
 
             self.vulkan_context
                 .device
-                .queue_submit(
-                    self.main_queue,
-                    &submit_infos,
-                    self.draw_commands_reuse_fence,
-                )
+                .queue_submit(self.main_queue, &submit_infos, to_signal_fen)
                 .expect("queue submit failed!");
         }
     }
@@ -567,7 +549,7 @@ impl Renderer {
 
             self.vulkan_context
                 .device
-                .reset_fences(&[self.draw_commands_reuse_fence])
+                .reset_fences(&[self.draw_commands_finished_fence])
                 .expect("fence reset failed!");
 
             self.vulkan_context
@@ -575,7 +557,7 @@ impl Renderer {
                 .queue_submit(
                     self.main_queue,
                     &submit_infos,
-                    self.draw_commands_reuse_fence,
+                    self.draw_commands_finished_fence,
                 )
                 .expect("queue submit failed!");
 
@@ -701,46 +683,12 @@ where
     log::trace!("command buffers created!");
 
     log::trace!("creating fences...");
-    let fence_create_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
-    let draw_commands_reuse_fence = unsafe {
-        ctx.device
-            .create_fence(&fence_create_info, None)
-            .expect("Create fence failed.")
-    };
-    let setup_commands_reuse_fence = unsafe {
-        ctx.device
-            .create_fence(&fence_create_info, None)
-            .expect("Create fence failed.")
-    };
-    ctx.try_set_debug_name("draw_commands_reuse_fence", draw_commands_reuse_fence);
-    ctx.try_set_debug_name("setup_commands_reuse_fence", setup_commands_reuse_fence);
+    let draw_commands_finished_fence = ctx.create_fence("draw_commands_finished_fence");
     log::trace!("fences created!");
 
     log::trace!("creating semaphores...");
-    let semaphore_create_info = vk::SemaphoreCreateInfo::default();
-    let present_complete_semaphore = unsafe {
-        ctx.device
-            .create_semaphore(&semaphore_create_info, None)
-            .unwrap()
-    };
-    let rendering_complete_semaphore = unsafe {
-        ctx.device
-            .create_semaphore(&semaphore_create_info, None)
-            .unwrap()
-    };
-    ctx.try_set_debug_name("present_complete_semaphore", present_complete_semaphore);
-    ctx.try_set_debug_name("rendering_complete_semaphore", rendering_complete_semaphore);
-    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::default()
-        .initial_value(0)
-        .semaphore_type(vk::SemaphoreType::TIMELINE);
-    let timeline_semaphore_create_info =
-        vk::SemaphoreCreateInfo::default().push_next(&mut timeline_semaphore_type_create_info);
-    let pass_timeline_semaphore = unsafe {
-        ctx.device
-            .create_semaphore(&timeline_semaphore_create_info, None)
-            .unwrap()
-    };
-    ctx.try_set_debug_name("pass_timeline_semaphore", pass_timeline_semaphore);
+    let rendering_complete_semaphore = ctx.create_semaphore("rendering_complete_semaphore");
+    let pass_timeline_semaphore = ctx.create_timeline_semaphore("pass_timeline_semaphore");
     log::trace!("semaphores created!");
 
     log::trace!("creating allocators...");
@@ -775,9 +723,7 @@ where
         main_queue,
         rendering_complete_semaphore,
         pass_timeline_semaphore,
-        present_complete_semaphore,
-        setup_commands_reuse_fence,
-        draw_commands_reuse_fence,
+        draw_commands_finished_fence,
         pool: command_pool,
         optimal_transition_queue: Vec::new(),
         ongoing_optimal_transitions: Vec::new(),

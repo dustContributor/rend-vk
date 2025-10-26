@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use ash::vk;
 
 use crate::{context::VulkanContext, pipeline::attachment::Attachment};
@@ -9,7 +11,16 @@ pub struct SwapchainContext {
     pub swapchain: vk::SwapchainKHR,
     pub present_mode: vk::PresentModeKHR,
     pub attachments: Vec<Attachment>,
+    pub semaphores: VecDeque<vk::Semaphore>,
+    image_acquired_semaphore: vk::Semaphore,
     funcs: ash::khr::swapchain::Device,
+}
+
+pub struct AcquiredImage {
+    pub index: u32,
+    pub attachment: Box<Attachment>,
+    pub acquire_semaphore: vk::Semaphore,
+    pub render_semaphore: vk::Semaphore,
 }
 
 impl SwapchainContext {
@@ -18,45 +29,59 @@ impl SwapchainContext {
         let surface_extent = surface_extent(ctx, surface, 1280, 720);
         let surface_format = surface_format(ctx, surface);
         let swapchain = swapchain(ctx, surface, surface_extent, present_mode);
-        let swapchain_attachments = attachments(ctx, surface, swapchain, surface_extent);
+        let attachments = attachments(ctx, surface, swapchain, surface_extent);
         ctx.try_set_debug_name("swapchain_main", swapchain);
+        let semaphores = attachments
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| ctx.create_semaphore(&format!("swapchain_semaphore_{}", idx)))
+            .collect();
+        let image_acquired_semaphore = ctx.create_semaphore("swapchain_image_aquired_semaphore");
         Self {
             present_mode,
             surface,
             surface_extent,
             surface_format,
             swapchain,
-            attachments: swapchain_attachments,
+            attachments,
+            semaphores,
+            image_acquired_semaphore,
             funcs: ctx.extension.swapchain.clone(),
         }
     }
 
-    pub fn acquire_next(&self, present_complete: vk::Semaphore) -> (u32, Attachment) {
+    pub fn acquire_next(&mut self) -> AcquiredImage {
         let (present_index, _) = unsafe {
             self.funcs
                 .acquire_next_image(
                     self.swapchain,
                     u64::MAX,
-                    present_complete,
+                    self.image_acquired_semaphore,
                     vk::Fence::null(),
                 )
                 .unwrap()
         };
         let attachment = self.attachments[present_index as usize].clone();
-        (present_index, attachment)
+        let semaphore = self.semaphores[present_index as usize].clone();
+        AcquiredImage {
+            attachment: Box::new(attachment),
+            render_semaphore: semaphore,
+            acquire_semaphore: self.image_acquired_semaphore,
+            index: present_index,
+        }
     }
 
-    pub fn present(
-        &self,
-        attachment_index: u32,
-        queue: vk::Queue,
-        rendering_complete: vk::Semaphore,
-    ) {
-        let wait_semaphores = [rendering_complete];
+    // fn next_semaphore(&mut self) -> vk::Semaphore {
+    //     let n = self.semaphores.pop_front().unwrap();
+    //     self.semaphores.push_back(n);
+    //     n
+    // }
+
+    pub fn present(&self, attachment_index: u32, queue: vk::Queue, to_wait: &[vk::Semaphore]) {
         let swapchains = [self.swapchain];
         let image_indices = [attachment_index];
         let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(&wait_semaphores)
+            .wait_semaphores(to_wait)
             .swapchains(&swapchains)
             .image_indices(&image_indices);
         unsafe {
@@ -72,6 +97,13 @@ impl SwapchainContext {
                 ctx.device.destroy_image_view(att.view, None);
             }
         }
+        for sem in self.semaphores.iter() {
+            unsafe { ctx.device.destroy_semaphore(sem.clone(), None) };
+        }
+        unsafe {
+            ctx.device
+                .destroy_semaphore(self.image_acquired_semaphore, None)
+        };
         unsafe {
             ctx.extension
                 .swapchain
