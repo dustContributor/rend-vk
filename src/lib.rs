@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 pub mod buffer;
 pub mod context;
 pub mod debug;
