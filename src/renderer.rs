@@ -349,7 +349,9 @@ impl Renderer {
         //     serde_json::to_writer_pretty(&mut writer, &self.batches_by_task_type).unwrap();
         //     writer.flush().unwrap();
         // }
-        let (attachment_index, default_attachment) = self.acquire_next_swapchain_attachment();
+        let (attachment_index, default_attachment) = self
+            .swapchain_context
+            .acquire_next(self.present_complete_semaphore);
 
         self.setup_frame();
 
@@ -357,7 +359,11 @@ impl Renderer {
             r.process_pipeline(c, &default_attachment);
         });
 
-        self.present(attachment_index);
+        self.swapchain_context.present(
+            attachment_index,
+            self.main_queue,
+            self.rendering_complete_semaphore,
+        );
 
         // Clear batch queues for next frame
         for batch in &mut self.batches_by_task_type.values_mut() {
@@ -365,40 +371,6 @@ impl Renderer {
         }
         // Signal current frame and increment ID for next frame
         self.signal_frame();
-    }
-
-    fn acquire_next_swapchain_attachment(&self) -> (u32, Attachment) {
-        let (present_index, _) = unsafe {
-            self.vulkan_context
-                .extension
-                .swapchain
-                .acquire_next_image(
-                    self.swapchain_context.swapchain,
-                    u64::MAX,
-                    self.present_complete_semaphore,
-                    vk::Fence::null(),
-                )
-                .unwrap()
-        };
-        let attachment = self.swapchain_context.attachments[present_index as usize].clone();
-        (present_index, attachment)
-    }
-
-    fn present(&self, swapchain_attachment_index: u32) {
-        let wait_semaphores = [self.rendering_complete_semaphore];
-        let swapchains = [self.swapchain_context.swapchain];
-        let image_indices = [swapchain_attachment_index];
-        let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(&wait_semaphores)
-            .swapchains(&swapchains)
-            .image_indices(&image_indices);
-        unsafe {
-            self.vulkan_context
-                .extension
-                .swapchain
-                .queue_present(self.main_queue, &present_info)
-                .expect("queue present failed!");
-        };
     }
 
     fn setup_frame(&mut self) {

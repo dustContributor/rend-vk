@@ -9,6 +9,7 @@ pub struct SwapchainContext {
     pub swapchain: vk::SwapchainKHR,
     pub present_mode: vk::PresentModeKHR,
     pub attachments: Vec<Attachment>,
+    funcs: ash::khr::swapchain::Device,
 }
 
 impl SwapchainContext {
@@ -26,7 +27,43 @@ impl SwapchainContext {
             surface_format,
             swapchain,
             attachments: swapchain_attachments,
+            funcs: ctx.extension.swapchain.clone(),
         }
+    }
+
+    pub fn acquire_next(&self, present_complete: vk::Semaphore) -> (u32, Attachment) {
+        let (present_index, _) = unsafe {
+            self.funcs
+                .acquire_next_image(
+                    self.swapchain,
+                    u64::MAX,
+                    present_complete,
+                    vk::Fence::null(),
+                )
+                .unwrap()
+        };
+        let attachment = self.attachments[present_index as usize].clone();
+        (present_index, attachment)
+    }
+
+    pub fn present(
+        &self,
+        attachment_index: u32,
+        queue: vk::Queue,
+        rendering_complete: vk::Semaphore,
+    ) {
+        let wait_semaphores = [rendering_complete];
+        let swapchains = [self.swapchain];
+        let image_indices = [attachment_index];
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&wait_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        unsafe {
+            self.funcs
+                .queue_present(queue, &present_info)
+                .expect("queue present failed!");
+        };
     }
 
     pub fn destroy(&self, ctx: &VulkanContext) {
