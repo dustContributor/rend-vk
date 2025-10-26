@@ -7,7 +7,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use ash::{ext::debug_utils, khr, vk, Entry};
+use ash::{ext, ext::debug_utils, khr, vk, Entry};
 use bitvec::vec::BitVec;
 
 use crate::{
@@ -864,11 +864,13 @@ pub fn make_device(
     queue_family_index: u32,
     is_debug_enabled: bool,
 ) -> ash::Device {
-    let mut device_extension_names_raw = vec![khr::swapchain::NAME.as_ptr()];
-    // ash::extensions::ext::swap
-    let non_semantic_info_name = c"VK_KHR_shader_non_semantic_info";
+    let mut device_extension_names_raw = vec![
+        khr::swapchain::NAME.as_ptr(),
+        ext::swapchain_maintenance1::NAME.as_ptr(),
+    ];
     if is_debug_enabled {
-        device_extension_names_raw.push(non_semantic_info_name.as_ptr());
+        // this allows for shader printf
+        device_extension_names_raw.push(ash::khr::shader_non_semantic_info::NAME.as_ptr());
     }
     let features = vk::PhysicalDeviceFeatures {
         shader_clip_distance: 1,
