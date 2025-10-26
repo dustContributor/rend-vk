@@ -12,9 +12,9 @@ pub struct VulkanContext {
 }
 
 pub struct ExtensionContext {
-    pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
-    pub swapchain: ash::extensions::khr::Swapchain,
-    pub surface: ash::extensions::khr::Surface,
+    pub debug_utils: Option<ash::ext::debug_utils::Device>,
+    pub swapchain: ash::khr::swapchain::Device,
+    pub surface: ash::khr::surface::Instance,
 }
 
 impl VulkanContext {
@@ -34,7 +34,7 @@ impl VulkanContext {
     where
         T: 'static + vk::Handle,
     {
-        self.extension.try_set_debug_name(&self.device, name, obj)
+        self.extension.try_set_debug_name(name, obj)
     }
 
     pub fn memory_type_index_for(
@@ -65,9 +65,7 @@ impl ExtensionContext {
         }
         let dbg = self.debug_utils.as_ref().unwrap();
         let c_name = std::ffi::CString::new(name).unwrap();
-        let label = vk::DebugUtilsLabelEXT::builder()
-            .label_name(&c_name)
-            .build();
+        let label = vk::DebugUtilsLabelEXT::default().label_name(&c_name);
         unsafe {
             dbg.cmd_begin_debug_utils_label(command_buffer, &label);
         }
@@ -86,7 +84,7 @@ impl ExtensionContext {
         true
     }
 
-    pub fn try_set_debug_name<T>(&self, device: &ash::Device, name: &str, obj: T) -> bool
+    pub fn try_set_debug_name<T>(&self, name: &str, obj: T) -> bool
     where
         T: 'static + vk::Handle,
     {
@@ -95,16 +93,11 @@ impl ExtensionContext {
         }
         let dbg = self.debug_utils.as_ref().unwrap();
         let c_name = std::ffi::CString::new(name).unwrap();
-        let type_id = TypeId::of::<T>();
-        let object_type = *OBJECT_TYPES_BY_TYPE_ID.get(&type_id).unwrap();
-        let name_info = vk::DebugUtilsObjectNameInfoEXT::builder()
-            .object_type(object_type)
-            .object_handle(vk::Handle::as_raw(obj))
-            .object_name(&c_name)
-            .build();
+        let name_info = vk::DebugUtilsObjectNameInfoEXT::default()
+            .object_handle(obj)
+            .object_name(&c_name);
         unsafe {
-            dbg.set_debug_utils_object_name(device.handle(), &name_info)
-                .unwrap();
+            dbg.set_debug_utils_object_name(&name_info).unwrap();
         }
         true
     }

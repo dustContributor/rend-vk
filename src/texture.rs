@@ -96,18 +96,16 @@ impl Texture {
         for sidei in 0..self.kind.layer_count() {
             for mm in &self.mip_maps {
                 dest.push(
-                    vk::BufferImageCopy::builder()
+                    vk::BufferImageCopy::default()
                         .image_subresource(
-                            vk::ImageSubresourceLayers::builder()
+                            vk::ImageSubresourceLayers::default()
                                 .aspect_mask(self.format.aspect())
                                 .base_array_layer(sidei)
                                 .layer_count(1)
-                                .mip_level(mm.index)
-                                .build(),
+                                .mip_level(mm.index),
                         )
                         .image_extent(mm.extent().into())
-                        .buffer_offset(offset)
-                        .build(),
+                        .buffer_offset(offset),
                 );
                 // advance to next mip map
                 offset += mm.size as u64;
@@ -314,23 +312,17 @@ pub fn make(
     let mut dedicated_req = vk::MemoryDedicatedRequirements {
         ..Default::default()
     };
-    let mut memory_req = vk::MemoryRequirements2::builder()
-        .push_next(&mut dedicated_req)
-        .build();
+    let mut memory_req = vk::MemoryRequirements2::default().push_next(&mut dedicated_req);
 
-    let requirements_info = vk::ImageMemoryRequirementsInfo2::builder()
-        .image(image)
-        .build();
+    let requirements_info = vk::ImageMemoryRequirementsInfo2::default().image(image);
     unsafe {
         ctx.device
             .get_image_memory_requirements2(&requirements_info, &mut memory_req)
     };
 
-    let mut dedicated_info = vk::MemoryDedicatedAllocateInfo::builder()
-        .image(image)
-        .build();
+    let mut dedicated_info = vk::MemoryDedicatedAllocateInfo::default().image(image);
 
-    let memory_allocate_info = vk::MemoryAllocateInfo::builder()
+    let memory_allocate_info = vk::MemoryAllocateInfo::default()
         .push_next(&mut dedicated_info)
         .allocation_size(memory_req.memory_requirements.size)
         .memory_type_index(
@@ -339,8 +331,7 @@ pub fn make(
                 vk::MemoryPropertyFlags::DEVICE_LOCAL,
             )
             .unwrap(),
-        )
-        .build();
+        );
 
     let memory = unsafe {
         ctx.device
@@ -354,13 +345,12 @@ pub fn make(
             .expect("failed image memory bind")
     };
 
-    let image_view_info = vk::ImageViewCreateInfo::builder()
+    let image_view_info = vk::ImageViewCreateInfo::default()
         .subresource_range(
-            vk::ImageSubresourceRange::builder()
+            vk::ImageSubresourceRange::default()
                 .aspect_mask(format.aspect())
                 .level_count(levels as u32)
-                .layer_count(kind.layer_count())
-                .build(),
+                .layer_count(kind.layer_count()),
         )
         .image(image)
         .format(vk_format)

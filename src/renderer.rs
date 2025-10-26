@@ -7,10 +7,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use ash::{
-    extensions::{ext::DebugUtils, khr},
-    vk, Entry,
-};
+use ash::{ext::debug_utils, khr, vk, Entry};
 use bitvec::vec::BitVec;
 
 use crate::{
@@ -391,7 +388,7 @@ impl Renderer {
         let wait_semaphores = [self.rendering_complete_semaphore];
         let swapchains = [self.swapchain_context.swapchain];
         let image_indices = [swapchain_attachment_index];
-        let present_info = vk::PresentInfoKHR::builder()
+        let present_info = vk::PresentInfoKHR::default()
             .wait_semaphores(&wait_semaphores)
             .swapchains(&swapchains)
             .image_indices(&image_indices);
@@ -472,14 +469,12 @@ impl Renderer {
 
     fn signal_frame(&self) {
         let frame_index = self.current_frame.fetch_add(1, Ordering::Relaxed);
-        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::builder()
+        let pass_semaphore_signal_info = [vk::SemaphoreSubmitInfo::default()
             .semaphore(self.pass_timeline_semaphore)
             .stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
-            .value(frame_index)
-            .build()];
-        let signal_submit_infos = [vk::SubmitInfo2::builder()
-            .signal_semaphore_infos(&pass_semaphore_signal_info)
-            .build()];
+            .value(frame_index)];
+        let signal_submit_infos =
+            [vk::SubmitInfo2::default().signal_semaphore_infos(&pass_semaphore_signal_info)];
         unsafe {
             self.vulkan_context
                 .device
@@ -518,9 +513,8 @@ impl Renderer {
                 )
                 .expect("reset command buffer failed!");
 
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-                .build();
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
             self.vulkan_context
                 .device
@@ -540,13 +534,13 @@ impl Renderer {
             let wait_semaphores = [self.present_complete_semaphore];
             let signal_semaphores = [self.rendering_complete_semaphore];
 
-            let submit_info = vk::SubmitInfo::builder()
+            let submit_info = vk::SubmitInfo::default()
                 .wait_semaphores(&wait_semaphores)
                 .wait_dst_stage_mask(&wait_mask)
                 .command_buffers(&command_buffers)
                 .signal_semaphores(&signal_semaphores);
 
-            let submit_infos = [submit_info.build()];
+            let submit_infos = [submit_info];
 
             self.vulkan_context
                 .device
@@ -574,7 +568,7 @@ impl Renderer {
                 .reset_command_buffer(cmd_buffer, vk::CommandBufferResetFlags::RELEASE_RESOURCES)
                 .expect("reset command buffer failed!");
 
-            let begin_info = vk::CommandBufferBeginInfo::builder()
+            let begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
             self.vulkan_context
@@ -592,12 +586,12 @@ impl Renderer {
             let wait_mask = [vk::PipelineStageFlags::ALL_COMMANDS];
             let command_buffers = [cmd_buffer];
 
-            let submit_info = vk::SubmitInfo::builder()
+            let submit_info = vk::SubmitInfo::default()
                 .wait_dst_stage_mask(&wait_mask)
                 .wait_semaphores(&[])
                 .command_buffers(&command_buffers);
 
-            let submit_infos = [submit_info.build()];
+            let submit_infos = [submit_info];
 
             self.vulkan_context
                 .device
@@ -645,17 +639,6 @@ where
     );
     log::trace!("instance created!");
 
-    let debug_context = if is_debug_enabled {
-        Some(Box::new(DebugContext::new(&entry, &instance)))
-    } else {
-        None
-    };
-
-    let debug_utils_ext = if is_debug_enabled {
-        Some(DebugUtils::new(&entry, &instance))
-    } else {
-        None
-    };
     log::trace!("creating surface...");
     let surface_layout = Layout::new::<vk::SurfaceKHR>();
     let surface = unsafe { std::alloc::alloc(surface_layout) as *mut vk::SurfaceKHR };
@@ -665,7 +648,7 @@ where
     }
     let surface = unsafe { *surface };
     log::trace!("surface created!");
-    let surface_extension = khr::Surface::new(&entry, &instance);
+    let surface_extension = khr::surface::Instance::new(&entry, &instance);
     // let make_surface = func: unsafe extern "C" fn(u64, *mut c_void),
     log::trace!("selecting physical device...");
     let (physical_device, name, queue_family_index) =
@@ -680,7 +663,20 @@ where
     );
     log::trace!("device created!");
 
-    let swapchain_extension = ash::extensions::khr::Swapchain::new(&instance, &device);
+    let (debug_context, debug_utils_ext) = if is_debug_enabled {
+        log::trace!("initializing ext debug utils...");
+        (
+            Some(Box::new(DebugContext::new(&entry, &instance))),
+            Some(debug_utils::Device::new(&instance, &device)),
+        )
+    } else {
+        (None, None)
+    };
+    if is_debug_enabled {
+        log::trace!("ext debug utils initialized!");
+    }
+
+    let swapchain_extension = khr::swapchain::Device::new(&instance, &device);
 
     let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
@@ -705,7 +701,7 @@ where
     let main_queue = unsafe { ctx.device.get_device_queue(queue_family_index, 0) };
     ctx.try_set_debug_name("main_queue", main_queue);
 
-    let pool_create_info = vk::CommandPoolCreateInfo::builder()
+    let pool_create_info = vk::CommandPoolCreateInfo::default()
         .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
         .queue_family_index(queue_family_index);
 
@@ -716,7 +712,7 @@ where
     };
     ctx.try_set_debug_name("main_command_pool", command_pool);
 
-    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
         .command_buffer_count(2)
         .command_pool(command_pool)
         .level(vk::CommandBufferLevel::PRIMARY);
@@ -733,7 +729,7 @@ where
     log::trace!("command buffers created!");
 
     log::trace!("creating fences...");
-    let fence_create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+    let fence_create_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
     let draw_commands_reuse_fence = unsafe {
         ctx.device
             .create_fence(&fence_create_info, None)
@@ -762,13 +758,11 @@ where
     };
     ctx.try_set_debug_name("present_complete_semaphore", present_complete_semaphore);
     ctx.try_set_debug_name("rendering_complete_semaphore", rendering_complete_semaphore);
-    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::builder()
+    let mut timeline_semaphore_type_create_info = vk::SemaphoreTypeCreateInfo::default()
         .initial_value(0)
-        .semaphore_type(vk::SemaphoreType::TIMELINE)
-        .build();
-    let timeline_semaphore_create_info = vk::SemaphoreCreateInfo::builder()
-        .push_next(&mut timeline_semaphore_type_create_info)
-        .build();
+        .semaphore_type(vk::SemaphoreType::TIMELINE);
+    let timeline_semaphore_create_info =
+        vk::SemaphoreCreateInfo::default().push_next(&mut timeline_semaphore_type_create_info);
     let pass_timeline_semaphore = unsafe {
         ctx.device
             .create_semaphore(&timeline_semaphore_create_info, None)
@@ -851,9 +845,7 @@ where
     log::trace!("issuing initial layout transitions...");
     renderer.submit_and_wait(|r, c| {
         let barriers = r.pipeline.gen_initial_barriers();
-        let barrier_dep_info = vk::DependencyInfo::builder()
-            .image_memory_barriers(&barriers)
-            .build();
+        let barrier_dep_info = vk::DependencyInfo::default().image_memory_barriers(&barriers);
         unsafe {
             r.vulkan_context
                 .device
@@ -872,7 +864,8 @@ pub fn make_device(
     queue_family_index: u32,
     is_debug_enabled: bool,
 ) -> ash::Device {
-    let mut device_extension_names_raw = vec![khr::Swapchain::name().as_ptr()];
+    let mut device_extension_names_raw = vec![khr::swapchain::NAME.as_ptr()];
+    // ash::extensions::ext::swap
     let non_semantic_info_name = c"VK_KHR_shader_non_semantic_info";
     if is_debug_enabled {
         device_extension_names_raw.push(non_semantic_info_name.as_ptr());
@@ -907,25 +900,23 @@ pub fn make_device(
     //     depth_clip_control: 1,
     //     ..Default::default()
     // };
-    let mut features2 = vk::PhysicalDeviceFeatures2::builder()
+    let mut features2 = vk::PhysicalDeviceFeatures2::default()
         .features(features)
         .push_next(&mut features12)
         .push_next(&mut features13)
         // .push_next(&mut depth_clip_control_feature)
-        .build();
+        ;
 
     let priorities = [1.0];
 
-    let queue_info = vk::DeviceQueueCreateInfo::builder()
+    let queue_info = vk::DeviceQueueCreateInfo::default()
         .queue_family_index(queue_family_index)
-        .queue_priorities(&priorities)
-        .build();
+        .queue_priorities(&priorities);
 
-    let device_create_info = vk::DeviceCreateInfo::builder()
+    let device_create_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(std::slice::from_ref(&queue_info))
         .enabled_extension_names(&device_extension_names_raw)
-        .push_next(&mut features2)
-        .build();
+        .push_next(&mut features2);
 
     log::info!("initializing Device...");
     let device: ash::Device = unsafe {
@@ -955,25 +946,24 @@ pub fn make_instance(
 
     let mut instance_extensions = extensions.to_vec();
     if is_debug_enabled {
-        instance_extensions.push(DebugUtils::name().as_ptr());
+        instance_extensions.push(debug_utils::NAME.as_ptr());
     }
 
-    let appinfo = vk::ApplicationInfo::builder()
+    let appinfo = vk::ApplicationInfo::default()
         .application_name(app_name)
         .application_version(0)
         .engine_name(app_name)
         .engine_version(0)
         .api_version(vk::make_api_version(0, 1, 3, 0));
 
-    let mut create_info = vk::InstanceCreateInfo::builder()
+    let mut create_info = vk::InstanceCreateInfo::default()
         .application_info(&appinfo)
         .enabled_layer_names(&layers_names_raw)
         .enabled_extension_names(&instance_extensions);
 
     let enabled_validation_features = [vk::ValidationFeatureEnableEXT::DEBUG_PRINTF];
-    let mut validation_features_ext = vk::ValidationFeaturesEXT::builder()
-        .enabled_validation_features(&enabled_validation_features)
-        .build();
+    let mut validation_features_ext = vk::ValidationFeaturesEXT::default()
+        .enabled_validation_features(&enabled_validation_features);
 
     if is_debug_enabled {
         create_info = create_info.push_next(&mut validation_features_ext);
@@ -992,7 +982,7 @@ pub fn make_instance(
 
 pub fn select_physical_device(
     instance: &ash::Instance,
-    surface_extension: &khr::Surface,
+    surface_extension: &khr::surface::Instance,
     window_surface: vk::SurfaceKHR,
 ) -> (vk::PhysicalDevice, String, u32) {
     let devices = unsafe {

@@ -869,14 +869,15 @@ impl DescHandler<ClearDesc> for Pipeline {
 }
 
 impl BlendDesc {
-    pub fn to_vk(
+    pub fn to_vk(&'_ self) -> vk::PipelineColorBlendStateCreateInfo<'_> {
+        vk::PipelineColorBlendStateCreateInfo::default().logic_op_enable(false)
+    }
+
+    pub fn to_attachment_states(
         &self,
         attachment_count: u32,
-    ) -> (
-        Vec<vk::PipelineColorBlendAttachmentState>,
-        vk::PipelineColorBlendStateCreateInfo,
-    ) {
-        let attachments: Vec<_> = (0..attachment_count)
+    ) -> Vec<vk::PipelineColorBlendAttachmentState> {
+        (0..attachment_count)
             .map(|_| vk::PipelineColorBlendAttachmentState {
                 blend_enable: if self.disabled { 0 } else { 1 },
                 src_color_blend_factor: self.src_factor.to_vk(),
@@ -891,12 +892,7 @@ impl BlendDesc {
                     | vk::ColorComponentFlags::B
                     | vk::ColorComponentFlags::A,
             })
-            .collect();
-        let info = vk::PipelineColorBlendStateCreateInfo::builder()
-            .logic_op_enable(false)
-            .attachments(&attachments)
-            .build();
-        (attachments, info)
+            .collect()
     }
 }
 
@@ -916,10 +912,10 @@ impl StencilDesc {
 
 impl DepthDesc {
     pub fn to_vk(
-        &self,
+        &'_ self,
         stencil: vk::StencilOpState,
         writing: &WriteDesc,
-    ) -> vk::PipelineDepthStencilStateCreateInfo {
+    ) -> vk::PipelineDepthStencilStateCreateInfo<'_> {
         vk::PipelineDepthStencilStateCreateInfo {
             depth_test_enable: if self.testing { 1 } else { 0 },
             depth_write_enable: if writing.depth { 1 } else { 0 },
@@ -1005,7 +1001,7 @@ impl ClearDesc {
 }
 
 impl TriangleDesc {
-    pub fn to_vk(&self, depth_desc: DepthDesc) -> vk::PipelineRasterizationStateCreateInfo {
+    pub fn to_vk(&'_ self, depth_desc: DepthDesc) -> vk::PipelineRasterizationStateCreateInfo<'_> {
         vk::PipelineRasterizationStateCreateInfo {
             front_face: self.front_face.to_vk(),
             cull_mode: self.cull_face.to_vk(),

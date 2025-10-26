@@ -3,7 +3,7 @@ use std::{collections::HashMap, mem::size_of_val};
 use ash::vk;
 
 use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles};
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use rend_vk::{
     pipeline::sampler::SamplerKey,
     render_task::TaskKind,
@@ -22,9 +22,10 @@ fn main() {
     let window_height = 720.0f32;
     let window_width = 1280.0f32;
     let window_context = WindowContext::new(window_width as u32, window_height as u32);
-    let instance_extensions =
-        ash_window::enumerate_required_extensions(window_context.window.raw_display_handle())
-            .unwrap();
+    let instance_extensions = ash_window::enumerate_required_extensions(
+        window_context.window.display_handle().unwrap().as_raw(),
+    )
+    .unwrap();
     let mut renderer = renderer::make_renderer(
         true,
         true,
@@ -35,8 +36,8 @@ fn main() {
                 ash_window::create_surface(
                     entry,
                     instance,
-                    window_context.window.raw_display_handle(),
-                    window_context.window.raw_window_handle(),
+                    window_context.window.display_handle().unwrap().as_raw(),
+                    window_context.window.window_handle().unwrap().as_raw(),
                     None,
                 )
             };
@@ -178,7 +179,7 @@ fn main() {
         renderer.render();
     }
 
-    window_context.event_loop(|| {
+    let _ = window_context.event_loop(|| {
         renderer.place_shader_resource(
             ResourceKind::Frustum,
             shader_resource::SingleResource::Frustum(gen_frustum()),
@@ -331,7 +332,6 @@ fn main() {
         }
 
         renderer.render();
-        true
         // renderer.get_current_frame() < 2
     });
     let mut renderer = renderer;

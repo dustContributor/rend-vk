@@ -2,18 +2,18 @@ use ash::vk;
 
 use super::{attachment::Attachment, stage::Stage};
 
-pub struct BlitStage {
+pub struct BlitStage<'a> {
     pub name: String,
     pub output: Attachment,
     pub input: Attachment,
     pub filter: vk::Filter,
     pub region: vk::ImageBlit,
     pub index: u32,
-    pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
+    pub image_barriers: Vec<vk::ImageMemoryBarrier2<'a>>,
     pub is_validation_layer_enabled: bool,
 }
 
-impl Stage for BlitStage {
+impl<'a> Stage for BlitStage<'a> {
     fn name(&self) -> &str {
         &self.name
     }
@@ -26,15 +26,18 @@ impl Stage for BlitStage {
         self.is_validation_layer_enabled
     }
 
-    fn image_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+    fn image_barriers(&'_ self) -> Vec<vk::ImageMemoryBarrier2<'_>> {
         self.image_barriers.clone()
+    }
+
+    fn destroy(&self, _device: &ash::Device) {
+        // Nothing to do
     }
 
     fn work(&mut self, ctx: super::RenderContext) {
         if !self.image_barriers.is_empty() {
-            let barrier_dep_info = vk::DependencyInfo::builder()
-                .image_memory_barriers(&self.image_barriers)
-                .build();
+            let barrier_dep_info =
+                vk::DependencyInfo::default().image_memory_barriers(&self.image_barriers);
             unsafe {
                 ctx.vulkan
                     .device
@@ -53,9 +56,5 @@ impl Stage for BlitStage {
                 self.filter,
             );
         }
-    }
-
-    fn destroy(&self, _device: &ash::Device) {
-        // Nothing to do
     }
 }

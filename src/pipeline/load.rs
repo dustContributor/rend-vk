@@ -63,10 +63,10 @@ impl Pipeline {
         format!("shader/{}", shader)
     }
 
-    fn compile_shader_programs(
-        ctx: &VulkanContext,
-        programs: &[Program],
-    ) -> HashMap<String, shader::ShaderProgram> {
+    fn compile_shader_programs<'a>(
+        ctx: &'a VulkanContext,
+        programs: &'a [Program],
+    ) -> HashMap<String, shader::ShaderProgram<'a>> {
         // Create dest folder for all of the SPIR-V binaries
         let base_path = Self::spirv_path_of("tmp");
         let base_path = std::path::Path::new(&base_path).parent().unwrap();
@@ -233,11 +233,11 @@ impl Pipeline {
         let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
 
         let mut stages = Vec::<Box<dyn Stage>>::with_capacity(enabled_passes.len());
-        for (pass_index, pass) in enabled_passes.iter().enumerate() {
+        for (pass_index, pass) in enabled_passes.into_iter().enumerate() {
             let render_pass = match pass {
                 PipelineStep::Blit(blit) => {
                     let blit_stage = Self::build_blit_stage(
-                        blit,
+                        &blit,
                         &barrier_gen,
                         pass_index,
                         is_validation_layer_enabled,
@@ -273,7 +273,7 @@ impl Pipeline {
             });
             let binding_descs = [];
             let attrib_descs = [];
-            let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
+            let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::default()
                 .vertex_binding_descriptions(&binding_descs)
                 .vertex_attribute_descriptions(&attrib_descs);
             let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
@@ -282,7 +282,7 @@ impl Pipeline {
             };
 
             let dynamic_state_info =
-                vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&[]);
+                vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&[]);
             let render_pass_inputs = render_pass
                 .inputs
                 .iter()
@@ -321,11 +321,12 @@ impl Pipeline {
             let attachment_output_formats: Vec<_> =
                 attachment_outputs.iter().map(|e| e.vk_format).collect();
             // We only need blend state for color attachments, ignoring depth/stencil
-            let (_attachments, blend_state) =
-                blending.to_vk(attachment_output_formats.len() as u32);
+            let _attachments =
+                blending.to_attachment_states(attachment_output_formats.len() as u32);
+            let blend_state = blending.to_vk().attachments(&_attachments);
 
             let mut rendering_pipeline_info = {
-                let mut b = vk::PipelineRenderingCreateInfo::builder()
+                let mut b = vk::PipelineRenderingCreateInfo::default()
                     .color_attachment_formats(&attachment_output_formats);
                 if writing.stencil || !stencil.disabled {
                     let att = depth_stencil_attachment.expect(&format!(
@@ -341,7 +342,7 @@ impl Pipeline {
                     ));
                     b = b.depth_attachment_format(att.vk_format);
                 }
-                b.build()
+                b
             };
 
             let multisample_state = vk::PipelineMultisampleStateCreateInfo {
@@ -452,15 +453,13 @@ impl Pipeline {
                 set_layouts.push(d.layout)
             }
             let pipeline_layout = unsafe {
-                let push_constant_ranges = [vk::PushConstantRange::builder()
+                let push_constant_ranges = [vk::PushConstantRange::default()
                     .offset(0)
                     .size(128)
-                    .stage_flags(ShaderStageFlags::ALL_GRAPHICS)
-                    .build()];
-                let info = vk::PipelineLayoutCreateInfo::builder()
+                    .stage_flags(ShaderStageFlags::ALL_GRAPHICS)];
+                let info = vk::PipelineLayoutCreateInfo::default()
                     .set_layouts(&set_layouts)
-                    .push_constant_ranges(&push_constant_ranges)
-                    .build();
+                    .push_constant_ranges(&push_constant_ranges);
                 ctx.device.create_pipeline_layout(&info, None)
             }
             .unwrap();
@@ -490,13 +489,13 @@ impl Pipeline {
             let viewports =
                 [viewport.to_vk(&depth, min_extent.width as f32, min_extent.height as f32)];
             let scissors = [scissor.to_vk(min_extent.width as f32, min_extent.height as f32)];
-            let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::builder()
+            let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::default()
                 .scissors(&scissors)
                 .viewports(&viewports)
                 // .push_next(&mut depth_clip_control)
-                .build();
+                ;
 
-            let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+            let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::default()
                 .stages(&shader_stages)
                 .vertex_input_state(&vertex_input_state_info)
                 .input_assembly_state(&vertex_input_assembly_state_info)
@@ -507,8 +506,7 @@ impl Pipeline {
                 .color_blend_state(&blend_state)
                 .dynamic_state(&dynamic_state_info)
                 .layout(pipeline_layout)
-                .push_next(&mut rendering_pipeline_info)
-                .build();
+                .push_next(&mut rendering_pipeline_info);
 
             let graphics_pipelines = unsafe {
                 ctx.device.create_graphics_pipelines(
@@ -625,7 +623,7 @@ impl Pipeline {
             .collect()
     }
 
-    fn build_blit_stage(
+    fn build_blit_stage<'a>(
         blit: &BlitPass,
         barrier_gen: &BarrierGen,
         index: usize,
@@ -633,7 +631,7 @@ impl Pipeline {
         window_width: u32,
         window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
-    ) -> crate::pipeline::blit_stage::BlitStage {
+    ) -> crate::pipeline::blit_stage::BlitStage<'a> {
         let mut outputs = Self::find_attachments(&[blit.output.get()], attachments_by_name);
         let mut inputs = Self::find_attachments(&[blit.input.get()], attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);

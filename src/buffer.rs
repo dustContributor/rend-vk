@@ -253,11 +253,10 @@ impl DeviceBuffer {
             flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
             ..Default::default()
         };
-        let mem_info = vk::MemoryAllocateInfo::builder()
+        let mem_info = vk::MemoryAllocateInfo::default()
             .allocation_size(mem_reqs.size)
             .memory_type_index(memi)
-            .push_next(&mut mem_flags)
-            .build();
+            .push_next(&mut mem_flags);
         let device_addr_info = vk::BufferDeviceAddressInfo {
             buffer,
             ..Default::default()
@@ -298,9 +297,7 @@ impl DeviceBuffer {
         let mut props = vk::PhysicalDeviceDescriptorBufferPropertiesEXT {
             ..Default::default()
         };
-        let mut device_props = vk::PhysicalDeviceProperties2::builder()
-            .push_next(&mut props)
-            .build();
+        let mut device_props = vk::PhysicalDeviceProperties2::default().push_next(&mut props);
         unsafe { instance.get_physical_device_properties2(*physical_device, &mut device_props) };
 
         props.descriptor_buffer_offset_alignment

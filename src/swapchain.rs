@@ -60,7 +60,7 @@ pub fn attachments(
     let image_views: Vec<vk::ImageView> = images
         .iter()
         .map(|&image| {
-            let create_view_info = vk::ImageViewCreateInfo::builder()
+            let create_view_info = vk::ImageViewCreateInfo::default()
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .format(surface_format.format)
                 .components(vk::ComponentMapping {
@@ -76,8 +76,7 @@ pub fn attachments(
                     base_array_layer: 0,
                     layer_count: 1,
                 })
-                .image(image)
-                .build();
+                .image(image);
             unsafe {
                 ctx.device
                     .create_image_view(&create_view_info, None)
@@ -112,7 +111,7 @@ pub fn swapchain(
     present_mode: vk::PresentModeKHR,
 ) -> vk::SwapchainKHR {
     let surface_format = surface_format(ctx, surface);
-    let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
+    let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
         .surface(surface)
         .min_image_count(desired_image_count(ctx, surface))
         .image_color_space(surface_format.color_space)
