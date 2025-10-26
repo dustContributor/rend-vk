@@ -9,6 +9,7 @@ use super::{
     file::{AttachmentFile, BaseState, DescHandler, Pipeline, PipelineStep, State, Target},
 };
 
+#[derive(Clone)]
 struct Image {
     name: String,
     level: u8,
@@ -23,6 +24,7 @@ impl Image {
     }
 }
 
+#[derive(Clone)]
 struct Pass {
     name: String,
     inputs: Vec<Image>,
@@ -30,6 +32,7 @@ struct Pass {
     is_blitting: bool,
 }
 
+#[derive(Clone)]
 pub struct BarrierGen {
     passes: Vec<Pass>,
     levels_by_owner: HashMap<String, u8>,
@@ -251,12 +254,12 @@ impl BarrierGen {
         BarrierEval::next_pass()
     }
 
-    pub fn gen_image_barriers_for(
+    pub fn gen_image_barriers_for<'a>(
         &self,
         currenti: usize,
-        inputs: &Vec<Attachment>,
-        outputs: &Vec<Attachment>,
-    ) -> Vec<vk::ImageMemoryBarrier2> {
+        inputs: &[Attachment],
+        outputs: &[Attachment],
+    ) -> Vec<vk::ImageMemoryBarrier2<'a>> {
         let mut barriers: Vec<(&str, bool, vk::ImageMemoryBarrier2)> = Vec::new();
         let curr_is_blitting = self.passes[currenti].is_blitting;
         fn wrap_around(index: usize, length: usize) -> usize {

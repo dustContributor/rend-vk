@@ -869,7 +869,7 @@ impl DescHandler<ClearDesc> for Pipeline {
 }
 
 impl BlendDesc {
-    pub fn to_vk(&self) -> vk::PipelineColorBlendStateCreateInfo {
+    pub fn to_vk(&'_ self) -> vk::PipelineColorBlendStateCreateInfo<'_> {
         vk::PipelineColorBlendStateCreateInfo::default().logic_op_enable(false)
     }
 
@@ -912,10 +912,10 @@ impl StencilDesc {
 
 impl DepthDesc {
     pub fn to_vk(
-        &self,
+        &'_ self,
         stencil: vk::StencilOpState,
         writing: &WriteDesc,
-    ) -> vk::PipelineDepthStencilStateCreateInfo {
+    ) -> vk::PipelineDepthStencilStateCreateInfo<'_> {
         vk::PipelineDepthStencilStateCreateInfo {
             depth_test_enable: if self.testing { 1 } else { 0 },
             depth_write_enable: if writing.depth { 1 } else { 0 },
@@ -1001,7 +1001,7 @@ impl ClearDesc {
 }
 
 impl TriangleDesc {
-    pub fn to_vk(&self, depth_desc: DepthDesc) -> vk::PipelineRasterizationStateCreateInfo {
+    pub fn to_vk(&'_ self, depth_desc: DepthDesc) -> vk::PipelineRasterizationStateCreateInfo<'_> {
         vk::PipelineRasterizationStateCreateInfo {
             front_face: self.front_face.to_vk(),
             cull_mode: self.cull_face.to_vk(),

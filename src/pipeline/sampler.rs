@@ -73,12 +73,12 @@ impl Sampler {
         }
     }
 
-    fn info_of(
+    fn info_of<'a>(
         filter: Filtering,
         wrap_mode: WrapMode,
         compare_func: CompareFunc,
         anisotropy: u8,
-    ) -> vk::SamplerCreateInfo {
+    ) -> vk::SamplerCreateInfo<'a> {
         vk::SamplerCreateInfo::default()
             .address_mode_u(wrap_mode.to_vk())
             .address_mode_v(wrap_mode.to_vk())

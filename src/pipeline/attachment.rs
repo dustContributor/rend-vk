@@ -132,7 +132,7 @@ impl Attachment {
         }
     }
 
-    pub fn default_attachment_write_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
+    pub fn default_attachment_write_barrier<'a>(image: vk::Image) -> vk::ImageMemoryBarrier2<'a> {
         vk::ImageMemoryBarrier2::default()
             .image(image)
             .src_access_mask(vk::AccessFlags2::MEMORY_READ)
@@ -144,7 +144,7 @@ impl Attachment {
             .subresource_range(Self::color_subresource_range())
     }
 
-    pub fn default_attachment_present_barrier(image: vk::Image) -> vk::ImageMemoryBarrier2 {
+    pub fn default_attachment_present_barrier<'a>(image: vk::Image) -> vk::ImageMemoryBarrier2<'a> {
         vk::ImageMemoryBarrier2::default()
             .image(image)
             .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
@@ -158,8 +158,8 @@ impl Attachment {
     }
 
     pub fn default_attachment_rendering_attachment_info(
-        a: &Attachment,
-    ) -> vk::RenderingAttachmentInfo {
+        a: &'_ Attachment,
+    ) -> vk::RenderingAttachmentInfo<'_> {
         vk::RenderingAttachmentInfo {
             image_view: a.view,
             image_layout: vk::ImageLayout::ATTACHMENT_OPTIMAL,

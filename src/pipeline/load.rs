@@ -63,10 +63,10 @@ impl Pipeline {
         format!("shader/{}", shader)
     }
 
-    fn compile_shader_programs(
-        ctx: &VulkanContext,
-        programs: &[Program],
-    ) -> HashMap<String, shader::ShaderProgram> {
+    fn compile_shader_programs<'a>(
+        ctx: &'a VulkanContext,
+        programs: &'a [Program],
+    ) -> HashMap<String, shader::ShaderProgram<'a>> {
         // Create dest folder for all of the SPIR-V binaries
         let base_path = Self::spirv_path_of("tmp");
         let base_path = std::path::Path::new(&base_path).parent().unwrap();
@@ -233,11 +233,11 @@ impl Pipeline {
         let mut samplers_by_key: HashMap<SamplerKey, Sampler> = HashMap::new();
 
         let mut stages = Vec::<Box<dyn Stage>>::with_capacity(enabled_passes.len());
-        for (pass_index, pass) in enabled_passes.iter().enumerate() {
+        for (pass_index, pass) in enabled_passes.into_iter().enumerate() {
             let render_pass = match pass {
                 PipelineStep::Blit(blit) => {
                     let blit_stage = Self::build_blit_stage(
-                        blit,
+                        &blit,
                         &barrier_gen,
                         pass_index,
                         is_validation_layer_enabled,
@@ -623,7 +623,7 @@ impl Pipeline {
             .collect()
     }
 
-    fn build_blit_stage(
+    fn build_blit_stage<'a>(
         blit: &BlitPass,
         barrier_gen: &BarrierGen,
         index: usize,
@@ -631,7 +631,7 @@ impl Pipeline {
         window_width: u32,
         window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
-    ) -> crate::pipeline::blit_stage::BlitStage {
+    ) -> crate::pipeline::blit_stage::BlitStage<'a> {
         let mut outputs = Self::find_attachments(&[blit.output.get()], attachments_by_name);
         let mut inputs = Self::find_attachments(&[blit.input.get()], attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);

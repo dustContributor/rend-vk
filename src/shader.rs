@@ -9,20 +9,20 @@ pub const ATTRIB_LOC_TEXCOORD: u32 = 3;
 pub const ATTRIB_LOC_JOINT_WEIGHT: u32 = 4;
 pub const ATTRIB_LOC_INSTANCE_ID: u32 = 5;
 
-pub struct ShaderProgram {
+pub struct ShaderProgram<'a> {
     pub name: String,
-    pub shaders: Vec<Shader>,
+    pub shaders: Vec<Shader<'a>>,
 }
-pub struct Shader {
+pub struct Shader<'a> {
     pub name: String,
-    pub info: vk::PipelineShaderStageCreateInfo,
+    pub info: vk::PipelineShaderStageCreateInfo<'a>,
 }
-impl Shader {
+impl<'a> Shader<'a> {
     pub fn type_id(&self) -> vk::ShaderStageFlags {
         self.info.stage
     }
 }
-impl ShaderProgram {
+impl<'a> ShaderProgram<'a> {
     pub fn destroy(&self, device: &Device) {
         self.shaders
             .iter()

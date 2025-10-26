@@ -11,9 +11,9 @@ use ash::vk::{self, ShaderStageFlags};
 
 use super::stage::Stage;
 
-pub struct RenderStage {
+pub struct RenderStage<'a> {
     pub name: String,
-    pub rendering: Rendering,
+    pub rendering: Rendering<'a>,
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
     pub render_area: vk::Rect2D,
@@ -27,19 +27,19 @@ pub struct RenderStage {
     pub batch_parent_id: u32,
     pub index: u32,
     pub is_final: bool,
-    pub image_barriers: Vec<vk::ImageMemoryBarrier2>,
+    pub image_barriers: Vec<vk::ImageMemoryBarrier2<'a>>,
     pub reserved_buffers: Vec<DeviceSlice>,
     pub is_validation_layer_enabled: bool,
 }
 
 #[derive(Clone)]
-pub struct Rendering {
-    pub attachments: Vec<vk::RenderingAttachmentInfo>,
-    pub depth_stencil: Option<vk::RenderingAttachmentInfo>,
+pub struct Rendering<'a> {
+    pub attachments: Vec<vk::RenderingAttachmentInfo<'a>>,
+    pub depth_stencil: Option<vk::RenderingAttachmentInfo<'a>>,
     pub default_attachment_index: Option<usize>,
 }
 
-impl Stage for RenderStage {
+impl<'a> Stage for RenderStage<'a> {
     fn work(&mut self, ctx: super::RenderContext) {
         let mut rendering_attachments = self.rendering.attachments.clone();
         if let Some(dai) = self.rendering.default_attachment_index {
@@ -206,7 +206,7 @@ impl Stage for RenderStage {
         self.is_validation_layer_enabled
     }
 
-    fn image_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+    fn image_barriers(&'_ self) -> Vec<vk::ImageMemoryBarrier2<'_>> {
         self.image_barriers.clone()
     }
 
@@ -221,7 +221,7 @@ impl Stage for RenderStage {
     }
 }
 
-impl RenderStage {
+impl<'a> RenderStage<'a> {
     fn release_reserved_buffers(&mut self, mem: &DeviceAllocator) {
         for buffer in self.reserved_buffers.drain(..) {
             mem.free(buffer);

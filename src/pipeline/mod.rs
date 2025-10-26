@@ -68,7 +68,7 @@ impl Pipeline {
         self.stages.len() as u32
     }
 
-    pub fn gen_initial_barriers(&self) -> Vec<vk::ImageMemoryBarrier2> {
+    pub fn gen_initial_barriers(&'_ self) -> Vec<vk::ImageMemoryBarrier2<'_>> {
         let mut first_layouts: Vec<_> = Vec::new();
         // collect all barriers in the pipeline since we're going to check them all
         let barriers: Vec<_> = self
