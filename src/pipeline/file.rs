@@ -974,11 +974,15 @@ impl ClearDesc {
     pub fn to_vk_color(&self) -> Option<vk::ClearValue> {
         self.color.map(|e| vk::ClearValue {
             color: vk::ClearColorValue {
-                // Convolutedw way to separate a RGBA u32 into a vec4
+                // Convoluted way to separate a RGBA u32 into a vec4
                 float32: e
                     .to_ne_bytes()
                     .into_iter()
-                    .map(|v| (v as f32) / 255.0)
+                    .map(|v| {
+                        /* Explicit de-reference otherwise rust-analyzer complains. Compiles fine either way */
+                        let v: u8 = v;
+                        (v as f32) / 255.0
+                    })
                     .collect::<Vec<_>>()
                     .try_into()
                     .unwrap(),
