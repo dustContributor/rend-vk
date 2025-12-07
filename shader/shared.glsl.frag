@@ -22,6 +22,10 @@ struct Frustum
   float height;
   float invWidth;
   float invHeight;
+  float extWidth;
+  float extHeight;
+  float extInvWidth;
+  float extInvHeight;
   float nearPlane;
   float farPlane;
   float fragmentsPerMeterPlane;

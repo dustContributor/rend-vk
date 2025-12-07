@@ -32,8 +32,8 @@ void main() {
   vec3 inPosition = READ(ATTR, POSITION);
 	Frustum frustum = READ(PASS, FRUSTUM);
   mat4 trn = mat4(
-  	vec4(2.0 / frustum.width, 0.0, 0.0, 0.0),
-  	vec4(0.0, -2.0 / frustum.height, 0.0, 0.0),
+  	vec4(2.0 * frustum.extInvWidth, 0.0, 0.0, 0.0),
+  	vec4(0.0, -2.0 * frustum.extInvHeight, 0.0, 0.0),
   	vec4(0.0, 0.0, -1.0, 0.0),
   	vec4(-1.0, 1.0, 0.0, 1.0)
   );
