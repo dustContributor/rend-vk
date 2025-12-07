@@ -186,7 +186,8 @@ pub fn swapchain(
         .image_color_space(surface_format.color_space)
         .image_format(surface_format.format)
         .image_extent(surface_extent)
-        .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+        // Allow for using the swapchain image as a destination for a blit operation
+        .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
         .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
         .pre_transform(vk::SurfaceTransformFlagsKHR::IDENTITY)
         .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)

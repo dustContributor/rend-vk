@@ -42,16 +42,17 @@ pub struct Rendering<'a> {
 impl<'a> Stage for RenderStage<'a> {
     fn work(&mut self, ctx: super::RenderContext) {
         let mut rendering_attachments = self.rendering.attachments.clone();
-        if let Some(dai) = self.rendering.default_attachment_index {
+        if self.is_final {
+            let dai = self.rendering.default_attachment_index.unwrap();
             /*
-             * If default attachment is present, override
-             * the view with the current swapchain target
+             * If it's a final stage, override the view with
+             * the current swapchain target
              */
             rendering_attachments[dai] = vk::RenderingAttachmentInfo {
                 image_view: ctx.default_attachment.usage_view(),
                 ..rendering_attachments[dai]
             };
-        };
+        }
         /*
          * New rendering info because lifetimes for the
          * arrays inside are too complex to keep around

@@ -157,6 +157,35 @@ impl Attachment {
             .subresource_range(Self::color_subresource_range())
     }
 
+    pub fn default_attachment_blit_dest_barrier<'a>(
+        image: vk::Image,
+    ) -> vk::ImageMemoryBarrier2<'a> {
+        vk::ImageMemoryBarrier2::default()
+            .image(image)
+            .src_access_mask(vk::AccessFlags2::MEMORY_READ)
+            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .dst_stage_mask(vk::PipelineStageFlags2::TRANSFER)
+            .subresource_range(Self::color_subresource_range())
+    }
+
+    pub fn default_attachment_blit_present_barrier<'a>(
+        image: vk::Image,
+    ) -> vk::ImageMemoryBarrier2<'a> {
+        vk::ImageMemoryBarrier2::default()
+            .image(image)
+            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            // None is the expected access mask for presenting
+            .dst_access_mask(vk::AccessFlags2::NONE)
+            .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .src_stage_mask(vk::PipelineStageFlags2::TRANSFER)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .subresource_range(Self::color_subresource_range())
+    }
+
     pub fn default_attachment_rendering_attachment_info(
         a: &'_ Attachment,
     ) -> vk::RenderingAttachmentInfo<'_> {

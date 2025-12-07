@@ -636,8 +636,13 @@ impl Pipeline {
             image_barriers,
             filter: blit.filter.to_vk(),
             region: blit.to_vk(input.extent, output.extent),
+            is_final: output.is_default(),
             input,
-            output,
+            output: if output.is_default()  {
+                None
+            } else {
+                Some(output)
+            },
         }
     }
 
