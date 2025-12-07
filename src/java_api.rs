@@ -158,8 +158,8 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
-    width: u32,
-    height: u32,
+    render_width: u32,
+    render_height: u32,
     window: u64,
     instance_extensions: u64,
     instance_extensions_len: u32,
@@ -192,8 +192,8 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
         }
     };
     let renderer = renderer::make_renderer(
-        width,
-        height,
+        render_width,
+        render_height,
         is_vsync_enabled == JNI_TRUE,
         is_debug_enabled == JNI_TRUE,
         is_validation_layer_enabled == JNI_TRUE,
