@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ash::vk;
+use ash::vk::{self, Extent2D};
 use indexmap::IndexMap;
 use serde::Deserialize;
 
@@ -210,21 +210,17 @@ pub struct BlitRect {
 }
 
 impl BlitRect {
-    pub fn to_vk(&self, window_width: f32, window_height: f32) -> [vk::Offset3D; 2] {
-        let x = self.x.scale(window_width);
-        let y = self.y.scale(window_height);
-        let width = self.width.scale(window_width);
-        let height = self.height.scale(window_height);
+    pub fn to_vk(&self, target_extent: Extent2D) -> [vk::Offset3D; 2] {
         [
             vk::Offset3D {
                 z: 0,
-                x: x as i32,
-                y: y as i32,
+                x: self.x.scale_for_offset(target_extent.width),
+                y: self.y.scale_for_offset(target_extent.height),
             },
             vk::Offset3D {
                 z: 1,
-                x: width as i32,
-                y: height as i32,
+                x: self.width.scale_for_offset(target_extent.width),
+                y: self.height.scale_for_offset(target_extent.height),
             },
         ]
     }
@@ -254,7 +250,7 @@ pub struct BlitPass {
 }
 
 impl BlitPass {
-    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::ImageBlit {
+    pub fn to_vk(&self, src_extent: Extent2D, dst_extent: Extent2D) -> vk::ImageBlit {
         let aspect_flags = self
             .attributes
             .iter()
@@ -274,8 +270,8 @@ impl BlitPass {
         vk::ImageBlit {
             dst_subresource: layer,
             src_subresource: layer,
-            src_offsets: self.input_rect.to_vk(window_width, window_height),
-            dst_offsets: self.output_rect.to_vk(window_width, window_height),
+            src_offsets: self.input_rect.to_vk(src_extent),
+            dst_offsets: self.output_rect.to_vk(dst_extent),
         }
     }
 }
@@ -572,10 +568,42 @@ pub enum U32OrF32 {
 }
 
 impl U32OrF32 {
-    fn scale(self, size: f32) -> f32 {
+    pub fn scale(self, size: f32) -> f32 {
         match self {
             U32OrF32::U32(v) => v as f32,
             U32OrF32::F32(v) => size * v,
+        }
+    }
+
+    pub fn scale_for_extent(self, size: u32) -> u32 {
+        self.scale(size as f32).ceil() as u32
+    }
+
+    pub fn scale_for_offset(self, size: u32) -> i32 {
+        let scaled = self.scale(size as f32);
+        let scaled = if scaled < 0.0 {
+            scaled.floor()
+        } else {
+            scaled.ceil()
+        };
+        return scaled as i32;
+    }
+
+    pub fn scale_for_attachment(self, internal_size: u32, external_size: u32) -> u32 {
+        /*
+         * Consider negative relative values as refering to the external resolution, ie, the desktop's.
+         * Whereas positive values refer to the internal resolution, ie, the one we will be rendering at.
+         */
+        match self {
+            U32OrF32::U32(v) => v,
+            U32OrF32::F32(v) => ((if v < 0.0 {
+                external_size
+            } else {
+                internal_size
+            }) as f32
+                * v)
+                .abs()
+                .ceil() as u32,
         }
     }
 
@@ -928,24 +956,12 @@ impl DepthDesc {
 }
 
 impl ViewportDesc {
-    pub fn to_vk(&self, depth: &DepthDesc, window_width: f32, window_height: f32) -> vk::Viewport {
+    pub fn to_vk(&self, depth: &DepthDesc, target_extent: Extent2D) -> vk::Viewport {
         vk::Viewport {
-            x: match self.x {
-                U32OrF32::U32(v) => v as f32,
-                U32OrF32::F32(v) => window_width * v,
-            },
-            y: match self.y {
-                U32OrF32::U32(v) => v as f32,
-                U32OrF32::F32(v) => window_height * v,
-            },
-            width: match self.width {
-                U32OrF32::U32(v) => v as f32,
-                U32OrF32::F32(v) => window_width * v,
-            },
-            height: match self.height {
-                U32OrF32::U32(v) => v as f32,
-                U32OrF32::F32(v) => window_height * v,
-            },
+            x: self.x.scale(target_extent.width as f32),
+            y: self.y.scale(target_extent.height as f32),
+            width: self.width.scale(target_extent.width as f32),
+            height: self.height.scale(target_extent.height as f32),
             min_depth: depth.range_start,
             max_depth: depth.range_end,
         }
@@ -953,19 +969,13 @@ impl ViewportDesc {
 }
 
 impl ScissorDesc {
-    pub fn to_vk(&self, window_width: f32, window_height: f32) -> vk::Rect2D {
+    pub fn to_vk(&self, target_extent: Extent2D) -> vk::Rect2D {
         vk::Rect2D {
             offset: vk::Offset2D {
-                x: match self.x {
-                    U32OrF32::U32(v) => v as i32,
-                    U32OrF32::F32(v) => (window_width * v).ceil() as i32,
-                },
-                y: match self.y {
-                    U32OrF32::U32(v) => v as i32,
-                    U32OrF32::F32(v) => (window_height * v).ceil() as i32,
-                },
+                x: self.x.scale_for_offset(target_extent.width),
+                y: self.y.scale_for_offset(target_extent.height),
             },
-            extent: Pipeline::extent_of(self.width, self.height, window_width, window_height),
+            extent: Pipeline::extent_of(self.width, self.height, target_extent),
         }
     }
 }

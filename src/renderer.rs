@@ -7,7 +7,12 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use ash::{ext, ext::debug_utils, khr, vk, Entry};
+use ash::{
+    ext::{self, debug_utils},
+    khr,
+    vk::{self, Extent2D},
+    Entry,
+};
 use bitvec::vec::BitVec;
 
 use crate::{
@@ -570,6 +575,8 @@ impl Renderer {
 }
 
 pub fn make_renderer<F>(
+    render_width: u32,
+    render_height: u32,
     is_vsync_enabled: bool,
     is_debug_enabled: bool,
     is_validation_layer_enabled: bool,
@@ -702,6 +709,11 @@ where
     log::trace!("creating pipeline...");
     let pip = pipeline::file::Pipeline::load(
         &ctx,
+        Extent2D {
+            width: render_width,
+            height: render_height,
+        },
+        swapchain_context.attachments[0].extent,
         swapchain_context.attachments[0].clone(),
         is_validation_layer_enabled,
         Some("pipeline.json"),

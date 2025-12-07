@@ -26,7 +26,10 @@ fn main() {
         window_context.window.display_handle().unwrap().as_raw(),
     )
     .unwrap();
+    let window_size = window_context.window.inner_size();
     let mut renderer = renderer::make_renderer(
+        window_size.width,
+        window_size.height,
         true,
         true,
         true,
@@ -96,6 +99,10 @@ fn main() {
         width: window_width,
         inv_height: 1.0 / window_height,
         inv_width: 1.0 / window_width,
+        ext_height: window_height,
+        ext_width: window_width,
+        ext_inv_height: 1.0 / window_height,
+        ext_inv_width: 1.0 / window_width,
         fragments_per_meter_plane: 600.0,
         pad0: 0,
     };

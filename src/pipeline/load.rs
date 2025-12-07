@@ -1,4 +1,4 @@
-use ash::vk::{self, DescriptorType, ShaderStageFlags};
+use ash::vk::{self, DescriptorType, Extent2D, ShaderStageFlags};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -153,6 +153,8 @@ impl Pipeline {
 
     pub fn load(
         ctx: &VulkanContext,
+        internal_extent: Extent2D,
+        external_extent: Extent2D,
         default_attachment: Attachment,
         is_validation_layer_enabled: bool,
         name: Option<&str>,
@@ -178,14 +180,12 @@ impl Pipeline {
 
         let barrier_gen = BarrierGen::new(&pip.targets, &enabled_passes, &resolve_state);
 
-        let window_width = default_attachment.extent.width;
-        let window_height = default_attachment.extent.height;
         let mut attachments_by_name: HashMap<_, _> = pip
             .targets
             .iter()
             .map(|f| {
                 let extent =
-                    Self::extent_of(f.width, f.height, window_width as f32, window_height as f32);
+                    Self::attachment_extent_of(f.width, f.height, internal_extent, external_extent);
                 let texture = texture::make(
                     ctx,
                     f.name.clone(),
@@ -241,8 +241,6 @@ impl Pipeline {
                         &barrier_gen,
                         pass_index,
                         is_validation_layer_enabled,
-                        window_width,
-                        window_height,
                         &attachments_by_name,
                     );
                     stages.push(Box::new(blit_stage));
@@ -481,14 +479,10 @@ impl Pipeline {
                     width: e.width.min(acc.width),
                     height: e.height.min(acc.height),
                 })
-                .unwrap_or(vk::Extent2D {
-                    width: window_width,
-                    height: window_height,
-                });
+                .unwrap_or(external_extent);
             // After having the concrete destination view, we can set up viewport/scissor with proper dimensions
-            let viewports =
-                [viewport.to_vk(&depth, min_extent.width as f32, min_extent.height as f32)];
-            let scissors = [scissor.to_vk(min_extent.width as f32, min_extent.height as f32)];
+            let viewports = [viewport.to_vk(&depth, min_extent)];
+            let scissors = [scissor.to_vk(min_extent)];
             let viewport_scissor_state = vk::PipelineViewportStateCreateInfo::default()
                 .scissors(&scissors)
                 .viewports(&viewports)
@@ -628,22 +622,22 @@ impl Pipeline {
         barrier_gen: &BarrierGen,
         index: usize,
         is_validation_layer_enabled: bool,
-        window_width: u32,
-        window_height: u32,
         attachments_by_name: &HashMap<String, Attachment>,
     ) -> crate::pipeline::blit_stage::BlitStage<'a> {
         let mut outputs = Self::find_attachments(&[blit.output.get()], attachments_by_name);
         let mut inputs = Self::find_attachments(&[blit.input.get()], attachments_by_name);
         let image_barriers = barrier_gen.gen_image_barriers_for(index, &inputs, &outputs);
+        let input = inputs.remove(0);
+        let output = outputs.remove(0);
         crate::pipeline::blit_stage::BlitStage {
             name: blit.name.clone(),
             index: index.try_into().unwrap(),
             is_validation_layer_enabled,
             image_barriers,
             filter: blit.filter.to_vk(),
-            region: blit.to_vk(window_width as f32, window_height as f32),
-            input: inputs.remove(0),
-            output: outputs.remove(0),
+            region: blit.to_vk(input.extent, output.extent),
+            input,
+            output,
         }
     }
 
@@ -691,18 +685,22 @@ impl Pipeline {
     pub fn extent_of(
         opt_width: U32OrF32,
         opt_height: U32OrF32,
-        ref_width: f32,
-        ref_height: f32,
+        target_extent: Extent2D,
     ) -> vk::Extent2D {
         vk::Extent2D {
-            width: match opt_width {
-                U32OrF32::U32(v) => v,
-                U32OrF32::F32(v) => (ref_width * v).ceil() as u32,
-            },
-            height: match opt_height {
-                U32OrF32::U32(v) => v,
-                U32OrF32::F32(v) => (ref_height * v).ceil() as u32,
-            },
+            width: opt_width.scale_for_extent(target_extent.width),
+            height: opt_height.scale_for_extent(target_extent.height),
+        }
+    }
+    pub fn attachment_extent_of(
+        opt_width: U32OrF32,
+        opt_height: U32OrF32,
+        internal_extent: Extent2D,
+        external_extent: Extent2D,
+    ) -> vk::Extent2D {
+        vk::Extent2D {
+            width: opt_width.scale_for_attachment(internal_extent.width, external_extent.width),
+            height: opt_height.scale_for_attachment(internal_extent.height, external_extent.height),
         }
     }
 }
