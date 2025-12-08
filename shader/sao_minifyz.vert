@@ -17,7 +17,7 @@
 */
 
 PASS_DATA_BEGIN
-  vec4 previousLevel;
+  float previousLevel;
 PASS_DATA_END
 
 INPUTS_BEGIN

@@ -194,8 +194,8 @@ float getRandomAngle(ivec2 coords) {
 }
 
 void main() {
-	View view = READ(PASS, VIEW);
-	Frustum frustum = READ(PASS, FRUSTUM);
+    View view = READ(PASS, VIEW);
+    Frustum frustum = READ(PASS, FRUSTUM);
     /** The height in pixels of a 1m object if viewed from 1m away.  
     You can compute it from your projection matrix.  The actual value is just
     a scale factor on radius; you can simply hardcode this to a constant (~500)
@@ -205,7 +205,7 @@ void main() {
 
     // Pixel being shaded 
     ivec2 ssC = ivec2(gl_FragCoord.xy);
-	// Fetch depth 
+    // Fetch depth 
     float linearDepth = texelFetch(gbLinearDepth, ssC, 0).r;
     // World space point being shaded
     vec3 C = getPosition(ssC, linearDepth, view.proj, frustum.width, frustum.height);

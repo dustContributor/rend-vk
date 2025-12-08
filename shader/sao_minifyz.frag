@@ -19,7 +19,7 @@
 */
 
 PASS_DATA_BEGIN
-  vec4 previousLevel;
+  float previousLevel;
 PASS_DATA_END
 
 INPUTS_BEGIN
@@ -40,7 +40,7 @@ WRITING(outLinearZ, float, 0);
 SAMPLING(gbLinearDepth, SMP_RT, 2D, 0)
 
 void main() {
-  int previousLevel = int(READ_CONST(previousLevel).x);
+  int previousLevel = int(READ_CONST(previousLevel));
   ivec2 ssP = ivec2(gl_FragCoord.xy);
   ivec2 depthSize = textureSize(gbLinearDepth, 0);
   ivec2 coords = clamp(ssP * 2 + ivec2(ssP.y & 1, ssP.x & 1), ivec2(0), depthSize - ivec2(1));
