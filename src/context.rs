@@ -78,6 +78,7 @@ impl VulkanContext {
     pub fn try_set_debug_name<T>(&self, name: &str, obj: T) -> bool
     where
         T: 'static + vk::Handle,
+        T: Copy,
     {
         self.extension.try_set_debug_name(name, obj)
     }
@@ -132,6 +133,7 @@ impl ExtensionContext {
     pub fn try_set_debug_name<T>(&self, name: &str, obj: T) -> bool
     where
         T: 'static + vk::Handle,
+        T: Copy,
     {
         if !self.is_debug_enabled() {
             return false;
@@ -144,6 +146,12 @@ impl ExtensionContext {
         unsafe {
             dbg.set_debug_utils_object_name(&name_info).unwrap();
         }
+        log::trace!(
+            "handle {:#x}, object type {:?}, name {}",
+            obj.as_raw(),
+            T::TYPE,
+            name,
+        );
         true
     }
 }
