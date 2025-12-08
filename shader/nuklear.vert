@@ -39,4 +39,8 @@ void main() {
   );
   // Projected position.
   gl_Position = trn * vec4(inPosition.xy, 0.0, 1.0);
+#if IS_VULKAN
+  // flip it around if we're drawing after the light image -> composite image pass
+  gl_Position = vec4(gl_Position.x, -gl_Position.y, gl_Position.z, gl_Position.w);
+#endif
 }
