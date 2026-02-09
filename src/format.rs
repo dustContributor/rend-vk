@@ -100,16 +100,31 @@ impl Format {
     }
 
     pub fn size_for(self, width: u32, height: u32) -> u32 {
+        /*
+         * size is defined per 4x4 block for BC formats
+         *
+         * D3D9/SM3/GL2 era compressed formats
+         * BC1/DXT1 RGB/RGBA => 8 bytes per block
+         * BC2/DXT3 RGBA => 16 bytes per block
+         * BC3/DXT5 RGBA => => 16 bytes per block
+         *
+         * D3D10/SM4/GL3 era compressed formats
+         * BC4 R => 8 bytes per block
+         * BC5 RG => 16 bytes per block
+         */
         match self {
-            // size is defined per 4x4 block for BC formats
             Self::BC1_RGBA_SRGB_BLOCK
             | Self::BC1_RGBA_UNORM_BLOCK
             | Self::BC1_RGB_SRGB_BLOCK
-            | Self::BC1_RGB_UNORM_BLOCK => width * height / 4 * 8,
+            | Self::BC1_RGB_UNORM_BLOCK
+            | Self::BC4_SNORM_BLOCK
+            | Self::BC4_UNORM_BLOCK => width * height / 4 * 8,
             Self::BC2_SRGB_BLOCK
             | Self::BC2_UNORM_BLOCK
             | Self::BC3_SRGB_BLOCK
-            | Self::BC3_UNORM_BLOCK => width * height / 4 * 16,
+            | Self::BC3_UNORM_BLOCK
+            | Self::BC5_SNORM_BLOCK
+            | Self::BC5_UNORM_BLOCK => width * height / 4 * 16,
             _ => panic!("unrecognized format {}", self),
         }
     }
@@ -155,7 +170,17 @@ impl Format {
     }
 }
 
-#[derive(Deserialize, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, strum_macros::Display)]
+#[derive(
+    Deserialize,
+    Copy,
+    Clone,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    strum_macros::Display,
+    strum_macros::EnumString,
+)]
 /* Preserve these as-is since the serde screaming case renaming wouldn't work */
 #[allow(non_camel_case_types)]
 pub enum Format {

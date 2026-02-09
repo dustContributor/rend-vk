@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     mem::size_of,
+    str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -214,6 +215,19 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceAlignOf(
 ) -> u32 {
     let kind = ResourceKind::of_u32(kind);
     kind.resource_align() as u32
+}
+
+#[no_mangle]
+pub extern "C" fn Java_game_render_vulkan_RendVkApi_formatValueForName(
+    _unused_jnienv: usize,
+    _unused_jclazz: usize,
+    name: u64,
+    name_len: u32,
+) -> u32 {
+    let name_chars = unsafe { std::slice::from_raw_parts(name as *const u8, name_len as usize) };
+    let v = Format::from_str(std::str::from_utf8(name_chars).expect("invalid name utf8 string!"))
+        .unwrap_or(Format::UNDEFINED);
+    v.to_u32()
 }
 
 #[no_mangle]
