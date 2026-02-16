@@ -30,7 +30,6 @@ void main() {
     vec3 inPosition = READ(ATTR, POSITION);
     Transform trn = READ(INST, TRANSFORM);
     StaticShadow ss = READ(INST, STATIC_SHADOW);
-    DirLight dl = READ(PASS, DIRLIGHT);
     // Interpolate model translation to get the current position
     vec3 prevTrans = trn.prevModel[3].xyz;
     vec3 currTrans = trn.model[3].xyz;
@@ -38,7 +37,10 @@ void main() {
     vec3 translation = mix(prevTrans, currTrans, tm.interpolation);
     mat4 model = trn.model;
     model[3] = vec4(translation.xyz, 1.0);
-    mat4 mvp = dl.cascadeViewProjs[ss.cascadeId] * model;
-    // Projected position.
-    gl_Position = mvp * vec4(inPosition, 1.0);
+    vec4 worldPos = model * vec4(inPosition, 1.0);
+    /* 
+    * Read and access the mat4 directly to hopefully prevent scractch memory 
+    * usage by avoiding placing the struct on a local first
+    */
+    gl_Position = READ(PASS, DIRLIGHT).cascadeViewProjs[ss.cascadeId] * worldPos;
 }
