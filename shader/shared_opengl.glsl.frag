@@ -29,11 +29,6 @@
 #define RT_6 6
 #define RT_7 7
 // Texture sampler bindings.
-#define TEX_DIFFUSE 0
-#define TEX_NORMAL 1
-#define TEX_GLOW 2
-#define TEX_ENV 3
-// Texture sampler bindings.
 #define SMP_TEX_0  0
 #define SMP_TEX_1  1
 #define SMP_TEX_2  2
