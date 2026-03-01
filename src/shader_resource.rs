@@ -121,16 +121,15 @@ pub struct TransformExtra {
 #[derive(Clone, Default, Serialize, Debug)]
 #[repr(C)]
 pub struct Material {
-    pub shininess: f32,
     pub scaling: f32,
-    pub diffuse_handle: u32,
-    pub normal_handle: u32,
-    pub glow_handle: u32,
-    pub diffuse_sampler: u8,
-    pub normal_sampler: u8,
-    pub glow_sampler: u8,
-    // Pad to 24 bytes
-    pub pad0: u8,
+    pub img0: u32,
+    pub img1: u32,
+    pub img2: u32,
+    pub img3: u32,
+    pub smp0: u8,
+    pub smp1: u8,
+    pub smp2: u8,
+    pub smp3: u8,
 }
 const MAX_DIR_LIGHT_CASCADES: usize = 4;
 #[derive(Clone, Serialize)]

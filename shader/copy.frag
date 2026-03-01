@@ -49,8 +49,8 @@ void main() {
    vec3 outColor = txLightAcc.xyz;
    float luminosity = luminosity(outColor);
    outColor *= (luminosity / (luminosity + 1.0));
-   outColor = crosshair(texCoord, outColor);
    outColor = pow(outColor, vec3(1.0/2.2));
+   outColor = crosshair(texCoord, outColor);
    outColor = colorIfNaN(outColor);
    outColor = colorIfInf(outColor);
    outFrag = vec4(outColor, 1);

@@ -305,12 +305,11 @@ fn main() {
         quad_resources.insert(
             ResourceKind::Material,
             MultiResource::Material(vec![Material {
-                diffuse_handle: quad_texture_id,
-                normal_handle: quad_normal_id,
-                diffuse_sampler: sampler_id,
-                normal_sampler: sampler_id,
+                img0: quad_texture_id,
+                img1: quad_normal_id,
+                smp0: sampler_id,
+                smp1: sampler_id,
                 scaling: 1.0,
-                shininess: 100.0,
                 ..Default::default()
             }]),
         );
