@@ -6,6 +6,7 @@
 #extension GL_ARB_shading_language_include : enable 
 
 #include "shared_wrapper.glsl.frag"
+#include "shared_pbr.glsl.frag"
 
 // Input parameters.
 ATTR_LOC(0) in vec2 passTexCoord;
@@ -50,67 +51,80 @@ float mapLightSpaceDepth(float v, float depthBias) {
 	#endif
 }
 
+uint selectCascade(float viewZ, vec4 splits) {
+	uint cascadei = uint(viewZ < splits[0]);
+	for (uint i = 1u; i < DIR_LIGHT_CASCADES; ++i) {
+		cascadei += uint(viewZ < splits[i]);
+	}
+	return cascadei;
+}
+
+float sampleCascade(uint cascadei, vec3 coords) {
+	if (cascadei == 3u) {
+	  return texture(gbCascade3, coords);
+	} 
+	if (cascadei == 2u) {
+		return texture(gbCascade2, coords);
+	}
+	if (cascadei == 1u) {
+		return texture(gbCascade1, coords);
+	}
+	return texture(gbCascade0, coords);
+}
+
 void main() {
 	Frustum frustum = READ(PASS, FRUSTUM);
 	ViewRay viewRay = READ(PASS, VIEWRAY);
 	View view = READ(PASS, VIEW);
-	// Fetch shininess value.
-	float shininess = texture(gbMisc, passTexCoord).x;
+	// Light attributes
+	vec3 lightDir = READ(INST, DIRLIGHT).viewDir.xyz;
+	vec3 lightColor = READ(INST, DIRLIGHT).color.xyz;
+	vec4 cascadeSplits = READ(INST, DIRLIGHT).cascadeSplits;
+	vec3 groundColor = READ(INST, DIRLIGHT).groundColor.xyz;
+	vec3 skyColor = READ(INST, DIRLIGHT).skyColor.xyz;
 	// Fetch albedo texel.
-	vec4 txAlbedo = texture(gbAlbedo, passTexCoord).xyzw;
-	// Fetch specular intensity.
-	float specIntensity = txAlbedo.w;
+	vec4 txAlbedo = texture(gbAlbedo, passTexCoord); 
 	// Fetch g buffer normal and decode it.
 	vec3 normal = decodeNormal(texture(gbNormal, passTexCoord).xy);
 	// Fetch depth 
 	float depth = texture(gbDepth, passTexCoord).x;
 	// Compute view space position.
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
-	// View space light direction.
-	DirLight dirLight = READ(INST, DIRLIGHT);
-	vec3 lightDir = normalize(dirLight.viewDir.xyz);
-	// Light color
-	vec3 lightColor = dirLight.color.xyz;
 
-	uint cascadei = 0u;
-	for (uint i = 0u; i < (DIR_LIGHT_CASCADES - 1u); ++i) {
-		if (viewPos.z < dirLight.cascadeSplits[i]) {
-			cascadei = i + 1u;
-		}
-	}
+	uint cascadei = selectCascade(viewPos.z, cascadeSplits);
 
-	// Compute position in light space.
-	vec4 tmpLightSpacePos = dirLight.cascadeViewProjs[cascadei] * view.invView * vec4(viewPos, 1.0);
-	vec3 lightSpacePos = tmpLightSpacePos.xyz / tmpLightSpacePos.w;
-	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z, dirLight.cascadeBiases[cascadei]);
+	vec4 worldPos = view.invView * vec4(viewPos, 1.0);
+	// Read directly from macro otherwise it forces scratch usage on AMD
+	vec4 cascadePos = READ(INST, DIRLIGHT).cascadeViewProjs[cascadei] * worldPos;
+	float cascadeBias = READ(INST, DIRLIGHT).cascadeBiases[cascadei];
+	vec3 lightSpacePos = cascadePos.xyz / cascadePos.w;
+	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z, cascadeBias);
 	vec3 shadowmapCoords = vec3(lightSpacePos.xy * 0.5 + 0.5, lightSpaceDepth);
 
-	float inShadow;
-	if (cascadei == 3u) {
-		inShadow = texture(gbCascade3, shadowmapCoords);
-	} else if (cascadei == 2u) {
-		inShadow = texture(gbCascade2, shadowmapCoords);
-	} else if (cascadei == 1u) {
-		inShadow = texture(gbCascade1, shadowmapCoords);
-	} else {
-		inShadow = texture(gbCascade0, shadowmapCoords);
-	}
+	float inShadow = sampleCascade(cascadei, shadowmapCoords);
 
-	// Cos angle incidence of light.
-	float cosAngle = dot( normal, lightDir );
-	// Influence factor to lerp for hemispheric ambient.
-	float influence = dot( normal, vec3(0, 1.0, 0) ) * 0.5 + 0.5;
-	// Diffuse light term.
-	vec3 diffuse = max(0.0, cosAngle ) * lightColor;
-	// Specular term.
-	vec3 specular = computeSpecular(viewPos, lightDir, normal, specIntensity, shininess) * lightColor;
-	// Hemisperic ambient term.
-	vec3 ambient = mix( dirLight.groundColor.xyz, dirLight.skyColor.xyz, influence ) * lightColor;
+  // Dir to eye.
+  vec3 nmEyeDir = normalize( -viewPos ); 
 
-	float inShadowSpecular = inShadow;
-	float inShadowDiffuse = max(inShadow, MIN_SHADOW_DIFFUSE);
- 
+	vec2 metalMap = texture(gbMisc, passTexCoord).xy; 
+
+	outLightAcc = doLighting(
+		lightColor,
+		lightDir,
+		inShadow,
+		nmEyeDir,
+		normal,
+		metalMap.x,
+		metalMap.y,
+		txAlbedo.xyz
+	);
+
+	// Influence factor to lerp for hemispheric ambient, sky is always "up"
+	float influence = clamp(dot(normal, vec3(0,1,0)) * 0.5 + 0.5, 0.0, 1.0);
+		// Hemisperic ambient term.
+	vec3 ambient = mix(groundColor, skyColor, influence);
 	float occlusion = texture(gbOcclusion, passTexCoord).x;
 
-	outLightAcc = (txAlbedo.xyz * diffuse * cosAngle) * inShadowDiffuse + (ambient * occlusion) + specular * inShadowSpecular;
+	outLightAcc += (ambient * occlusion);
+
 }

@@ -1,6 +1,10 @@
 #ifndef SHARED_GLSL
 #define SHARED_GLSL
 
+#ifndef IS_FRAGMENT_SHADER
+#define IS_FRAGMENT_SHADER 0
+#endif
+
 #ifdef IS_VULKAN
 #extension GL_EXT_shader_explicit_arithmetic_types : require 
 #endif
@@ -11,6 +15,7 @@
 #define NUM_INV_PI (0.31830987)
 #define NUM_INV_TAU (0.15915494)
 #define NUM_SQRT2 (1.4142135)
+#define NUM_MIN_NORMAL (1.17549435e-38)
 
 #define DIR_LIGHT_CASCADES 4u
 
@@ -77,16 +82,24 @@ struct TransformExtra
 
 struct Material
 {
-  float shininess;
   float scaling;
 #ifdef IS_VULKAN
-  uint32_t diffuseId;
-  uint32_t normalId;
-  uint32_t glowId;
-  uint8_t diffuseSamplerId;
-  uint8_t normalSamplerId;
-  uint8_t glowSamplerId;
-  uint8_t padding; // pad to 24 bytes
+  // vulkan has image and sampler ids
+  uint32_t img0;
+  uint32_t img1;
+  uint32_t img2;
+  uint32_t img3;
+  uint8_t smp0;
+  uint8_t smp1;
+  uint8_t smp2;
+  uint8_t smp3;
+#else
+// GL uses texture samplers, just pad to 24 bytes
+  int pad0;
+  int pad1;
+  int pad2;
+  int pad3;
+  int pad4;
 #endif
 };
 

@@ -35,5 +35,5 @@ SAMPLING(matEnv, SMP_TEX, Cube, 0)
 
 void main () {
 	Material mat = READ(INST, MATERIAL);
-  outLightAcc = texture(SAMPLER_FOR(matEnv, Cube, mat.diffuseId, mat.diffuseSamplerId), passEyeDir).xyz;
+  outLightAcc = texture(SAMPLER_FOR(matEnv, Cube, mat.img0, mat.smp0), passEyeDir).xyz;
 }

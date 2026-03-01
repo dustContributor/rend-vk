@@ -34,6 +34,6 @@ void main() {
 	Material mat = READ(INST, MATERIAL);
 	vec2 texCoord = passTexCoord;
   // Fetch diffuse texel.
-	vec4 txDiffuse = texture(SAMPLER_FOR(matDiffuse, 2D, mat.diffuseId, mat.diffuseSamplerId), texCoord);
+	vec4 txDiffuse = texture(SAMPLER_FOR(matDiffuse, 2D, mat.img0, mat.smp0), texCoord);
   outFrag = vec4(vec3(1), txDiffuse.r) * passColor;
 }
