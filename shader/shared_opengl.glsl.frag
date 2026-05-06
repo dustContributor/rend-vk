@@ -1,8 +1,11 @@
 #ifndef SHARED_OPENGL_GLSL
 #define SHARED_OPENGL_GLSL
 
+#ifndef EXT_INCLUDE_GLSL
+#define EXT_INCLUDE_GLSL
 #extension GL_GOOGLE_include_directive : enable 
 #extension GL_ARB_shading_language_include : enable 
+#endif
 
 //#pragma optionNV(strict on)
 #extension GL_ARB_shading_language_420pack : require

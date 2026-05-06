@@ -1,13 +1,13 @@
+#ifndef SHARED_PBR_GLSL
+#define SHARED_PBR_GLSL
+
+#ifndef EXT_INCLUDE_GLSL
+#define EXT_INCLUDE_GLSL
 #extension GL_GOOGLE_include_directive : enable 
 #extension GL_ARB_shading_language_include : enable 
-
-#ifdef IS_VULKAN
-#extension GL_EXT_shader_explicit_arithmetic_types : require 
 #endif
 
-#ifndef SHARED_GLSL
 #include "shared.glsl.frag"
-#endif
 
 vec3 FresnelSchlick(float cosTheta, vec3 f0, vec3 f90)
 {
@@ -62,3 +62,5 @@ vec3 doLighting(
     // multiply by incoming light.
     return lightColor * mul * light;
 }
+
+#endif // SHARED_PBR_GLSL
