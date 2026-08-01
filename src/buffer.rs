@@ -11,6 +11,7 @@ use crate::context::VulkanContext;
 pub struct DeviceAllocator {
     context: Rc<VulkanContext>,
     chunks: RefCell<Vec<Rc<RefCell<Chunk>>>>,
+    big_allocations: RefCell<Vec<BigAlloc>>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -46,6 +47,31 @@ impl DeviceSlice {
     }
 }
 
+/// Represents a large standalone allocation that exceeds the chunk size.
+/// These are kept separate from the chunked arena allocator to handle
+/// allocations larger than CHUNK_SIZE
+#[derive(Clone)]
+struct BigAlloc {
+    buffer: DeviceBuffer,
+    slice: DeviceSlice,
+}
+
+impl BigAlloc {
+    fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            device.destroy_buffer(self.buffer.buffer, None);
+            device.free_memory(self.buffer.memory, None);
+        }
+    }
+
+    fn address_range(&self) -> std::ops::Range<u64> {
+        std::ops::Range {
+            start: self.buffer.device_addr,
+            end: self.buffer.device_addr + self.buffer.size,
+        }
+    }
+}
+
 impl DeviceAllocator {
     pub const CHUNK_SIZE: u64 = 32 * 1024 * 1024;
 
@@ -63,10 +89,20 @@ impl DeviceAllocator {
         Self {
             context: ctx,
             chunks: RefCell::new(vec![refc]),
+            big_allocations: RefCell::new(Vec::new()),
         }
     }
 
+    /// Allocates a buffer of the given size.
+    /// If the requested size exceeds CHUNK_SIZE, it is routed to a dedicated
+    /// "big allocation" buffer that lives outside the chunked arena. This keeps
+    /// large allocations from fragmenting the free-list used by smaller requests.
     pub fn alloc(&self, size: u64) -> Option<DeviceSlice> {
+        // Route oversized allocations directly to the big-allocation path
+        if size > Self::CHUNK_SIZE {
+            return self.alloc_big(size);
+        }
+        // Otherwise use the existing chunked arena allocator
         if let Some(slice) = self.try_alloc(size) {
             return Some(slice);
         }
@@ -80,6 +116,24 @@ impl DeviceAllocator {
         panic!("can't allocate a buffer of this size {}!", size)
     }
 
+    /// Allocates a dedicated standalone buffer for sizes exceeding CHUNK_SIZE.
+    fn alloc_big(&self, size: u64) -> Option<DeviceSlice> {
+        let buffer = DeviceBuffer::new(&self.context, size, self.kind());
+        let slice = DeviceSlice {
+            buffer: buffer.buffer,
+            addr: buffer.addr,
+            size: buffer.size,
+            offset: 0,
+            device_addr: buffer.device_addr,
+            kind: self.kind(),
+        };
+        let mut big_allocations = self.big_allocations.borrow_mut();
+        let ba = BigAlloc { buffer, slice };
+        let slice_copy = ba.slice;
+        big_allocations.push(ba);
+        Some(slice_copy)
+    }
+
     fn try_alloc(&self, size: u64) -> Option<DeviceSlice> {
         let chunks = self.chunks.borrow();
         for chunk in chunks.iter() {
@@ -91,6 +145,23 @@ impl DeviceAllocator {
     }
 
     pub fn free(&self, slice: DeviceSlice) {
+        /*
+         * Route based on size first: big allocations exceed CHUNK_SIZE, so they can never be in chunks
+         */
+        if slice.size > Self::CHUNK_SIZE {
+            let mut big_allocations = self.big_allocations.borrow_mut();
+            if let Some(idx) = big_allocations
+                .iter()
+                .position(|b| b.address_range().contains(&slice.device_addr))
+            {
+                let to_remove = big_allocations.remove(idx);
+                to_remove.destroy(&self.context.device);
+                return;
+            }
+            panic!("can't free this big slice! {:?}", slice)
+        }
+
+        // Check chunk allocations for smaller slices
         let chunks = self.chunks.borrow_mut();
         for chunk in chunks.iter() {
             let mut chunk = chunk.borrow_mut();
@@ -99,17 +170,26 @@ impl DeviceAllocator {
                 return;
             }
         }
-        panic!("can't free this slice! {:?}", slice)
+        panic!("can't free this chunk slice! {:?}", slice)
     }
 
     pub fn destroy(&self, device: &ash::Device) {
+        // Destroy chunk buffers
         let mut chunks = self.chunks.borrow_mut();
-        for chunk in chunks.iter() {
-            chunk.borrow().destroy(device);
+        for c in chunks.iter() {
+            c.borrow().destroy(device);
         }
         chunks.clear();
+
+        // Destroy big allocation buffers
+        let mut big_allocations = self.big_allocations.borrow_mut();
+        for ba in big_allocations.iter() {
+            ba.destroy(device);
+        }
+        big_allocations.clear();
     }
 
+    /// Only represents the available memory for all chunks in this allocator.
     pub fn available(&self) -> u64 {
         self.chunks
             .borrow()
@@ -126,11 +206,22 @@ impl DeviceAllocator {
         self.chunks.borrow().len() as u64
     }
 
+    /// Total number of big allocations currently active.
+    pub fn big_allocations(&self) -> u64 {
+        self.big_allocations.borrow().len() as u64
+    }
+
     pub fn alignment(&self) -> u64 {
         self.chunks
             .borrow()
             .iter()
             .map(|c| c.borrow().buffer.alignment)
+            .chain(
+                self.big_allocations
+                    .borrow()
+                    .iter()
+                    .map(|b| b.buffer.alignment),
+            )
             .next()
             .unwrap_or(0)
     }
@@ -140,8 +231,8 @@ impl DeviceAllocator {
             .borrow()
             .iter()
             .map(|c| c.borrow().buffer.size)
-            .next()
-            .unwrap_or(0)
+            .chain(self.big_allocations.borrow().iter().map(|b| b.buffer.size))
+            .sum()
     }
 
     pub fn kind(&self) -> BufferKind {
