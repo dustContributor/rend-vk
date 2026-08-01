@@ -638,7 +638,7 @@ impl Pipeline {
             region: blit.to_vk(input.extent, output.extent),
             is_final: output.is_default(),
             input,
-            output: if output.is_default()  {
+            output: if output.is_default() {
                 None
             } else {
                 Some(output)

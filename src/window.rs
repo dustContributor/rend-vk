@@ -30,7 +30,10 @@ impl WindowContext {
         }
     }
 
-    pub fn event_loop<F: FnMut()>(&self, mut on_event: F) -> Result<(), impl std::error::Error> {
+    pub fn event_loop<F: FnMut()>(
+        &self,
+        mut on_event: F,
+    ) -> Result<(), impl std::error::Error + use<F>> {
         self.event_loop.borrow_mut().run_on_demand(|event, elwp| {
             elwp.set_control_flow(ControlFlow::Poll);
             match event {

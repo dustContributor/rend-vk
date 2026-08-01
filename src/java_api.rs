@@ -138,7 +138,7 @@ fn to_renderer(addr: u64) -> Box<Renderer> {
     unsafe { Box::from_raw(addr as *mut Renderer) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -155,7 +155,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_init(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -207,7 +207,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_makeRenderer(
     ptr
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceAlignOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -217,7 +217,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceAlignOf(
     kind.resource_align() as u32
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_formatValueForName(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -230,7 +230,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_formatValueForName(
     v.to_u32()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceSizeOf(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -240,7 +240,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_resourceSizeOf(
     kind.resource_size() as u32
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_getCurrentFrame(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -252,7 +252,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getCurrentFrame(
     current_frame
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_getAllocatorStats(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -266,7 +266,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getAllocatorStats(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -277,7 +277,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_render(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -301,7 +301,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_tryGetSampler(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -322,7 +322,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_getSampler(
     sampler
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -345,7 +345,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genMesh(
     mesh_id
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -360,7 +360,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchMesh(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_freeMesh(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -372,7 +372,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_freeMesh(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -422,7 +422,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_genTexture(
     texture_id
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -437,7 +437,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTexture(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTextureMipMaps(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -458,7 +458,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_fetchTextureMipMaps(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_queueTextureForUploading(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -470,7 +470,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_queueTextureForUploading(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -487,7 +487,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_placeShaderResource(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
@@ -518,7 +518,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_placeShaderResource(
     Box::leak(renderer);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Java_game_render_vulkan_RendVkApi_addTaskToQueue(
     _unused_jnienv: usize,
     _unused_jclazz: usize,
