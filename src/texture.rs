@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::{buffer::DeviceSlice, context::VulkanContext, UsedAsIndex};
+use crate::{UsedAsIndex, buffer::DeviceSlice, context::VulkanContext};
 
 #[derive(PartialEq, Eq, Clone, Copy, strum_macros::Display, Hash)]
 pub enum TextureKind {

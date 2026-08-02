@@ -263,11 +263,7 @@ impl BarrierGen {
         let mut barriers: Vec<(&str, bool, vk::ImageMemoryBarrier2)> = Vec::new();
         let curr_is_blitting = self.passes[currenti].is_blitting;
         fn wrap_around(index: usize, length: usize) -> usize {
-            if index == 0 {
-                length - 1
-            } else {
-                index - 1
-            }
+            if index == 0 { length - 1 } else { index - 1 }
         }
         for input in inputs {
             if input.is_default() {
@@ -404,7 +400,7 @@ impl BarrierGen {
                 currenti,
             );
             barriers.iter().enumerate().for_each(|e| {
-                let tmp = format!("{:?}", e.1 .2)
+                let tmp = format!("{:?}", e.1.2)
                     .replace("{", "{\n")
                     .replace(", ", ",\n ")
                     .replace("}", "\n}");
@@ -413,8 +409,8 @@ impl BarrierGen {
                     self.passes[currenti].name,
                     currenti,
                     e.0,
-                    if e.1 .1 { "output" } else { "input" },
-                    e.1 .0,
+                    if e.1.1 { "output" } else { "input" },
+                    e.1.0,
                     tmp,
                 );
             });

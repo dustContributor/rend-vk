@@ -480,11 +480,7 @@ pub extern "C" fn Java_game_render_vulkan_RendVkApi_isTextureUploaded(
     let renderer = to_renderer(renderer);
     let is_uploaded = renderer.is_texture_uploaded(id);
     Box::leak(renderer);
-    if is_uploaded {
-        JNI_TRUE
-    } else {
-        JNI_FALSE
-    }
+    if is_uploaded { JNI_TRUE } else { JNI_FALSE }
 }
 
 #[unsafe(no_mangle)]

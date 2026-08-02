@@ -57,11 +57,13 @@ impl DescriptorGroup {
     ) -> Self {
         assert!(capacity > 0, "cant have zero sized descriptor groups!");
         let bindings: Vec<_> = if is_array {
-            vec![vk::DescriptorSetLayoutBinding::default()
-                .binding(0)
-                .descriptor_type(descriptor_type)
-                .descriptor_count(capacity)
-                .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)]
+            vec![
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(descriptor_type)
+                    .descriptor_count(capacity)
+                    .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS),
+            ]
         } else {
             (0..capacity)
                 .map(|e| {

@@ -1,4 +1,4 @@
-use ash::{vk, Device};
+use ash::{Device, vk};
 
 use crate::context::VulkanContext;
 

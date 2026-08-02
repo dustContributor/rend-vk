@@ -8,6 +8,7 @@ use std::{
 };
 
 use ash::{
+    Entry,
     ext::{self, debug_utils},
     khr,
     vk::{self, Extent2D},

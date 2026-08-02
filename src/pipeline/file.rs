@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 
 use super::state::*;
-use crate::{format, shader_resource::ResourceKind, texture::MipMap, UsedAsIndex};
+use crate::{UsedAsIndex, format, shader_resource::ResourceKind, texture::MipMap};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

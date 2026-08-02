@@ -2,8 +2,8 @@ use std::{collections::HashMap, hash::Hash};
 
 use serde::{Deserialize, Serialize};
 
-use crate::shader_resource::{MultiResource, ResourceKind};
 use crate::UsedAsIndex;
+use crate::shader_resource::{MultiResource, ResourceKind};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
