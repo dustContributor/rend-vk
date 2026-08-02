@@ -12,26 +12,24 @@ use ash::{
     ext::{self, debug_utils},
     khr,
     vk::{self, Extent2D},
-    Entry,
 };
 use bitvec::vec::BitVec;
 
 use crate::{
+    UsedAsIndex,
     buffer::{DeviceAllocator, DeviceSlice},
     context::{self, ExtensionContext, VulkanContext},
     debug::{self, DebugContext},
     format::Format,
     pipeline::{
-        self,
+        self, Pipeline,
         attachment::Attachment,
         sampler::{Sampler, SamplerKey},
-        Pipeline,
     },
     render_task::{RenderTask, TaskKind},
     shader_resource::{ResourceKind, SingleResource},
     swapchain,
     texture::{MipMap, Texture, TextureKind},
-    UsedAsIndex,
 };
 
 #[derive(Clone)]
