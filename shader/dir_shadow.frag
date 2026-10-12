@@ -45,18 +45,19 @@ const float MIN_SHADOW_DIFFUSE = 0.15;
 
 float mapLightSpaceDepth(float v, float depthBias) {
 	#if IS_VULKAN
-	return max(0.0, v - depthBias);
+	return clamp(v + depthBias, 0.0, 1.0);
 	#else 
-	return max(0.0, v * 0.5 + 0.5 - depthBias);
+	return clamp(v * 0.5 + 0.5 + depthBias, 0.0, 1.0);
 	#endif
 }
 
-uint selectCascade(float viewZ, vec4 splits) {
-	uint cascadei = uint(viewZ < splits[0]);
-	for (uint i = 1u; i < DIR_LIGHT_CASCADES; ++i) {
-		cascadei += uint(viewZ < splits[i]);
+uint selectCascade(float viewDepth, vec4 splits) {
+	uint cascadei = 0;
+	for (uint i = 0u; i < DIR_LIGHT_CASCADES; ++i) {
+		cascadei += uint(viewDepth >= splits[i]);
 	}
-	return cascadei;
+	// clamp in case the view depth goes beyond the last split
+	return min(cascadei, DIR_LIGHT_CASCADES - 1u);
 }
 
 float sampleCascade(uint cascadei, vec3 coords) {
@@ -88,10 +89,17 @@ void main() {
 	vec3 normal = decodeNormal(texture(gbNormal, passTexCoord).xy);
 	// Fetch depth 
 	float depth = texture(gbDepth, passTexCoord).x;
-	// Compute view space position.
+	// Compute view space position (true right-handed: z < 0 in front of the camera).
 	vec3 viewPos = computeViewPos(frustum, viewRay, passTexCoord, depth);
+	// Positive view space distance of this fragment.
+	float viewDepth = toViewDepth(frustum, depth);
 
-	uint cascadei = selectCascade(viewPos.z, cascadeSplits);
+	uint lastCascade = DIR_LIGHT_CASCADES - 1u;
+	float cascadeFar = cascadeSplits[lastCascade];
+	float fadeStart = mix(cascadeSplits[lastCascade - 1u], cascadeFar, 0.75);
+	float shadowFade = clamp((cascadeFar - viewDepth) / max(cascadeFar - fadeStart, 1e-5), 0.0, 1.0);
+
+	uint cascadei = selectCascade(viewDepth, cascadeSplits);
 
 	vec4 worldPos = view.invView * vec4(viewPos, 1.0);
 	// Read directly from macro otherwise it forces scratch usage on AMD
@@ -101,7 +109,8 @@ void main() {
 	float lightSpaceDepth = mapLightSpaceDepth(lightSpacePos.z, cascadeBias);
 	vec3 shadowmapCoords = vec3(lightSpacePos.xy * 0.5 + 0.5, lightSpaceDepth);
 
-	float inShadow = sampleCascade(cascadei, shadowmapCoords);
+	// 1.0 means fully lit
+	float inShadow = mix(1.0, sampleCascade(cascadei, shadowmapCoords), shadowFade);
 
   // Dir to eye.
   vec3 nmEyeDir = normalize( -viewPos ); 
@@ -126,5 +135,4 @@ void main() {
 	float occlusion = texture(gbOcclusion, passTexCoord).x;
 
 	outLightAcc += (ambient * occlusion);
-
 }

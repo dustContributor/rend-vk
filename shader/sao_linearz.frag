@@ -43,7 +43,5 @@ SAMPLING(gbDepth, SMP_RT, 2D, 0)
 void main() {
   Frustum frustum = READ(PASS, FRUSTUM);
   float depth = texelFetch(gbDepth, ivec2(gl_FragCoord.xy), 0).r;
-  float near = frustum.nearPlane;
-  float far = frustum.farPlane;
-  outLinearZ = (near * far) / (far + depth * (near - far));
+  outLinearZ = toViewDepth(frustum, depth);
 }

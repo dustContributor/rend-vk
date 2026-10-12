@@ -67,9 +67,9 @@
     "saoBaseState": {
       "writing": "COLOR",
       "depth": {
-        "func": "GREATER",
-        "rangeStart": 1.0,
-        "rangeEnd": 1.0,
+        "func": "LESS",
+        "rangeStart": 0.0,
+        "rangeEnd": 0.0,
         "testing": true,
         "clamping": false
       },

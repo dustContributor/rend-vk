@@ -173,6 +173,10 @@ pub struct Frustum {
     pub ext_inv_width: f32,
     pub ext_inv_height: f32,
     pub near_plane: f32,
+    /*
+     * No longer a proj far plane since we're using infinite Z.
+     * Not dropped for now since it's used for other purposes in shaders.
+     */
     pub far_plane: f32,
     pub fragments_per_meter_plane: f32,
     // Pad to 32 bytes

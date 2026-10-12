@@ -612,7 +612,7 @@ impl U32OrF32 {
     }
 }
 
-const DEFAULT_DEPTH_CLEAR_VALUE: f32 = 1.0;
+const DEFAULT_DEPTH_CLEAR_VALUE: f32 = 0.0;
 const DEFAULT_STENCIL_CLEAR_VALUE: u32 = 0;
 const DEFAULT_COLOR_CLEAR_VALUE: u32 = 0;
 
@@ -682,9 +682,9 @@ impl Predefined<StencilDesc> for StencilDesc {
 impl Predefined<DepthDesc> for DepthDesc {
     fn def() -> DepthDesc {
         Self {
-            func: CompareFunc::LessOrEqual,
-            range_start: 0.0,
-            range_end: 1.0,
+            func: CompareFunc::GreaterOrEqual,
+            range_start: 1.0,
+            range_end: 0.0,
             testing: true,
             clamping: false,
         }
@@ -962,8 +962,8 @@ impl ViewportDesc {
             y: self.y.scale(target_extent.height as f32),
             width: self.width.scale(target_extent.width as f32),
             height: self.height.scale(target_extent.height as f32),
-            min_depth: depth.range_start,
-            max_depth: depth.range_end,
+            min_depth: depth.range_start.min(depth.range_end),
+            max_depth: depth.range_start.max(depth.range_end),
         }
     }
 }

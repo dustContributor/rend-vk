@@ -343,9 +343,7 @@ vec3 colorIfInf ( vec3 val )
 // Convertes NDC depth to view space depth.
 float toViewDepth ( Frustum frust, float depth )
 {
-  float near = frust.nearPlane;
-  float far = frust.farPlane;
-  return near * far / ((depth * (far - near)) - far);
+  return frust.nearPlane / max(depth, 1e-30);
 }
 
 vec2 texCoordFromVID ( int vertexId )

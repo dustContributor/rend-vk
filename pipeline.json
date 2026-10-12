@@ -86,7 +86,7 @@
 			"depth": {
 				"testing": true,
 				"clamping": false,
-				"func": "GREATER_OR_EQUAL",
+				"func": "LESS_OR_EQUAL",
 				"rangeStart": 0,
 				"rangeEnd": 1
 			},
@@ -252,8 +252,8 @@
 					"testing": true,
 					"clamping": false,
 					"func": "EQUAL",
-					"rangeStart": 1,
-					"rangeEnd": 1
+					"rangeStart": 0,
+					"rangeEnd": 0
 				},
 				"scissor": "DEFAULT",
 				"viewport": "DEFAULT",
